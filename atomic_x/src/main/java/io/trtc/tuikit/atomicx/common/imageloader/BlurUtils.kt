@@ -108,7 +108,11 @@ object BlurUtils {
 
     @JvmStatic
     fun fastBlur(sentBitmap: Bitmap, radius: Int, canReuseInBitmap: Boolean): Bitmap {
-        val bitmap = if (canReuseInBitmap) sentBitmap else sentBitmap.copy(sentBitmap.config, true)
+        val bitmap = if (canReuseInBitmap) {
+            sentBitmap
+        } else {
+            sentBitmap.copy(sentBitmap.config ?: Bitmap.Config.ARGB_8888, true)
+        }
         if (radius < 1) {
             return sentBitmap
         }

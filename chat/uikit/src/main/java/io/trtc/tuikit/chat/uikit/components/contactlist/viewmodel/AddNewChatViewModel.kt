@@ -14,6 +14,10 @@ import io.trtc.tuikit.atomicxcore.api.group.CreateGroupCompletionHandler
 import io.trtc.tuikit.atomicxcore.api.group.GroupCreateParams
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.group.GroupType
+import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionCompletion
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -254,6 +258,47 @@ class AddNewChatViewModel(
             groupName = ensuredGroupName
         )
 
+        fun complete(groupID: String) {
+            lastCreatedGroupID = groupID
+            val conversationId = ConversationIDUtil.fromGroup(groupID)
+            val createdGroupType = currentSelectedGroupType.value.type
+            _uiState.value = _uiState.value.copy(
+                isCreating = false,
+                createdConversationId = conversationId,
+                groupFlowStep = GroupFlowStep.CONTACT_SELECTION
+            )
+            groupStore.loadJoinedGroups()
+            onSuccess()
+            groupCreateMessageSender.schedule(conversationId, createdGroupType)
+        }
+
+        fun fail(code: Int, desc: String) {
+            _uiState.value = _uiState.value.copy(
+                isCreating = false,
+                groupFlowStep = GroupFlowStep.GROUP_SETTINGS
+            )
+            onFailure(code, desc)
+        }
+
+        if (BusinessActionRegistry.dispatch(
+                BusinessAction.CreateGroup(
+                    groupName = ensuredGroupName,
+                    requestedGroupID = groupID,
+                    avatarURL = groupAvatarUrl,
+                    memberUserIDs = currentState.selectedContacts.map { it.userID },
+                    groupType = currentSelectedGroupType.value.type.name
+                ),
+                object : BusinessActionCompletion {
+                    override fun onSuccess(result: BusinessActionResult) {
+                        val createdGroupID = result.identifier.orEmpty()
+                        if (createdGroupID.isBlank()) fail(-1, "Group ID is missing") else complete(createdGroupID)
+                    }
+
+                    override fun onFailure(code: Int, description: String) = fail(code, description)
+                }
+            )
+        ) return
+
         groupStore.createGroup(
             params = GroupCreateParams(
                 groupType = currentSelectedGroupType.value.type,
@@ -264,24 +309,11 @@ class AddNewChatViewModel(
             ),
             completion = object : CreateGroupCompletionHandler {
                 override fun onSuccess(groupID: String) {
-                    lastCreatedGroupID = groupID
-                    val conversationId = ConversationIDUtil.fromGroup(groupID)
-                    val createdGroupType = currentSelectedGroupType.value.type
-                    _uiState.value = _uiState.value.copy(
-                        isCreating = false,
-                        createdConversationId = conversationId,
-                        groupFlowStep = GroupFlowStep.CONTACT_SELECTION
-                    )
-                    onSuccess()
-                    groupCreateMessageSender.schedule(conversationId, createdGroupType)
+                    complete(groupID)
                 }
 
                 override fun onFailure(code: Int, desc: String) {
-                    _uiState.value = _uiState.value.copy(
-                        isCreating = false,
-                        groupFlowStep = GroupFlowStep.GROUP_SETTINGS
-                    )
-                    onFailure(code, desc)
+                    fail(code, desc)
                 }
             }
         )

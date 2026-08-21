@@ -5,7 +5,8 @@ plugins {
 
 android {
     namespace = "io.trtc.tuikit.chat.uikit"
-    compileSdk = 35
+    compileSdk = 36
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         minSdk = 23
@@ -47,13 +48,13 @@ android {
 
 dependencies {
     implementation(project(":atomic_x"))
-    implementation("com.tencent.imsdk:imsdk-plus:latest.release")
+    implementation("com.tencent.imsdk:imsdk-plus:9.0.7652")
     implementation("androidx.core:core-ktx:1.10.1")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.cardview:cardview:1.0.0")
     implementation("com.google.android.material:material:1.12.0")
 
-    implementation("io.trtc.uikit:albumpicker:1.0.0.+")
+    implementation("io.trtc.uikit:albumpicker:1.0.0.9")
     implementation("org.ahocorasick:ahocorasick:0.6.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2")
@@ -61,5 +62,7 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.2.1")
     implementation("com.tencent:mmkv:2.4.0")
     implementation("com.google.code.gson:gson:2.10.1")
+
+    testImplementation("junit:junit:4.13.2")
 
 }

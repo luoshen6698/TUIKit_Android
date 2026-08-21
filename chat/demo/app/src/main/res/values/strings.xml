@@ -1,7 +1,7 @@
 <resources>
-    <string name="demo_app_name">Tencent Chat</string>
+    <string name="demo_app_name">XingDun IM</string>
     <string name="demo_tab_messages">Messages</string>
-    <string name="demo_tab_calls">Calls</string>
+    <string name="demo_tab_calls">Workspace</string>
     <string name="demo_tab_contacts">Contacts</string>
     <string name="demo_tab_me">Me</string>
     <string name="demo_settings_show_calls">Show Recent Calls</string>
@@ -9,8 +9,35 @@
     <string name="demo_login">Login</string>
     <string name="demo_input_user_id_tips">Please enter user ID</string>
     <string name="demo_logout">Logout</string>
-    <string name="demo_login_hero_title">Tencent Cloud Chat</string>
-    <string name="demo_login_hero_subtitle">Welcome to use this APP to experience Tencent Cloud Chat products and services</string>
+    <string name="demo_login_hero_title">XingDun IM</string>
+    <string name="demo_login_hero_subtitle">Secure enterprise communication</string>
+    <string name="xingdun_company_code">Enterprise code</string>
+    <string name="xingdun_company_code_required">Enter the enterprise code first.</string>
+    <string name="xingdun_account">Account</string>
+    <string name="xingdun_nickname">Display name</string>
+    <string name="xingdun_password">Password</string>
+    <string name="xingdun_confirm_password">Confirm password</string>
+    <string name="xingdun_invite_code">Invitation code (optional)</string>
+    <string name="xingdun_adult_declaration">I confirm that I am at least 18 years old.</string>
+    <string name="xingdun_privacy_consent">I have read and agree to the User Agreement and Privacy Policy.</string>
+    <string name="xingdun_user_agreement">User Agreement</string>
+    <string name="xingdun_privacy_policy">Privacy Policy</string>
+    <string name="xingdun_login">Sign in</string>
+    <string name="xingdun_register">Create account</string>
+    <string name="xingdun_create_account">Create an account</string>
+    <string name="xingdun_back_to_login">Back to sign in</string>
+    <string name="xingdun_restoring_session">Restoring your session…</string>
+    <string name="xingdun_session_expired">Your session has expired. Please sign in again.</string>
+    <string name="xingdun_registering">Creating your account…</string>
+    <string name="xingdun_signing_in">Signing in…</string>
+    <string name="xingdun_connecting_im">Connecting to messaging…</string>
+    <string name="xingdun_required_fields">Enter the enterprise code, account and password.</string>
+    <string name="xingdun_registration_fields_invalid">Enter a display name and make sure both passwords match.</string>
+    <string name="xingdun_consent_required">Confirm your age and accept both legal documents.</string>
+    <string name="xingdun_network_error">Network unavailable. Please try again.</string>
+    <string name="xingdun_authentication_failed">Authentication failed.</string>
+    <string name="xingdun_legal_document_unavailable">This legal document is unavailable.</string>
+    <string name="xingdun_workspace_available">Workspace</string>
     <string name="demo_login_user_id_label">User ID</string>
     <string name="demo_page_conversations_title">Messages</string>
     <string name="demo_page_contacts_title">Contacts</string>
@@ -166,4 +193,101 @@
     <string name="demo_voice_custom_badge">Custom</string>
     <string name="demo_voice_delete">Delete</string>
     <string name="demo_voice_delete_failed">Delete failed</string>
+    <string name="xingdun_workspace_title">Workspace</string>
+    <string name="xingdun_workspace_description">Enterprise services, customer support and invitation tools are provided here.</string>
+    <string name="xingdun_action_failed">The operation could not be completed.</string>
+    <string name="xingdun_error_im_not_configured">This enterprise has not completed its IM configuration.</string>
+    <string name="xingdun_error_im_provider">Tencent Cloud IM is not enabled for this enterprise.</string>
+    <string name="xingdun_error_company_mismatch">The enterprise configuration does not match this session.</string>
+    <string name="xingdun_error_sdk_app_id">The enterprise SDKAppID is invalid.</string>
+    <string name="xingdun_error_im_credential_missing">The IM credential is incomplete.</string>
+    <string name="xingdun_error_im_credential_expired">The IM credential has expired.</string>
+    <string name="xingdun_error_credential_missing">The login credential is incomplete.</string>
+    <string name="xingdun_error_credential_expiry">The credential expiry is invalid.</string>
+    <string name="xingdun_error_service_url">The enterprise service address is invalid.</string>
+    <string name="xingdun_error_company_code">The enterprise code must contain 4–20 letters or numbers.</string>
+    <string name="xingdun_error_response_format">The service response format is invalid.</string>
+    <string name="xingdun_error_response_data">The service response is missing required data.</string>
+    <string name="xingdun_error_rate_limited">Too many requests. Please try again later.</string>
+    <string name="xingdun_error_service_unavailable">The service is temporarily unavailable.</string>
+    <string name="xingdun_error_request_failed">Request failed (%1$d).</string>
+    <string name="xingdun_error_member_not_found">The enterprise member could not be found.</string>
+    <string name="xingdun_error_friend_application_expired">This friend request is no longer valid. Refresh and try again.</string>
+    <string name="xingdun_error_group_invitation_expired">This group invitation is no longer valid. Refresh and try again.</string>
+    <string name="xingdun_back">Back</string>
+    <string name="xingdun_loading">Loading…</string>
+    <string name="xingdun_submit">Submit</string>
+    <string name="xingdun_workspace_create">New application</string>
+    <string name="xingdun_workspace_my">My applications</string>
+    <string name="xingdun_workspace_pending">Pending approvals</string>
+    <string name="xingdun_workspace_pending_empty">No applications are waiting for your approval</string>
+    <string name="xingdun_workspace_detail">Application details</string>
+    <string name="xingdun_workspace_invalid_application">The application identifier is invalid.</string>
+    <string name="xingdun_workspace_withdraw">Withdraw application</string>
+    <string name="xingdun_workspace_withdrawn">Application withdrawn.</string>
+    <string name="xingdun_workspace_approve">Approve</string>
+    <string name="xingdun_workspace_reject">Reject</string>
+    <string name="xingdun_workspace_delete">Delete application</string>
+    <string name="xingdun_workspace_deleted">Application deleted.</string>
+    <string name="xingdun_workspace_decision_comment">Decision comment (up to 500 characters)</string>
+    <string name="xingdun_workspace_reject_comment_required">Enter a reason for rejection.</string>
+    <string name="xingdun_workspace_decided">Decision submitted.</string>
+    <string name="xingdun_workspace_empty">No applications yet</string>
+    <string name="xingdun_workspace_untitled">Untitled application</string>
+    <string name="xingdun_workspace_form_title">Application title</string>
+    <string name="xingdun_workspace_form_reason">Reason or notes</string>
+    <string name="xingdun_workspace_form_start">Start time (YYYY-MM-DD HH:mm:ss)</string>
+    <string name="xingdun_workspace_form_end">End time (YYYY-MM-DD HH:mm:ss)</string>
+    <string name="xingdun_workspace_form_amount">Amount</string>
+    <string name="xingdun_workspace_title_required">Enter an application title.</string>
+    <string name="xingdun_workspace_submitted">Application submitted.</string>
+    <string name="xingdun_customer_service">Customer service</string>
+    <string name="xingdun_customer_service_agent">Customer-service account</string>
+    <string name="xingdun_customer_service_user">Enterprise user</string>
+    <string name="xingdun_open_customer_service">Open customer-service chat</string>
+    <string name="xingdun_customer_service_unavailable">No customer-service account is available for this user.</string>
+    <string name="xingdun_invite_title">Invite colleagues</string>
+    <string name="xingdun_share">Share</string>
+    <string name="xingdun_feedback">Feedback</string>
+    <string name="xingdun_feedback_content">Describe the issue or suggestion (at least 10 characters)</string>
+    <string name="xingdun_feedback_contact">Contact information (optional)</string>
+    <string name="xingdun_feedback_content_required">Enter at least 10 characters.</string>
+    <string name="xingdun_feedback_submitted">Feedback submitted.</string>
+    <string name="xingdun_version">Version check</string>
+    <string name="xingdun_version_current">Current version: %1$s (%2$d)</string>
+    <string name="xingdun_version_no_update">No update is required.</string>
+    <string name="xingdun_checking_version">Checking the app version…</string>
+    <string name="xingdun_update_available">Update available</string>
+    <string name="xingdun_force_update">Update required</string>
+    <string name="xingdun_update_now">Update now</string>
+    <string name="xingdun_update_later">Later</string>
+    <string name="xingdun_force_update_url_invalid">A required update is configured without a valid HTTPS download address. Contact your administrator.</string>
+    <string name="xingdun_reports">My reports</string>
+    <string name="xingdun_reports_empty">No reports yet</string>
+    <string name="xingdun_report">Report</string>
+    <string name="xingdun_continue">Continue</string>
+    <string name="xingdun_report_description">Additional details (optional)</string>
+    <string name="xingdun_report_submitted">Report submitted. We will review it promptly.</string>
+    <string name="xingdun_profile_updated">Profile updated.</string>
+    <string name="xingdun_personal_qr">My QR code</string>
+    <string name="xingdun_personal_qr_description">%1$s\nAccount: %2$s</string>
+    <string name="xingdun_personal_qr_validity">This QR code identifies your XingDun account. Share it only with people you trust.</string>
+    <string-array name="xingdun_report_reason_values" translatable="false">
+        <item>spam</item><item>harassment</item><item>fraud</item><item>violence</item><item>porn</item><item>other</item>
+    </string-array>
+    <string-array name="xingdun_report_reason_labels">
+        <item>Spam</item><item>Harassment</item><item>Fraud</item><item>Violence</item><item>Sexual content</item><item>Other</item>
+    </string-array>
+    <string-array name="xingdun_workspace_type_values" translatable="false">
+        <item>leave</item><item>travel</item><item>out</item><item>overtime</item><item>reimburse</item><item>purchase</item><item>hr_need</item><item>confirmation</item><item>resign</item>
+    </string-array>
+    <string-array name="xingdun_workspace_type_labels">
+        <item>Leave</item><item>Business travel</item><item>Off-site work</item><item>Overtime</item><item>Reimbursement</item><item>Purchase</item><item>Staffing request</item><item>Confirmation</item><item>Resignation</item>
+    </string-array>
+    <string-array name="xingdun_feedback_type_values" translatable="false">
+        <item>bug</item><item>suggestion</item><item>experience</item><item>account</item><item>other</item>
+    </string-array>
+    <string-array name="xingdun_feedback_type_labels">
+        <item>Bug</item><item>Suggestion</item><item>Experience</item><item>Account</item><item>Other</item>
+    </string-array>
 </resources>

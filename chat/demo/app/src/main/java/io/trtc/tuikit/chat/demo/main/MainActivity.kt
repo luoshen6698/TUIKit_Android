@@ -2,8 +2,6 @@ package io.trtc.tuikit.chat.demo.main
 
 import io.trtc.tuikit.chat.demo.common.BadgeDragPolicy
 import io.trtc.tuikit.chat.demo.common.BaseActivity
-import io.trtc.tuikit.chat.demo.common.AppConstants
-import io.trtc.tuikit.chat.demo.customerservice.CustomerServiceManager
 import io.trtc.tuikit.chat.demo.settings.SettingsPageView
 
 import android.graphics.Bitmap
@@ -15,8 +13,8 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.content.Intent
 import android.os.Bundle
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -32,11 +30,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
-import androidx.fragment.app.FragmentContainerView
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
-import com.tencent.mmkv.MMKV
-import com.tencent.qcloud.tuikit.tuicallkit.view.component.recents.RecentCallsFragment
 import io.trtc.tuikit.chat.uikit.components.contactlist.ui.ContactFlowLauncher
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
@@ -51,6 +46,8 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.search.SearchActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspacePageView
+import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
 import io.trtc.tuikit.chat.uikit.components.widgets.AvatarBadgeView
 import io.trtc.tuikit.chat.uikit.pages.ContactsPageView
 import io.trtc.tuikit.chat.uikit.pages.ConversationsPageView
@@ -84,6 +81,14 @@ private const val TAB_ICON_GRADIENT_DARK_X = -0.24f
 private const val TAB_ICON_GRADIENT_DARK_Y = 0.6875f
 
 class MainActivity : BaseActivity() {
+
+    companion object {
+        const val EXTRA_TARGET_TAB = "xingdun.target.tab"
+        const val TAB_MESSAGES = "messages"
+        const val TAB_WORKSPACE = "workspace"
+        const val TAB_CONTACTS = "contacts"
+        const val TAB_PROFILE = "profile"
+    }
 
     private lateinit var viewPager: ViewPager2
     private lateinit var bottomNav: LinearLayout
@@ -158,10 +163,7 @@ class MainActivity : BaseActivity() {
                 iconResId = R.drawable.demo_ic_tab_me
             )
         )
-        val showCallsTab = MMKV.defaultMMKV().decodeBool(AppConstants.KEY_SHOW_CALLS_TAB, true)
-        bottomTabs = filterVisibleTabs(showCallsTab)
-        allBottomTabs.first { it.tabId == R.id.demo_tab_calls }.root.visibility =
-            if (showCallsTab) View.VISIBLE else View.GONE
+        bottomTabs = allBottomTabs
 
         ViewCompat.setOnApplyWindowInsetsListener(mainContainer) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -174,6 +176,14 @@ class MainActivity : BaseActivity() {
         setupBottomNav()
         applyColors(themeStore.themeState.value.currentTheme.tokens.color)
         refreshUnreadCounts()
+        selectRequestedTab(intent)
+        XingDunRouter.consumePendingRoute()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        selectRequestedTab(intent)
     }
 
     override fun onStart() {
@@ -270,22 +280,6 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    private fun filterVisibleTabs(showCalls: Boolean): List<BottomTab> {
-        return allBottomTabs.filter { it.tabId != R.id.demo_tab_calls || showCalls }
-    }
-
-    fun setCallsTabVisible(show: Boolean) {
-        val isVisible = bottomTabs.any { it.tabId == R.id.demo_tab_calls }
-        if (show == isVisible) {
-            return
-        }
-        allBottomTabs.first { it.tabId == R.id.demo_tab_calls }.root.visibility =
-            if (show) View.VISIBLE else View.GONE
-        bottomTabs = filterVisibleTabs(show)
-        bindTabClicks()
-        rebuildPages()
-    }
-
     private fun setupBottomNav() {
         bindTabClicks()
         selectTab(bottomTabs.indexOfFirst { it.tabId == currentTabId }.coerceAtLeast(0), updatePager = false)
@@ -317,38 +311,11 @@ class MainActivity : BaseActivity() {
             appearanceLightStatusBarsOverride() ?: isColorLight(colors.bgColorOperate)
     }
 
-    override fun appearanceLightStatusBarsOverride(): Boolean? {
-        if (::bottomTabs.isInitialized &&
-            bottomTabs.getOrNull(selectedTabIndex)?.tabId == R.id.demo_tab_calls
-        ) {
-            return true
-        }
-        return null
-    }
-
     private fun updateStatusBarAreaColor(colors: ColorTokens) {
         if (!::bottomTabs.isInitialized) {
             return
         }
-        val isCallsTab = bottomTabs.getOrNull(selectedTabIndex)?.tabId == R.id.demo_tab_calls
-        if (isCallsTab) {
-            mainContainer.setBackgroundColor(resolveCallsPageTopColor())
-        } else {
-            mainContainer.setBackgroundColor(colors.bgColorOperate)
-        }
-    }
-
-    private fun resolveCallsPageTopColor(): Int {
-        val typedValue = TypedValue()
-        if (theme.resolveAttribute(com.tencent.qcloud.tuicore.R.attr.core_header_start_color, typedValue, true)) {
-            if (typedValue.resourceId != 0) {
-                return ContextCompat.getColor(this, typedValue.resourceId)
-            }
-            if (typedValue.type in TypedValue.TYPE_FIRST_COLOR_INT..TypedValue.TYPE_LAST_COLOR_INT) {
-                return typedValue.data
-            }
-        }
-        return ContextCompat.getColor(this, com.tencent.qcloud.tuikit.tuicallkit.R.color.callkit_color_white)
+        mainContainer.setBackgroundColor(colors.bgColorOperate)
     }
 
     private fun updateSelectedTabColors(colors: ColorTokens) {
@@ -782,12 +749,7 @@ class MainActivity : BaseActivity() {
             headerTitle = getString(R.string.demo_page_conversations_title),
             headerRightAction = addButton,
             onConversationClick = { conversationInfo ->
-                val conversationID = conversationInfo.conversationID
-                if (conversationID == AppConstants.CUSTOMER_SERVICE_CONVERSATION_ID) {
-                    CustomerServiceManager.openCustomerServiceChat(this)
-                } else {
-                    ChatActivity.start(this, conversationID)
-                }
+                ChatActivity.start(this, conversationInfo.conversationID)
             },
             onSearchClick = {
                 SearchActivity.Companion.start(this)
@@ -834,37 +796,20 @@ class MainActivity : BaseActivity() {
     }
 
     private fun createCallsPage(): View {
-        val container = FragmentContainerView(this).apply {
-            id = R.id.demo_calls_fragment_container
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        }
-        // The container lives inside a ViewPager2 page, so it is not part of the view
-        // hierarchy when onCreate/onStart run. Fragment transactions targeting it must
-        // wait until it is attached to the window, otherwise FragmentManager crashes
-        // with "No view found for id".
-        container.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(view: View) {
-                container.removeOnAttachStateChangeListener(this)
-                val fragmentManager = supportFragmentManager
-                val existing = fragmentManager.findFragmentById(container.id)
-                if (existing != null && existing.view?.parent === container) {
-                    return
-                }
-                // After recreation, FragmentManager restores the old fragment but its view
-                // is never attached to this new container, so replace it with a fresh one.
-                fragmentManager.beginTransaction().apply {
-                    existing?.let { remove(it) }
-                    add(container.id, RecentCallsFragment())
-                }.commit()
-            }
+        return XingDunWorkspacePageView(this)
+    }
 
-            override fun onViewDetachedFromWindow(view: View) {
-            }
-        })
-        return container
+    private fun selectRequestedTab(intent: Intent?) {
+        if (!::bottomTabs.isInitialized) return
+        val requestedTabId = when (intent?.getStringExtra(EXTRA_TARGET_TAB)) {
+            TAB_WORKSPACE -> R.id.demo_tab_calls
+            TAB_CONTACTS -> R.id.demo_tab_contacts
+            TAB_PROFILE -> R.id.demo_tab_me
+            else -> R.id.demo_tab_messages
+        }
+        val index = bottomTabs.indexOfFirst { it.tabId == requestedTabId }
+        if (index >= 0) selectTab(index, updatePager = true)
+        intent?.removeExtra(EXTRA_TARGET_TAB)
     }
 
     private fun createMePage(): View {

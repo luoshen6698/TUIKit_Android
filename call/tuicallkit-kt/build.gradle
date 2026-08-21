@@ -4,7 +4,8 @@ plugins {
 }
 
 android {
-    compileSdk 34
+    compileSdk 36
+    buildToolsVersion '36.0.0'
     namespace "com.tencent.qcloud.tuikit.tuicallkit"
     defaultConfig {
         minSdkVersion 21
@@ -54,18 +55,18 @@ dependencies {
     if (projects.contains("tuicore")) {
         api project(':tuicore')
     } else {
-        api "com.tencent.imsdk:imsdk-plus:8.7.7201"
-        api "com.tencent.liteav.tuikit:tuicore:8.7.7202"
+        api "com.tencent.imsdk:imsdk-plus:9.0.7652"
+        api "com.tencent.liteav.tuikit:tuicore:9.0.7652"
     }
     if (projects.contains("engine_source")) {
         api project(':engine_source')
     } else {
-        api rootProject.getProperties().containsKey("atomicxCoreSdk") ? rootProject.ext.atomicxCoreSdk : "io.trtc.uikit:atomicx-core:4.2.0.28"
-        api rootProject.getProperties().containsKey("roomEngineSdk") ? rootProject.ext.roomEngineSdk : "io.trtc.uikit:rtc_room_engine:4.2.0.28"
+        api rootProject.getProperties().containsKey("atomicxCoreSdk") ? rootProject.ext.atomicxCoreSdk : "io.trtc.uikit:atomicx-core:4.3.0.25"
+        api rootProject.getProperties().containsKey("roomEngineSdk") ? rootProject.ext.roomEngineSdk : "io.trtc.uikit:rtc_room_engine:4.3.0.25"
     }
     if (projects.contains("common")) {
         api project(':common')
     } else {
-        api 'io.trtc.uikit:common:3.2.+'
+        api 'io.trtc.uikit:common:3.2.0.1016'
     }
 }

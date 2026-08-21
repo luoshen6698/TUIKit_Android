@@ -1,12 +1,9 @@
 package io.trtc.tuikit.chat.demo.chat
 
-import CustomLinkMessage
-import CustomLinkMessageRenderer
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
-import android.net.Uri
 import android.os.Bundle
 import android.text.Spannable
 import android.text.SpannableStringBuilder
@@ -20,18 +17,17 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.doOnPreDraw
 import androidx.core.view.updatePadding
-import com.google.gson.Gson
 import io.trtc.tuikit.chat.uikit.components.common.EventBus
 import io.trtc.tuikit.chat.uikit.components.common.observeOn
 import io.trtc.tuikit.chat.uikit.components.common.expandTouchTarget
 import io.trtc.tuikit.chat.uikit.components.contactlist.ui.ContactFlowLauncher
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
-import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.atomicxcore.api.contact.GetContactInfoCompletionHandler
@@ -40,19 +36,12 @@ import io.trtc.tuikit.atomicxcore.api.conversation.ConversationListStore
 import io.trtc.tuikit.atomicxcore.api.conversation.GetConversationInfoCompletionHandler
 import io.trtc.tuikit.atomicxcore.api.group.GroupEvent
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
-import io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
-import io.trtc.tuikit.atomicxcore.api.message.MessageInputStore
-import io.trtc.tuikit.atomicxcore.api.message.SendMessageOption
-import io.trtc.tuikit.atomicxcore.api.message.SendMessagePayload
-import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.app.R
-import io.trtc.tuikit.chat.uikit.components.config.AppBuilderConfig
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.messageinput.config.ChatMessageInputConfig
-import io.trtc.tuikit.chat.uikit.components.messageinput.data.MessageInputActionIDs
-import io.trtc.tuikit.chat.uikit.components.messageinput.data.MessageInputMenuAction
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.ChatMessageListConfig
 import io.trtc.tuikit.chat.uikit.pages.ChatPageView
 import kotlinx.coroutines.CoroutineScope
@@ -100,7 +89,6 @@ class ChatActivity : BaseActivity() {
         private const val C2C_CONVERSATION_ID_PREFIX = "c2c_"
         private const val GROUP_CONVERSATION_ID_PREFIX = "group_"
         private const val UNREAD_BADGE_DEBOUNCE_MS = 300L
-        private const val DEMO_MESSAGE_INPUT_CUSTOM_LINK_ACTION_ID = "demo.messageInput.customLink"
 
         fun start(context: Context, conversationID: String) {
             start(context, conversationID, null)
@@ -108,6 +96,9 @@ class ChatActivity : BaseActivity() {
 
         fun start(context: Context, conversationID: String, locateMessage: MessageInfo?) {
             context.startActivity(Intent(context, ChatActivity::class.java).apply {
+                if (context !is android.app.Activity) {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
                 putExtra(EXTRA_CONVERSATION_ID, conversationID)
                 if (locateMessage != null) {
                     putExtra(EXTRA_LOCATE_MESSAGE, locateMessage)
@@ -144,8 +135,12 @@ class ChatActivity : BaseActivity() {
         updateChatTitle(ChatTitleResolver.resolve(conversationID = conversationID))
         val chatPageContainer = findViewById<FrameLayout>(R.id.demo_chatPageContainer)
         chatSecurityBar = findViewById(R.id.demo_chatSecurityBar)
+        securityWarningIcon = findViewById(R.id.demo_securityWarningIcon)
         securityWarningText = findViewById(R.id.demo_securityWarningText)
         securityWarningClose = findViewById(R.id.demo_securityWarningClose)
+        securityWarningText.setOnClickListener { openSecurityReport(conversationID) }
+        securityWarningIcon.setOnClickListener { openSecurityReport(conversationID) }
+        securityWarningClose.setOnClickListener { chatSecurityBar.visibility = View.GONE }
 
         ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -164,47 +159,17 @@ class ChatActivity : BaseActivity() {
         }
         btnMore.expandTouchTarget()
 
-        val messageListConfig = ChatMessageListConfig().setCustomMessageRenderer(
-            businessID = CustomLinkMessage.BUSINESS_ID,
-            renderer = CustomLinkMessageRenderer(),
-            summaryProvider = { summaryContext ->
-                val payload = summaryContext.message.messagePayload as? CustomMessagePayload
-                CustomLinkMessage.from(payload?.customData)?.text
-            }
+        val messageListConfig = ChatMessageListConfig(
+            isSupportReaction = false,
+            isSupportConvertToText = false,
+            isSupportTranslate = false,
+            isSupportListenFromHere = false,
         )
-
-        val messageInputConfig = ChatMessageInputConfig().customizeActions {
-            val androidContext = editorContext.androidContext
-            val conversationID = editorContext.conversationID
-            add(
-                MessageInputMenuAction(
-                    ID = DEMO_MESSAGE_INPUT_CUSTOM_LINK_ACTION_ID,
-                    title = androidContext.getString(R.string.demo_chat_custom_message_menu_title),
-                    iconResID = android.R.drawable.ic_menu_send,
-                    onClick = {
-                        val customLinkMessage = CustomLinkMessage(
-                            businessID = CustomLinkMessage.BUSINESS_ID,
-                            text = androidContext.getString(R.string.demo_chat_custom_message_content),
-                            link = androidContext.getString(R.string.demo_chat_custom_message_link)
-                        )
-                        val payload = SendMessagePayload.CustomSendMessagePayload(
-                            customData = Gson().toJson(customLinkMessage),
-                            description = customLinkMessage.text
-                        )
-                        MessageInputStore.create(conversationID).sendMessage(
-                            payload = payload,
-                            option = SendMessageOption(
-                                needReadReceipt = AppBuilderConfig.enableReadReceipt
-                            ),
-                            completion = object : CompletionHandler {
-                                override fun onSuccess() {}
-                                override fun onFailure(code: Int, desc: String) {}
-                            }
-                        )
-                    }
-                )
-            )
-        }
+        val isC2CConversation = conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)
+        val messageInputConfig = ChatMessageInputConfig(
+            isShowAudioCall = isC2CConversation,
+            isShowVideoCall = isC2CConversation,
+        )
 
         chatPageView = ChatPageView(this)
         chatPageContainer.addView(chatPageView)
@@ -389,14 +354,64 @@ class ChatActivity : BaseActivity() {
         super.onBackPressed()
     }
 
-    private fun openSecurityReport() {
-        try {
-            startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(AppConstants.REPORT_URL))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        } catch (_: Exception) {
-            Toast.makeText(this, getString(R.string.demo_open_browser_failed), Toast.LENGTH_SHORT).show()
+    private fun openSecurityReport(conversationID: String) {
+        val reasonValues = resources.getStringArray(R.array.xingdun_report_reason_values)
+        val reasonLabels = resources.getStringArray(R.array.xingdun_report_reason_labels)
+        var selectedIndex = 0
+        AlertDialog.Builder(this)
+            .setTitle(R.string.xingdun_report)
+            .setSingleChoiceItems(reasonLabels, selectedIndex) { _, which -> selectedIndex = which }
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.xingdun_continue) { _, _ ->
+                val description = android.widget.EditText(this).apply {
+                    setHint(R.string.xingdun_report_description)
+                    minLines = 3
+                }
+                AlertDialog.Builder(this)
+                    .setTitle(reasonLabels[selectedIndex])
+                    .setView(description)
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(R.string.xingdun_submit) { _, _ ->
+                        submitConversationReport(
+                            conversationID,
+                            reasonValues[selectedIndex],
+                            description.text.toString().trim()
+                        )
+                    }
+                    .show()
+            }
+            .show()
+    }
+
+    private fun submitConversationReport(conversationID: String, reason: String, description: String) {
+        val targetType = if (conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)) "user" else "team"
+        val targetID = if (targetType == "user") getUserID(conversationID) else getGroupID(conversationID)
+        val session = XingDunSessionManager.currentSession()
+        if (session == null || targetID.isNullOrBlank()) {
+            Toast.makeText(this, R.string.xingdun_session_expired, Toast.LENGTH_LONG).show()
+            return
+        }
+        activityScope?.launch {
+            runCatching {
+                XingDunSessionManager.apiClient().postEmpty(
+                    session,
+                    "report/save",
+                    mapOf(
+                        "target_type" to targetType,
+                        "target_id" to targetID,
+                        "reason" to reason,
+                        "description" to description.takeIf(String::isNotEmpty)
+                    )
+                )
+            }.onSuccess {
+                Toast.makeText(this@ChatActivity, R.string.xingdun_report_submitted, Toast.LENGTH_LONG).show()
+            }.onFailure { error ->
+                Toast.makeText(
+                    this@ChatActivity,
+                    error.localizedMessage ?: getString(R.string.xingdun_action_failed),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 

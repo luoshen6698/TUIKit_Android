@@ -6,6 +6,10 @@ import androidx.lifecycle.viewModelScope
 import io.trtc.tuikit.chat.uikit.components.chatsetting.utils.ChatSettingBackgroundStore
 import io.trtc.tuikit.chat.uikit.components.common.ConversationIDUtil
 import io.trtc.tuikit.chat.uikit.components.common.EventBus
+import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionCompletion
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionResult
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.atomicxcore.api.conversation.ConversationInfo
@@ -123,7 +127,12 @@ class C2CChatSettingViewModel(
     }
 
     fun toggleBlacklist() {
-        if (isInBlacklist.value) {
+        val enabled = !isInBlacklist.value
+        if (dispatchBusinessAction(BusinessAction.SetFriendBlacklist(userID, enabled), onSuccess = {
+                _contactStore.loadBlackList()
+            })
+        ) return
+        if (!enabled) {
             _contactStore.removeFromBlacklist(userID, emptyHandler())
         } else {
             _contactStore.addToBlacklist(userID, emptyHandler())
@@ -131,6 +140,10 @@ class C2CChatSettingViewModel(
     }
 
     fun setFriendRemark(remark: String) {
+        if (dispatchBusinessAction(BusinessAction.SetFriendRemark(userID, remark), onSuccess = {
+                _contactStore.loadFriends()
+            })
+        ) return
         _contactStore.setFriendRemark(userID, remark, emptyHandler())
     }
 
@@ -169,6 +182,16 @@ class C2CChatSettingViewModel(
         onSuccess: (() -> Unit)? = null,
         onFailure: ((Int, String) -> Unit)? = null
     ) {
+        if (dispatchBusinessAction(
+                BusinessAction.DeleteFriend(userID),
+                onSuccess = {
+                    _contactStore.loadFriends()
+                    _conversationListStore.deleteConversation(conversationID)
+                    onSuccess?.invoke()
+                },
+                onFailure = { code, desc -> onFailure?.invoke(code, desc) }
+            )
+        ) return
         _contactStore.deleteFriend(
             userID,
             object : CompletionHandler {
@@ -188,6 +211,15 @@ class C2CChatSettingViewModel(
         override fun onSuccess() {}
         override fun onFailure(code: Int, desc: String) {}
     }
+
+    private fun dispatchBusinessAction(
+        action: BusinessAction,
+        onSuccess: () -> Unit = {},
+        onFailure: (Int, String) -> Unit = { _, _ -> }
+    ): Boolean = BusinessActionRegistry.dispatch(action, object : BusinessActionCompletion {
+        override fun onSuccess(result: BusinessActionResult) = onSuccess()
+        override fun onFailure(code: Int, description: String) = onFailure(code, description)
+    })
 
     private fun updateConversationInfo(update: (ConversationInfo) -> ConversationInfo) {
         val current = conversationInfo.value ?: ConversationInfo(conversationID = conversationID)

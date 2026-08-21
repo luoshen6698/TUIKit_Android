@@ -1,18 +1,19 @@
 buildscript {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+        maven("https://mirrors.tencent.com/nexus/repository/maven-public/")
+        maven("https://developer.huawei.com/repo/")
+        maven("https://developer.hihonor.com/repo")
+    }
+
     dependencies {
         classpath("org.jetbrains.dokka:dokka-gradle-plugin:1.8.20")
-        val currentGradleVersion = GradleVersion.current()
-        val androidGradlePluginVersion = when {
-            currentGradleVersion >= GradleVersion.version("8.9") -> "8.7.0"
-            currentGradleVersion >= GradleVersion.version("8.7") -> "8.6.1"
-            currentGradleVersion >= GradleVersion.version("8.6") -> "8.4.2"
-            currentGradleVersion >= GradleVersion.version("8.4") -> "8.3.2"
-            currentGradleVersion >= GradleVersion.version("8.2") -> "8.2.2"
-            currentGradleVersion >= GradleVersion.version("8.0") -> "8.1.4"
-            currentGradleVersion >= GradleVersion.version("7.2") -> "7.0.0"
-            else -> "4.2.0"
-        }
-        classpath("com.android.tools.build:gradle:$androidGradlePluginVersion")
+        classpath("com.android.tools.build:gradle:8.12.2")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22")
+        classpath("com.huawei.agconnect:agcp:1.9.1.301")
+        classpath("com.hihonor.mcs:asplugin:2.0.1.300")
     }
 }
 

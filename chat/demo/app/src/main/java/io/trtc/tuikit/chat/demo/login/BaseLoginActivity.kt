@@ -27,9 +27,8 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.common.BaseActivity
-import io.trtc.tuikit.chat.demo.common.WelcomeMessageSender
-import io.trtc.tuikit.chat.demo.customerservice.CustomerServiceManager
 import io.trtc.tuikit.chat.demo.main.MainActivity
+import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.uikit.components.widgets.ActionItem
 import io.trtc.tuikit.chat.uikit.components.widgets.ActionSheet
 import kotlinx.coroutines.CoroutineScope
@@ -99,8 +98,6 @@ abstract class BaseLoginActivity : BaseActivity() {
         sdkAppId: Int,
         userId: String,
         userSig: String,
-        loginType: String,
-        token: String? = null,
         onSuccess: (() -> Unit)? = null,
         onFailure: ((Int, String) -> Unit)? = null
     ) {
@@ -109,13 +106,8 @@ abstract class BaseLoginActivity : BaseActivity() {
             object : CompletionHandler {
                 override fun onSuccess() {
                     initCall(sdkAppId, userId, userSig)
-                    CustomerServiceManager.initAndStart(this@BaseLoginActivity, sdkAppId, userId, userSig)
-                    WelcomeMessageSender.scheduleWelcomeMessage(this@BaseLoginActivity)
+                    XingDunPushManager.syncDeviceRegistration()
                     MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, userId)
-                    MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_TYPE, loginType)
-                    if (token != null) {
-                        MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_TOKEN, token)
-                    }
                     onSuccess?.invoke()
                     startActivity(Intent(this@BaseLoginActivity, MainActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)

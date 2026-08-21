@@ -2,3 +2,9 @@
 **/.DS_Store
 live/tuilivekit/.gradle/
 room/tuiroomkit/.gradle/
+# XingDun release and vendor configuration is injected locally or by CI.
+chat/demo/app/agconnect-services.json
+chat/demo/app/mcs-services.json
+chat/demo/app/src/main/assets/timpush-configs.json
+*.jks
+*.keystore

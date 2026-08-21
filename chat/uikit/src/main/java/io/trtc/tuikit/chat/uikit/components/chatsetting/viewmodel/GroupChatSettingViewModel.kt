@@ -6,6 +6,10 @@ import androidx.lifecycle.viewModelScope
 import io.trtc.tuikit.chat.uikit.components.chatsetting.utils.ChatSettingBackgroundStore
 import io.trtc.tuikit.chat.uikit.components.common.ConversationIDUtil
 import io.trtc.tuikit.chat.uikit.components.common.EventBus
+import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionCompletion
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionResult
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
@@ -276,25 +280,30 @@ class GroupChatSettingViewModel(
     }
 
     fun setGroupName(name: String) {
+        if (dispatchBusinessAction(BusinessAction.UpdateGroup(groupID, mapOf("name" to name)))) return
         val info = GroupInfo(groupID = groupID, groupName = name)
         _groupStore.updateProfile(info, emptyHandler())
     }
 
     fun setGroupAvatar(avatarUrl: String) {
+        if (dispatchBusinessAction(BusinessAction.UpdateGroup(groupID, mapOf("avatar_url" to avatarUrl)))) return
         val info = GroupInfo(groupID = groupID, avatarURL = avatarUrl)
         _groupStore.updateProfile(info, emptyHandler())
     }
 
     fun setGroupNotice(notice: String) {
+        if (dispatchBusinessAction(BusinessAction.UpdateGroup(groupID, mapOf("announcement" to notice)))) return
         val info = GroupInfo(groupID = groupID, notification = notice)
         _groupStore.updateProfile(info, emptyHandler())
     }
 
     fun setJoinGroupApproveType(type: GroupJoinOption) {
+        if (dispatchBusinessAction(BusinessAction.UpdateGroup(groupID, mapOf("join_mode" to type.value.toString())))) return
         _groupStore.setJoinOption(groupID, type, emptyHandler())
     }
 
     fun setInviteGroupApproveType(type: GroupInviteOption) {
+        if (dispatchBusinessAction(BusinessAction.UpdateGroup(groupID, mapOf("invite_mode" to type.value.toString())))) return
         _groupStore.setInviteOption(groupID, type, emptyHandler())
     }
 
@@ -310,6 +319,7 @@ class GroupChatSettingViewModel(
 
     fun addMember(userIDList: List<String>) {
         if (userIDList.isEmpty()) return
+        if (dispatchBusinessAction(BusinessAction.InviteGroupMembers(groupID, userIDList))) return
         _groupMemberStore.addMember(userIDList, emptyHandler())
     }
 
@@ -317,6 +327,16 @@ class GroupChatSettingViewModel(
         onSuccess: (() -> Unit)? = null,
         onFailure: ((Int, String) -> Unit)? = null
     ) {
+        if (dispatchBusinessAction(
+                BusinessAction.LeaveGroup(groupID),
+                onSuccess = {
+                    _groupStore.loadJoinedGroups()
+                    _conversationListStore.deleteConversation(conversationID)
+                    onSuccess?.invoke()
+                },
+                onFailure = { code, desc -> onFailure?.invoke(code, desc) }
+            )
+        ) return
         _groupStore.quitGroup(
             groupID,
             completionHandler(
@@ -333,6 +353,16 @@ class GroupChatSettingViewModel(
         onSuccess: (() -> Unit)? = null,
         onFailure: ((Int, String) -> Unit)? = null
     ) {
+        if (dispatchBusinessAction(
+                BusinessAction.DismissGroup(groupID),
+                onSuccess = {
+                    _groupStore.loadJoinedGroups()
+                    _conversationListStore.deleteConversation(conversationID)
+                    onSuccess?.invoke()
+                },
+                onFailure = { code, desc -> onFailure?.invoke(code, desc) }
+            )
+        ) return
         _groupStore.dismissGroup(
             groupID,
             completionHandler(
@@ -377,11 +407,13 @@ class GroupChatSettingViewModel(
     }
 
     fun changeOwner(newOwnerID: String) {
+        if (dispatchBusinessAction(BusinessAction.TransferGroupOwner(groupID, newOwnerID))) return
         _groupStore.changeOwner(groupID, newOwnerID)
     }
 
     fun toggleGroupAllMute() {
         val mute = !isAllMuted.value
+        if (dispatchBusinessAction(BusinessAction.SetGroupMuteAll(groupID, mute))) return
         _groupStore.muteAllMembers(groupID, mute, emptyHandler())
     }
 
@@ -390,6 +422,11 @@ class GroupChatSettingViewModel(
         muteTimeSeconds: Long,
         onFailure: ((Int, String) -> Unit)? = null
     ) {
+        if (dispatchBusinessAction(
+                BusinessAction.MuteGroupMember(groupID, userID, muteTimeSeconds),
+                onFailure = { code, desc -> onFailure?.invoke(code, desc) }
+            )
+        ) return
         _groupMemberStore.muteMember(
             userID,
             muteTimeSeconds,
@@ -407,6 +444,11 @@ class GroupChatSettingViewModel(
         role: GroupMemberRole,
         onFailure: ((Int, String) -> Unit)? = null
     ) {
+        if (dispatchBusinessAction(
+                BusinessAction.SetGroupAdministrator(groupID, userID, role == GroupMemberRole.ADMIN),
+                onFailure = { code, desc -> onFailure?.invoke(code, desc) }
+            )
+        ) return
         _groupMemberStore.setMemberRole(
             userID,
             role,
@@ -421,6 +463,7 @@ class GroupChatSettingViewModel(
 
     fun deleteMember(members: List<GroupMember>) {
         val userIDList = members.map { it.userID }
+        if (dispatchBusinessAction(BusinessAction.RemoveGroupMembers(groupID, userIDList))) return
         _groupMemberStore.deleteMember(userIDList, emptyHandler())
     }
 
@@ -437,6 +480,20 @@ class GroupChatSettingViewModel(
         override fun onFailure(code: Int, desc: String) {
             onFailure?.invoke(code, desc)
         }
+    }
+
+    private fun dispatchBusinessAction(
+        action: BusinessAction,
+        onSuccess: () -> Unit = { refreshGroupData() },
+        onFailure: (Int, String) -> Unit = { _, _ -> }
+    ): Boolean = BusinessActionRegistry.dispatch(action, object : BusinessActionCompletion {
+        override fun onSuccess(result: BusinessActionResult) = onSuccess()
+        override fun onFailure(code: Int, description: String) = onFailure(code, description)
+    })
+
+    private fun refreshGroupData() {
+        _groupStore.loadJoinedGroups()
+        _groupMemberStore.loadMembers(roleList = listOf(GroupMemberFilterRole.ALL))
     }
 
     private fun updateConversationInfo(update: (ConversationInfo) -> ConversationInfo) {

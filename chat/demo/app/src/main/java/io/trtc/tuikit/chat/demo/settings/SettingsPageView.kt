@@ -1,8 +1,6 @@
 package io.trtc.tuikit.chat.demo.settings
 
 import io.trtc.tuikit.chat.demo.common.AppConstants
-import io.trtc.tuikit.chat.demo.main.MainActivity
-
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
@@ -33,7 +31,10 @@ import io.trtc.tuikit.atomicxcore.api.login.AllowType
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.login.UserProfile
 import io.trtc.tuikit.chat.app.R
-import io.trtc.tuikit.chat.demo.login.LocalLoginActivity
+import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.uikit.pages.PageHeaderView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -77,6 +78,7 @@ class SettingsPageView @JvmOverloads constructor(
     private val scrollContent: LinearLayout
     private val allDividers = mutableListOf<View>()
     private val allSpacers = mutableListOf<View>()
+    private val productFeatureItems = mutableListOf<View>()
 
     private var enableReadReceipt: Boolean = AppBuilderConfig.enableReadReceipt
     private var translateTargetLanguage: String = AppBuilderConfig.translateTargetLanguage
@@ -164,6 +166,9 @@ class SettingsPageView @JvmOverloads constructor(
         ))
 
         setupSettingsItems()
+        itemTranslateLanguage.visibility = View.GONE
+        findViewById<View>(R.id.demo_divider4).visibility = View.GONE
+        setupProductFeatureEntries()
         setupReadReceiptToggle()
         setupCallsTabToggle()
         setupLogout()
@@ -225,7 +230,7 @@ class SettingsPageView @JvmOverloads constructor(
             itemAddRule,
             itemTranslateLanguage,
             itemVoiceMessage,
-        )
+        ) + productFeatureItems
         for (item in entryItems) {
             item.findViewById<TextView>(R.id.demo_tvSettingsTitle)?.setTextColor(colors.textColorSecondary)
             item.findViewById<TextView>(R.id.demo_tvSettingsValue)?.setTextColor(colors.textColorPrimary)
@@ -313,6 +318,29 @@ class SettingsPageView @JvmOverloads constructor(
         view.setOnClickListener { onClick() }
     }
 
+    private fun setupProductFeatureEntries() {
+        settingsGroupVoice.visibility = View.VISIBLE
+        findViewById<View>(R.id.demo_spacerVoice).visibility = View.VISIBLE
+        val entries = listOf(
+            R.string.xingdun_personal_qr to XingDunFeatureActivity.MODE_PERSONAL_QR,
+            R.string.xingdun_invite_title to XingDunFeatureActivity.MODE_INVITE,
+            R.string.xingdun_feedback to XingDunFeatureActivity.MODE_FEEDBACK,
+            R.string.xingdun_reports to XingDunFeatureActivity.MODE_REPORTS,
+            R.string.xingdun_version to XingDunFeatureActivity.MODE_VERSION,
+        )
+        entries.forEachIndexed { index, (title, mode) ->
+            val entry = if (index == 0) itemVoiceMessage else {
+                LayoutInflater.from(context).inflate(R.layout.demo_item_settings_entry, settingsGroupVoice, false).also {
+                    settingsGroupVoice.addView(it)
+                    productFeatureItems.add(it)
+                }
+            }
+            setupEntryItem(entry, context.getString(title), "") {
+                XingDunFeatureActivity.start(context, mode)
+            }
+        }
+    }
+
     private fun updateEntryValue(view: View, value: String) {
         view.findViewById<TextView>(R.id.demo_tvSettingsValue).text = value
     }
@@ -339,31 +367,34 @@ class SettingsPageView @JvmOverloads constructor(
     }
 
     private fun setupCallsTabToggle() {
-        tvCallsTabTitle.text = context.getString(R.string.demo_settings_show_calls)
-        switchCallsTab.setChecked(MMKV.defaultMMKV().decodeBool(AppConstants.KEY_SHOW_CALLS_TAB, true))
-        switchCallsTab.setOnCheckedChangeListener { isChecked ->
-            MMKV.defaultMMKV().encode(AppConstants.KEY_SHOW_CALLS_TAB, isChecked)
-            (context as? MainActivity)?.setCallsTabVisible(isChecked)
-        }
+        tvCallsTabTitle.text = context.getString(R.string.xingdun_workspace_available)
+        switchCallsTab.setChecked(true)
+        switchCallsTab.isEnabled = false
     }
 
     private fun setupLogout() {
         btnLogout.setOnClickListener {
-            LoginStore.shared.logout(object : CompletionHandler {
-                override fun onSuccess() {
-                    MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, "")
-                    MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_TOKEN, "")
-                    MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_TYPE, "")
-                    val activity = context
-                    if (activity is AppCompatActivity) {
-                        activity.startActivity(Intent(activity, LocalLoginActivity::class.java).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                        })
+            XingDunPushManager.unregisterDevice {
+                LoginStore.shared.logout(object : CompletionHandler {
+                    override fun onSuccess() {
+                        completeLocalLogout()
                     }
-                }
 
-                override fun onFailure(code: Int, desc: String) {
-                }
+                    override fun onFailure(code: Int, desc: String) {
+                        completeLocalLogout()
+                    }
+                })
+            }
+        }
+    }
+
+    private fun completeLocalLogout() {
+        XingDunSessionManager.clear()
+        MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, "")
+        val activity = context
+        if (activity is AppCompatActivity) {
+            activity.startActivity(Intent(activity, XingDunLaunchActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             })
         }
     }

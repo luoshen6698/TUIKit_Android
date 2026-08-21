@@ -8,6 +8,10 @@ import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.atomicxcore.api.contact.FriendApplicationInfo
 import io.trtc.tuikit.atomicxcore.api.group.GroupApplicationInfo
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
+import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionCompletion
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionResult
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -55,6 +59,11 @@ class FriendApplicationSubViewModel(
         onSuccess: () -> Unit = {},
         onFailure: (String) -> Unit = {}
     ) {
+        if (BusinessActionRegistry.dispatch(
+                BusinessAction.HandleFriendApplication(application.userID, true),
+                businessCompletion({ contactStore.loadFriendApplications(); contactStore.loadFriends(); onSuccess() }, onFailure)
+            )
+        ) return
         contactStore.acceptFriendApplication(application, object : CompletionHandler {
             override fun onSuccess() {
                 onSuccess()
@@ -71,6 +80,11 @@ class FriendApplicationSubViewModel(
         onSuccess: () -> Unit = {},
         onFailure: (String) -> Unit = {}
     ) {
+        if (BusinessActionRegistry.dispatch(
+                BusinessAction.HandleFriendApplication(application.userID, false),
+                businessCompletion({ contactStore.loadFriendApplications(); onSuccess() }, onFailure)
+            )
+        ) return
         contactStore.refuseFriendApplication(application, object : CompletionHandler {
             override fun onSuccess() {
                 onSuccess()
@@ -80,6 +94,14 @@ class FriendApplicationSubViewModel(
                 onFailure(desc)
             }
         })
+    }
+
+    private fun businessCompletion(
+        onSuccess: () -> Unit,
+        onFailure: (String) -> Unit
+    ): BusinessActionCompletion = object : BusinessActionCompletion {
+        override fun onSuccess(result: BusinessActionResult) = onSuccess()
+        override fun onFailure(code: Int, description: String) = onFailure(description)
     }
 }
 
@@ -107,6 +129,16 @@ class GroupApplicationSubViewModel(
         onSuccess: () -> Unit = {},
         onFailure: (String) -> Unit = {}
     ) {
+        if (BusinessActionRegistry.dispatch(
+                BusinessAction.HandleGroupApplication(
+                    application.applicationID,
+                    application.groupID,
+                    application.fromUser.orEmpty(),
+                    true
+                ),
+                businessCompletion({ groupStore.loadApplications(); groupStore.loadJoinedGroups(); onSuccess() }, onFailure)
+            )
+        ) return
         groupStore.acceptApplication(application, object : CompletionHandler {
             override fun onSuccess() {
                 onSuccess()
@@ -123,6 +155,16 @@ class GroupApplicationSubViewModel(
         onSuccess: () -> Unit = {},
         onFailure: (String) -> Unit = {}
     ) {
+        if (BusinessActionRegistry.dispatch(
+                BusinessAction.HandleGroupApplication(
+                    application.applicationID,
+                    application.groupID,
+                    application.fromUser.orEmpty(),
+                    false
+                ),
+                businessCompletion({ groupStore.loadApplications(); onSuccess() }, onFailure)
+            )
+        ) return
         groupStore.refuseApplication(application, object : CompletionHandler {
             override fun onSuccess() {
                 onSuccess()
@@ -132,6 +174,14 @@ class GroupApplicationSubViewModel(
                 onFailure(desc)
             }
         })
+    }
+
+    private fun businessCompletion(
+        onSuccess: () -> Unit,
+        onFailure: (String) -> Unit
+    ): BusinessActionCompletion = object : BusinessActionCompletion {
+        override fun onSuccess(result: BusinessActionResult) = onSuccess()
+        override fun onFailure(code: Int, description: String) = onFailure(description)
     }
 }
 

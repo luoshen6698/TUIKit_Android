@@ -13,13 +13,28 @@
         android:theme="@style/demo_Theme_ChatView">
 
         <activity
-            android:name="io.trtc.tuikit.chat.demo.login.LocalLoginActivity"
+            android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity"
             android:exported="true"
             android:theme="@style/Chat_UIKit_Theme"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="api.xingdunim.com"
+                    android:path="/prod/xingdun/share.html" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="xingdun" android:host="invite" />
             </intent-filter>
         </activity>
 
@@ -33,6 +48,12 @@
             android:name="io.trtc.tuikit.chat.demo.chat.ChatActivity"
             android:exported="false"
             android:theme="@style/Chat_UIKit_Theme" />
+
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity"
+            android:exported="false"
+            android:theme="@style/Chat_UIKit_Theme"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name="io.trtc.tuikit.chat.demo.chat.ChatSettingActivity"

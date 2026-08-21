@@ -22,3 +22,6 @@
 -keep class com.tencent.qcloud.** { *; }
 -keep class com.tencentcloud.tencentcloudcustomer.** { *; }
 -keep class com.tencent.imsdk.** { *; }
+# TIMPush and Tencent callbacks are discovered by reflection and Android components.
+-keep class com.tencent.qcloud.** { *; }
+-keep class com.tencent.timpush.** { *; }

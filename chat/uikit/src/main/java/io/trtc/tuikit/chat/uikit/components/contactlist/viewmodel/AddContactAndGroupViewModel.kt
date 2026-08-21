@@ -10,6 +10,9 @@ import io.trtc.tuikit.atomicxcore.api.group.GroupInfo
 import io.trtc.tuikit.atomicxcore.api.group.GetGroupInfoCompletionHandler
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
+import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionCompletion
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -155,6 +158,13 @@ class AddContactAndGroupViewModel(
     ) {
         _uiState.value = _uiState.value.copy(isAddingContact = true, requestResult = null)
         val friendRemark = remark.trim().ifEmpty { result.nickname ?: result.userID }
+        if (BusinessActionRegistry.dispatch(
+                BusinessAction.ApplyFriend(result.userID, addWording, friendRemark),
+                businessCompletion(successMessage, AddType.CONTACT, failureMessageMapper) {
+                    contactStore.loadFriends()
+                }
+            )
+        ) return
         contactStore.addFriend(
             userID = result.userID,
             remark = friendRemark,
@@ -192,6 +202,13 @@ class AddContactAndGroupViewModel(
         failureMessageMapper: (Int, String) -> String
     ) {
         _uiState.value = _uiState.value.copy(isAddingContact = true, requestResult = null)
+        if (BusinessActionRegistry.dispatch(
+                BusinessAction.JoinGroup(result.userID, message),
+                businessCompletion(successMessage, AddType.GROUP, failureMessageMapper) {
+                    groupStore.loadJoinedGroups()
+                }
+            )
+        ) return
         groupStore.joinGroup(
             groupID = result.userID,
             message = message,
@@ -239,6 +256,28 @@ class AddContactAndGroupViewModel(
 
     fun clearRequestResult() {
         _uiState.value = _uiState.value.copy(requestResult = null)
+    }
+
+    private fun businessCompletion(
+        successMessage: String,
+        type: AddType,
+        failureMessageMapper: (Int, String) -> String,
+        refresh: () -> Unit
+    ): BusinessActionCompletion = object : BusinessActionCompletion {
+        override fun onSuccess(result: io.trtc.tuikit.chat.uikit.components.config.BusinessActionResult) {
+            refresh()
+            _uiState.value = _uiState.value.copy(
+                isAddingContact = false,
+                requestResult = RequestResult(true, successMessage, type)
+            )
+        }
+
+        override fun onFailure(code: Int, description: String) {
+            _uiState.value = _uiState.value.copy(
+                isAddingContact = false,
+                requestResult = RequestResult(false, failureMessageMapper(code, description), type)
+            )
+        }
     }
 }
 

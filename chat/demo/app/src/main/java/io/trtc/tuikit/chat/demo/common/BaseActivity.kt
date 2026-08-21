@@ -12,7 +12,7 @@ import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicxcore.api.login.LoginStatus
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
-import io.trtc.tuikit.chat.demo.login.LocalLoginActivity
+import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,7 +46,7 @@ abstract class BaseActivity : AppCompatActivity() {
         if (LoginStore.shared.loginState.loginStatus.value != LoginStatus.UNLOGIN) {
             return false
         }
-        startActivity(Intent(this, LocalLoginActivity::class.java).apply {
+        startActivity(Intent(this, XingDunLaunchActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         })
         finish()

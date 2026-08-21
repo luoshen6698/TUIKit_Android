@@ -26,6 +26,10 @@ import io.trtc.tuikit.chat.uikit.components.common.findViewModelStoreOwner
 import io.trtc.tuikit.chat.uikit.components.contactlist.utils.matchesSearchQuery
 import io.trtc.tuikit.chat.uikit.components.contactlist.viewmodel.BlacklistSubViewModel
 import io.trtc.tuikit.chat.uikit.components.contactlist.viewmodel.BlacklistSubViewModelFactory
+import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionCompletion
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
+import io.trtc.tuikit.chat.uikit.components.config.BusinessActionResult
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.chat.uikit.components.widgets.azorderedlist.AZOrderedListItem
@@ -366,6 +370,21 @@ internal class BlacklistDialog(
     }
 
     private fun removeFromBlacklist(contactInfo: ContactInfo) {
+        if (BusinessActionRegistry.dispatch(
+                BusinessAction.SetFriendBlacklist(contactInfo.userID, false),
+                object : BusinessActionCompletion {
+                    override fun onSuccess(result: BusinessActionResult) {
+                        contactStore.loadBlackList()
+                    }
+
+                    override fun onFailure(code: Int, description: String) {
+                        if (description.isNotBlank()) {
+                            Toast.makeText(context, description, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            )
+        ) return
         contactStore.removeFromBlacklist(contactInfo.userID, object : CompletionHandler {
             override fun onSuccess() {}
 

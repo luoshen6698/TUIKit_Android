@@ -17,6 +17,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -31,7 +32,7 @@ import io.trtc.tuikit.atomicxcore.api.login.Gender
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.login.UserProfile
 import io.trtc.tuikit.chat.app.R
-import io.trtc.tuikit.chat.uikit.components.widgets.AvatarPickerDialog
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -82,9 +83,6 @@ class SelfDetailActivity : BaseActivity() {
         }
 
         private const val DEFAULT_BIRTHDAY_TEXT = "1970-01-01"
-        private const val USER_AVATAR_URL_TEMPLATE =
-            "https://im.sdk.qcloud.com/download/tuikit-resource/avatar/avatar_%s.png"
-        private const val USER_AVATAR_URL_COUNT = 26
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -147,7 +145,6 @@ class SelfDetailActivity : BaseActivity() {
 
         avatar = Avatar(this).apply {
             setSize(Avatar.AvatarSize.XXL)
-            setOnAvatarClickListener { showAvatarPicker() }
         }
         contentColumn.addView(
             avatar,
@@ -291,19 +288,6 @@ class SelfDetailActivity : BaseActivity() {
         }
     }
 
-    private fun showAvatarPicker() {
-        val urls = buildAvatarUrls()
-        AvatarPickerDialog(
-            context = this,
-            title = getString(R.string.demo_settings_self_detail_pick_avatar_title),
-            imageUrls = urls,
-            onImageSelected = { _, url ->
-                val profile = UserProfile(avatarURL = url)
-                LoginStore.shared.setSelfInfo(profile, noopCompletion())
-            }
-        ).show()
-    }
-
     private fun showNicknameEditor() {
         TextInputDialog(
             context = this,
@@ -312,7 +296,7 @@ class SelfDetailActivity : BaseActivity() {
             onConfirm = { text ->
                 if (text.isNotBlank()) {
                     val profile = UserProfile(nickname = text)
-                    LoginStore.shared.setSelfInfo(profile, noopCompletion())
+                    updateProfileOnServer(mapOf("nickname" to text), profile)
                 }
             }
         ).show()
@@ -325,7 +309,7 @@ class SelfDetailActivity : BaseActivity() {
             initialText = cachedSignature,
             onConfirm = { text ->
                 val profile = UserProfile(selfSignature = text)
-                LoginStore.shared.setSelfInfo(profile, noopCompletion())
+                updateProfileOnServer(mapOf("signature" to text), profile)
             }
         ).show()
     }
@@ -348,7 +332,12 @@ class SelfDetailActivity : BaseActivity() {
         ActionSheet.show(this, options) { selected ->
             val gender = selected.value as? Gender ?: Gender.UNKNOWN
             val profile = UserProfile(gender = gender)
-            LoginStore.shared.setSelfInfo(profile, noopCompletion())
+            val serverGender = when (gender) {
+                Gender.MALE -> 1
+                Gender.FEMALE -> 2
+                else -> 0
+            }
+            updateProfileOnServer(mapOf("gender" to serverGender), profile)
         }
     }
 
@@ -374,7 +363,8 @@ class SelfDetailActivity : BaseActivity() {
                 val birthdayStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
                     .format(Date(cal.timeInMillis))
                 val profile = UserProfile(birthday = birthdayStr.toLong())
-                LoginStore.shared.setSelfInfo(profile, noopCompletion())
+                val serverBirthday = "%04d-%02d-%02d".format(year, month + 1, dayOfMonth)
+                updateProfileOnServer(mapOf("birthday" to serverBirthday), profile)
             },
             calendar.get(Calendar.YEAR),
             calendar.get(Calendar.MONTH),
@@ -383,12 +373,28 @@ class SelfDetailActivity : BaseActivity() {
         picker.show()
     }
 
-    private fun buildAvatarUrls(): List<String> {
-        val list = mutableListOf<String>()
-        for (i in 1..USER_AVATAR_URL_COUNT) {
-            list.add(String.format(USER_AVATAR_URL_TEMPLATE, i))
+    private fun updateProfileOnServer(fields: Map<String, Any>, profile: UserProfile) {
+        val session = XingDunSessionManager.currentSession()
+        if (session == null) {
+            Toast.makeText(this, R.string.xingdun_session_expired, Toast.LENGTH_LONG).show()
+            return
         }
-        return list
+        activityScope?.launch {
+            runCatching {
+                XingDunSessionManager.apiClient().postEmpty(session, "user/updateProfile", fields)
+            }.onSuccess {
+                // Server REST already synchronizes Tencent IM. This call refreshes the local Store;
+                // it is intentionally issued only after the authoritative business write succeeds.
+                LoginStore.shared.setSelfInfo(profile, noopCompletion())
+                Toast.makeText(this@SelfDetailActivity, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
+            }.onFailure { error ->
+                Toast.makeText(
+                    this@SelfDetailActivity,
+                    error.localizedMessage ?: getString(R.string.xingdun_action_failed),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     private fun noopCompletion(): CompletionHandler = object : CompletionHandler {
