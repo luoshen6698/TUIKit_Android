@@ -6,6 +6,8 @@ import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.text.TextUtils
 import android.util.TypedValue
@@ -18,9 +20,11 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import com.google.gson.JsonObject
 import io.trtc.tuikit.chat.uikit.components.chatsetting.ui.TextInputDialog
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
@@ -33,12 +37,15 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.login.UserProfile
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunUploadFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -65,10 +72,13 @@ class SelfDetailActivity : BaseActivity() {
     private lateinit var entryContainer: LinearLayout
 
     private lateinit var accountItem: SettingsEntry
+    private lateinit var customIDItem: SettingsEntry
     private lateinit var nicknameItem: SettingsEntry
     private lateinit var statusItem: SettingsEntry
     private lateinit var genderItem: SettingsEntry
     private lateinit var birthdayItem: SettingsEntry
+    private lateinit var phoneItem: SettingsEntry
+    private lateinit var emailItem: SettingsEntry
 
     private var cachedUserID: String = ""
     private var cachedNickname: String = ""
@@ -76,6 +86,12 @@ class SelfDetailActivity : BaseActivity() {
     private var cachedGender: Gender = Gender.UNKNOWN
     private var cachedBirthday: Long? = null
     private var cachedAvatarUrl: String? = null
+    private var cachedCustomID: String = ""
+
+    private val avatarPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri ?: return@registerForActivityResult
+        activityScope?.launch { uploadAvatar(uri) }
+    }
 
     companion object {
         fun start(context: Context) {
@@ -103,7 +119,7 @@ class SelfDetailActivity : BaseActivity() {
         scrollView = findViewById(R.id.demo_selfDetailScrollView)
         contentColumn = findViewById(R.id.demo_selfDetailContent)
 
-        ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { view, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { _, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             headerContainer.updatePadding(top = systemBars.top)
             scrollView.updatePadding(bottom = systemBars.bottom)
@@ -130,6 +146,7 @@ class SelfDetailActivity : BaseActivity() {
                 updateUserProfile(profile)
             }
         }
+        activityScope?.launch { loadServerProfile() }
     }
 
     override fun onDestroy() {
@@ -145,6 +162,7 @@ class SelfDetailActivity : BaseActivity() {
 
         avatar = Avatar(this).apply {
             setSize(Avatar.AvatarSize.XXL)
+            setOnAvatarClickListener { avatarPicker.launch("image/*") }
         }
         contentColumn.addView(
             avatar,
@@ -191,6 +209,13 @@ class SelfDetailActivity : BaseActivity() {
             showArrow = false,
             showDivider = true
         )
+        customIDItem = SettingsEntry(
+            context = this,
+            title = getString(R.string.xingdun_custom_id),
+            showArrow = true,
+            showDivider = true,
+            onClick = { showCustomIDEditor() }
+        )
         nicknameItem = SettingsEntry(
             context = this,
             title = getString(R.string.demo_settings_self_detail_nickname),
@@ -216,15 +241,30 @@ class SelfDetailActivity : BaseActivity() {
             context = this,
             title = getString(R.string.demo_settings_self_detail_birthday),
             showArrow = true,
-            showDivider = false,
+            showDivider = true,
             onClick = { showBirthdayPicker() }
+        )
+        phoneItem = SettingsEntry(
+            context = this,
+            title = getString(R.string.xingdun_phone),
+            showArrow = false,
+            showDivider = true
+        )
+        emailItem = SettingsEntry(
+            context = this,
+            title = getString(R.string.xingdun_email),
+            showArrow = false,
+            showDivider = false
         )
 
         entryContainer.addView(accountItem.view, entryLayoutParams())
+        entryContainer.addView(customIDItem.view, entryLayoutParams())
         entryContainer.addView(nicknameItem.view, entryLayoutParams())
         entryContainer.addView(statusItem.view, entryLayoutParams())
         entryContainer.addView(genderItem.view, entryLayoutParams())
         entryContainer.addView(birthdayItem.view, entryLayoutParams())
+        entryContainer.addView(phoneItem.view, entryLayoutParams())
+        entryContainer.addView(emailItem.view, entryLayoutParams())
     }
 
     private fun entryLayoutParams(): LinearLayout.LayoutParams =
@@ -244,10 +284,13 @@ class SelfDetailActivity : BaseActivity() {
         tvDisplayName.setTextColor(colors.textColorPrimary)
 
         accountItem.applyColors(colors)
+        customIDItem.applyColors(colors)
         nicknameItem.applyColors(colors)
         statusItem.applyColors(colors)
         genderItem.applyColors(colors)
         birthdayItem.applyColors(colors)
+        phoneItem.applyColors(colors)
+        emailItem.applyColors(colors)
     }
 
     private fun updateUserProfile(profile: UserProfile?) {
@@ -264,10 +307,107 @@ class SelfDetailActivity : BaseActivity() {
             Avatar.AvatarContent.Image(url = cachedAvatarUrl, fallbackName = displayName)
         )
         accountItem.setValue(cachedUserID)
+        customIDItem.setValue(cachedCustomID)
         nicknameItem.setValue(cachedNickname)
         statusItem.setValue(cachedSignature)
         genderItem.setValue(genderDisplayText(cachedGender))
         birthdayItem.setValue(birthdayDisplayText(cachedBirthday))
+    }
+
+    private suspend fun loadServerProfile() {
+        val session = XingDunSessionManager.currentSession() ?: return
+        runCatching {
+            XingDunSessionManager.apiClient().get<JsonObject>(
+                session, "user/profile", emptyMap(), JsonObject::class.java
+            )
+        }.onSuccess { profile ->
+            cachedCustomID = profile.string("custom_id").orEmpty()
+            customIDItem.setValue(cachedCustomID.ifBlank { getString(R.string.xingdun_not_set) })
+            phoneItem.setValue(profile.string("phone")?.let(::maskPhone) ?: getString(R.string.xingdun_not_bound))
+            emailItem.setValue(profile.string("email")?.let(::maskEmail) ?: getString(R.string.xingdun_not_bound))
+            profile.string("avatar")?.let { url ->
+                cachedAvatarUrl = url
+                avatar.setContent(Avatar.AvatarContent.Image(url = url, fallbackName = cachedNickname.ifBlank { cachedUserID }))
+            }
+        }
+    }
+
+    private fun showCustomIDEditor() {
+        TextInputDialog(
+            context = this,
+            title = getString(R.string.xingdun_edit_custom_id),
+            initialText = cachedCustomID,
+            onConfirm = { value ->
+                val normalized = value.trim()
+                if (!normalized.matches(Regex("^[A-Za-z0-9_]{3,32}$"))) {
+                    Toast.makeText(this, R.string.xingdun_custom_id_invalid, Toast.LENGTH_LONG).show()
+                    return@TextInputDialog
+                }
+                activityScope?.launch {
+                    runCatching {
+                        XingDunSessionManager.apiClient().postEmpty(
+                            XingDunSessionManager.currentSession() ?: error(getString(R.string.xingdun_session_expired)),
+                            "user/updateCustomId",
+                            mapOf("custom_id" to normalized)
+                        )
+                    }.onSuccess {
+                        cachedCustomID = normalized
+                        customIDItem.setValue(normalized)
+                        Toast.makeText(this@SelfDetailActivity, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
+                    }.onFailure { showProfileError(it) }
+                }
+            }
+        ).show()
+    }
+
+    private suspend fun uploadAvatar(uri: android.net.Uri) {
+        val bytes = runCatching {
+            withContext(Dispatchers.IO) {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+                check(bounds.outWidth > 0 && bounds.outHeight > 0)
+                var sample = 1
+                while (bounds.outWidth / sample > 2_048 || bounds.outHeight / sample > 2_048) sample *= 2
+                val bitmap = contentResolver.openInputStream(uri)?.use {
+                    BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+                } ?: error(getString(R.string.xingdun_avatar_invalid))
+                ByteArrayOutputStream().use { output ->
+                    check(bitmap.compress(Bitmap.CompressFormat.JPEG, 86, output))
+                    output.toByteArray()
+                }
+            }
+        }.getOrElse {
+            showProfileError(it)
+            return
+        }
+        if (bytes.isEmpty() || bytes.size > 5 * 1024 * 1024) {
+            Toast.makeText(this, R.string.xingdun_avatar_invalid, Toast.LENGTH_LONG).show()
+            return
+        }
+        runCatching {
+            XingDunSessionManager.apiClient().postMultipartEmpty(
+                XingDunSessionManager.currentSession() ?: error(getString(R.string.xingdun_session_expired)),
+                "user/updateProfile",
+                emptyMap(),
+                listOf(XingDunUploadFile("avatar", "xingdun-avatar.jpg", "image/jpeg", bytes))
+            )
+        }.onSuccess {
+            loadServerProfile()
+            Toast.makeText(this, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
+        }.onFailure(::showProfileError)
+    }
+
+    private fun showProfileError(error: Throwable) {
+        Toast.makeText(this, error.localizedMessage ?: getString(R.string.xingdun_action_failed), Toast.LENGTH_LONG).show()
+    }
+
+    private fun JsonObject.string(name: String): String? =
+        get(name)?.takeUnless { it.isJsonNull }?.asString?.trim()?.takeIf(String::isNotEmpty)
+
+    private fun maskPhone(value: String): String = if (value.length < 7) value else "${value.take(3)}****${value.takeLast(4)}"
+    private fun maskEmail(value: String): String {
+        val at = value.indexOf('@')
+        return if (at <= 0) value else "${value.take(1)}***${value.substring(at)}"
     }
 
     private fun genderDisplayText(gender: Gender?): String = when (gender) {

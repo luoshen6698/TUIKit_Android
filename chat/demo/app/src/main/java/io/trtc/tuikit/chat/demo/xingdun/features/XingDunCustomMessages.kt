@@ -2,12 +2,13 @@ package io.trtc.tuikit.chat.demo.xingdun.features
 
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
+import android.os.Handler
+import android.os.Looper
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -15,6 +16,7 @@ import io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageType
 import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.ChatMessageListConfig
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.BubbleStyle
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.MessageContentRenderer
@@ -23,7 +25,12 @@ import io.trtc.tuikit.chat.uikit.components.messagelist.ui.MessageRenderConfig
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.MessageRenderContext
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.MessageSummaryProvider
 import io.trtc.tuikit.chat.uikit.components.messagelist.utils.MessageListMessageSummaryRegistry
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 internal data class XingDunCustomMessage(
     val type: String,
@@ -71,13 +78,66 @@ internal data class XingDunCustomMessage(
         if (type != "redpacket") return summary(context)
         val greeting = values["greeting"]?.trim()?.takeIf(String::isNotEmpty)
             ?: context.getString(R.string.xingdun_redpacket_default_greeting)
-        return "$greeting\n${context.getString(R.string.xingdun_redpacket_closed_detail)}"
+        val status = XingDunRedpacketAccessPolicy.statusText(context, values)
+        val count = values["count"]?.toIntOrNull()?.takeIf { it > 1 }
+        return buildString {
+            append(greeting).append('\n').append(status).append('\n')
+            append(context.getString(if (values["packet_type"] == "team_exclusive") R.string.xingdun_redpacket_exclusive else R.string.xingdun_redpacket_normal))
+            if (count != null) append(" · ").append(context.getString(R.string.xingdun_redpacket_total_count, count))
+        }
     }
 
     private fun formatDuration(seconds: Int): String = if (seconds >= 3_600) {
         String.format(Locale.ROOT, "%d:%02d:%02d", seconds / 3_600, seconds % 3_600 / 60, seconds % 60)
     } else {
         String.format(Locale.ROOT, "%02d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+internal object XingDunRedpacketAccessPolicy {
+    fun canOpen(featureEnabled: Boolean): Boolean = featureEnabled
+
+    fun statusText(context: Context, values: Map<String, String>): String {
+        if (values["has_claimed"].equals("true", true) || values["has_claimed"] == "1") {
+            return context.getString(R.string.xingdun_redpacket_claimed)
+        }
+        return when (values["status"]?.toIntOrNull()) {
+            1 -> context.getString(R.string.xingdun_redpacket_sending)
+            2 -> context.getString(R.string.xingdun_redpacket_receive)
+            3 -> context.getString(R.string.xingdun_redpacket_exhausted)
+            4, 5 -> context.getString(R.string.xingdun_redpacket_expired)
+            6 -> context.getString(R.string.xingdun_redpacket_cancelled)
+            else -> values["status_name"]?.takeIf(String::isNotBlank)
+                ?: context.getString(R.string.xingdun_redpacket_status_loading)
+        }
+    }
+}
+
+internal object XingDunRedpacketStatusLoader {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val cache = ConcurrentHashMap<String, Map<String, String>>()
+
+    fun load(packetNo: String, completion: (Map<String, String>) -> Unit) {
+        cache[packetNo]?.let(completion) ?: scope.launch {
+            val session = XingDunSessionManager.currentSession() ?: return@launch
+            val values = runCatching {
+                val response = XingDunSessionManager.apiClient().get<JsonObject>(
+                    session,
+                    "redpacket/batchStatus",
+                    mapOf("packet_nos" to packetNo),
+                    JsonObject::class.java
+                )
+                val item = response.getAsJsonObject(packetNo) ?: return@runCatching emptyMap()
+                buildMap {
+                    item.entrySet().forEach { (key, value) ->
+                        if (!value.isJsonNull && value.isJsonPrimitive) put(key, value.asString)
+                    }
+                }
+            }.getOrNull() ?: return@launch
+            if (values.isNotEmpty()) cache[packetNo] = values
+            mainHandler.post { completion(values) }
+        }
     }
 }
 
@@ -177,6 +237,8 @@ private object XingDunCustomMessageRenderer : MessageContentRenderer {
     override fun bindView(view: View, context: MessageRenderContext) {
         val textView = view as TextView
         val message = XingDunCustomMessageParser.parse(context.message) ?: return
+        val packetNo = message.values["packet_no"] ?: message.values["packetNo"]
+        textView.tag = packetNo
         textView.text = message.detail(textView.context)
         val backgroundColor = if (message.type == "redpacket") 0xFFD83B32.toInt() else context.colors.bgColorInput
         val textColor = if (message.type == "redpacket") 0xFFFFFFFF.toInt() else context.colors.textColorPrimary
@@ -185,10 +247,19 @@ private object XingDunCustomMessageRenderer : MessageContentRenderer {
             setColor(backgroundColor)
             cornerRadius = 12f * textView.resources.displayMetrics.density
         }
+        val redpacketEnabled = XingDunSessionManager.currentSession()?.features?.redpacket == true
         textView.setOnClickListener(
-            if (message.type == "redpacket") View.OnClickListener {
-                Toast.makeText(it.context, R.string.xingdun_redpacket_closed_detail, Toast.LENGTH_SHORT).show()
+            if (message.type == "redpacket" && XingDunRedpacketAccessPolicy.canOpen(redpacketEnabled)) View.OnClickListener {
+                val destination = packetNo ?: return@OnClickListener
+                XingDunFeatureActivity.start(it.context, XingDunFeatureActivity.MODE_REDPACKET_DETAIL, destination)
             } else null
         )
+        if (message.type == "redpacket" && !packetNo.isNullOrBlank()) {
+            XingDunRedpacketStatusLoader.load(packetNo) { statusValues ->
+                if (textView.tag == packetNo && statusValues.isNotEmpty()) {
+                    textView.text = message.copy(values = message.values + statusValues).detail(textView.context)
+                }
+            }
+        }
     }
 }

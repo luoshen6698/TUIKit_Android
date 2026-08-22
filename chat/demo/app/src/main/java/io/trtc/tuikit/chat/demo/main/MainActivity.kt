@@ -812,6 +812,10 @@ class MainActivity : BaseActivity() {
         intent?.removeExtra(EXTRA_TARGET_TAB)
     }
 
+    fun selectTabByName(tab: String) {
+        selectRequestedTab(Intent().putExtra(EXTRA_TARGET_TAB, tab))
+    }
+
     private fun createMePage(): View {
         val page = SettingsPageView(this)
         page.setHeaderTitle(getString(R.string.demo_page_me_title))

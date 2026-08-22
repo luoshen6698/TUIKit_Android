@@ -207,7 +207,7 @@ abstract class BaseLoginActivity : BaseActivity() {
         }
     }
 
-    private fun showLanguageSelector() {
+    protected fun showLanguageSelector() {
         ActionSheet.show(this, appLanguageOptions) { selected ->
             val tag = selected.value as String
             val targetLocales = LocaleListCompat.forLanguageTags(tag)

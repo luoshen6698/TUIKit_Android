@@ -161,5 +161,13 @@
             android:layout_marginTop="8dp"
             android:text="@string/xingdun_create_account"
             android:textAllCaps="false" />
+
+        <Button
+            android:id="@+id/xingdun_language"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:text="@string/demo_settings_language"
+            android:textAllCaps="false" />
     </LinearLayout>
 </ScrollView>

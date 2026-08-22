@@ -43,4 +43,15 @@ class XingDunCustomMessageParserTest {
         val message = XingDunCustomMessageParser.parse("{}", "XingDun:report_notice")
         assertEquals("report_notice", message?.type)
     }
+
+    @Test
+    fun dormantRedpacketCannotOpenButRemainsParsable() {
+        val message = XingDunCustomMessageParser.parse(
+            """{"type":"redpacket","data":{"packet_no":"P002","status":2}}"""
+        )
+
+        assertEquals("P002", message?.values?.get("packet_no"))
+        assertFalse(XingDunRedpacketAccessPolicy.canOpen(featureEnabled = false))
+        assertTrue(XingDunRedpacketAccessPolicy.canOpen(featureEnabled = true))
+    }
 }

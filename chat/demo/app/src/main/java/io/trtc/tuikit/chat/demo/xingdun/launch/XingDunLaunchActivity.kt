@@ -43,6 +43,7 @@ class XingDunLaunchActivity : BaseLoginActivity() {
         applyInvitation(intent?.data)
         primaryAction.setOnClickListener { authenticate() }
         switchMode.setOnClickListener { setRegistrationMode(!registrationMode) }
+        findViewById<Button>(R.id.xingdun_language).setOnClickListener { showLanguageSelector() }
         findViewById<Button>(R.id.xingdun_user_agreement).setOnClickListener { openLegalDocument(false) }
         findViewById<Button>(R.id.xingdun_privacy_policy).setOnClickListener { openLegalDocument(true) }
         checkVersionThenRestore()

@@ -17,6 +17,7 @@ import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import com.google.gson.JsonObject
 import com.tencent.mmkv.MMKV
 import io.trtc.tuikit.chat.uikit.components.config.AppBuilderConfig
 import io.trtc.tuikit.atomicx.theme.Theme
@@ -27,10 +28,13 @@ import io.trtc.tuikit.chat.uikit.components.widgets.ActionItem
 import io.trtc.tuikit.chat.uikit.components.widgets.ActionSheet
 import io.trtc.tuikit.chat.uikit.components.widgets.Switch
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
+import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
+import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.login.AllowType
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.login.UserProfile
 import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
@@ -55,6 +59,10 @@ class SettingsPageView @JvmOverloads constructor(
     private val tvUserId: TextView
     private val tvUserStatus: TextView
     private val userAvatar: Avatar
+    private val profileMetrics: LinearLayout
+    private val metricFriends: TextView
+    private val metricGroups: TextView
+    private val metricFavorites: TextView
 
     private val itemTheme: View
     private val itemPrimaryColor: View
@@ -128,6 +136,10 @@ class SettingsPageView @JvmOverloads constructor(
         userAvatar = findViewById<Avatar>(R.id.demo_userAvatar).apply {
             setSize(Avatar.AvatarSize.L)
         }
+        profileMetrics = findViewById(R.id.xingdun_profileMetrics)
+        metricFriends = findViewById(R.id.xingdun_metricFriends)
+        metricGroups = findViewById(R.id.xingdun_metricGroups)
+        metricFavorites = findViewById(R.id.xingdun_metricFavorites)
 
         itemTheme = findViewById(R.id.demo_itemTheme)
         itemPrimaryColor = findViewById(R.id.demo_itemPrimaryColor)
@@ -173,6 +185,7 @@ class SettingsPageView @JvmOverloads constructor(
         setupCallsTabToggle()
         setupLogout()
         setupUserProfileClick()
+        setupMetricActions()
         observeUserInfo()
         applyThemeColors(themeStore.themeState.value.currentTheme.tokens.color)
     }
@@ -207,6 +220,9 @@ class SettingsPageView @JvmOverloads constructor(
         scrollContent.setBackgroundColor(colors.bgColorTopBar)
 
         findViewById<View>(R.id.demo_userProfileSection)?.setBackgroundColor(colors.bgColorOperate)
+        profileMetrics.setBackgroundColor(colors.bgColorOperate)
+        listOf(metricFriends, metricGroups, metricFavorites).forEach { it.setTextColor(colors.textColorPrimary) }
+        findViewById<View>(R.id.xingdun_metricsSpacer)?.setBackgroundColor(colors.bgColorTopBar)
         tvUserName.setTextColor(colors.textColorPrimary)
         tvUserId.setTextColor(colors.textColorTertiary)
         tvUserStatus.setTextColor(colors.textColorTertiary)
@@ -321,17 +337,31 @@ class SettingsPageView @JvmOverloads constructor(
     private fun setupProductFeatureEntries() {
         settingsGroupVoice.visibility = View.VISIBLE
         findViewById<View>(R.id.demo_spacerVoice).visibility = View.VISIBLE
-        val entries = listOf(
-            R.string.xingdun_personal_qr to XingDunFeatureActivity.MODE_PERSONAL_QR,
-            R.string.xingdun_scan_qr to XingDunFeatureActivity.MODE_QR_SCANNER,
-            R.string.xingdun_account_security to XingDunFeatureActivity.MODE_ACCOUNT_SECURITY,
-            R.string.xingdun_notification_settings to XingDunFeatureActivity.MODE_NOTIFICATIONS,
-            R.string.xingdun_storage_management to XingDunFeatureActivity.MODE_STORAGE,
-            R.string.xingdun_invite_title to XingDunFeatureActivity.MODE_INVITE,
-            R.string.xingdun_feedback to XingDunFeatureActivity.MODE_FEEDBACK,
-            R.string.xingdun_reports to XingDunFeatureActivity.MODE_REPORTS,
-            R.string.xingdun_version to XingDunFeatureActivity.MODE_VERSION,
-        )
+        val session = XingDunSessionManager.currentSession()
+        val entries = buildList {
+            add(R.string.xingdun_reports to XingDunFeatureActivity.MODE_REPORTS)
+            if (session?.features?.messageFavorite == true) {
+                add(R.string.xingdun_message_favorites to XingDunFeatureActivity.MODE_FAVORITES)
+            }
+            if (session?.features?.redpacket == true) {
+                add(R.string.xingdun_redpacket_account to XingDunFeatureActivity.MODE_REDPACKET_ACCOUNT)
+            }
+            add(R.string.xingdun_personal_qr to XingDunFeatureActivity.MODE_PERSONAL_QR)
+            add(R.string.xingdun_scan_qr to XingDunFeatureActivity.MODE_QR_SCANNER)
+            add(R.string.xingdun_invite_title to XingDunFeatureActivity.MODE_INVITE)
+            add(R.string.xingdun_help_center to XingDunFeatureActivity.MODE_HELP)
+            if (session?.features?.customerService == true) {
+                add(R.string.xingdun_customer_service to XingDunFeatureActivity.MODE_CUSTOMER_SERVICE)
+            }
+            add(R.string.xingdun_feedback to XingDunFeatureActivity.MODE_FEEDBACK)
+            add(R.string.xingdun_account_security to XingDunFeatureActivity.MODE_ACCOUNT_SECURITY)
+            add(R.string.xingdun_notification_settings to XingDunFeatureActivity.MODE_NOTIFICATIONS)
+            add(R.string.xingdun_storage_management to XingDunFeatureActivity.MODE_STORAGE)
+            add(R.string.xingdun_permission_management to XingDunFeatureActivity.MODE_PERMISSIONS)
+            add(R.string.xingdun_user_agreement to XingDunFeatureActivity.MODE_USER_AGREEMENT)
+            add(R.string.xingdun_privacy_policy to XingDunFeatureActivity.MODE_PRIVACY_POLICY)
+            add(R.string.xingdun_about to XingDunFeatureActivity.MODE_ABOUT)
+        }
         entries.forEachIndexed { index, (title, mode) ->
             val entry = if (index == 0) itemVoiceMessage else {
                 LayoutInflater.from(context).inflate(R.layout.demo_item_settings_entry, settingsGroupVoice, false).also {
@@ -427,6 +457,7 @@ class SettingsPageView @JvmOverloads constructor(
                 updateUserProfile(userInfo)
             }
         }
+        coroutineScope?.launch { refreshMetrics() }
     }
 
     private fun stopObserving() {
@@ -452,6 +483,41 @@ class SettingsPageView @JvmOverloads constructor(
         )
 
         updateFriendAddRuleDisplay(userInfo?.allowType)
+    }
+
+    private fun setupMetricActions() {
+        metricFriends.setOnClickListener { (context as? MainActivity)?.selectTabByName(MainActivity.TAB_CONTACTS) }
+        metricGroups.setOnClickListener { (context as? MainActivity)?.selectTabByName(MainActivity.TAB_CONTACTS) }
+        metricFavorites.setOnClickListener {
+            if (XingDunSessionManager.currentSession()?.features?.messageFavorite == true) {
+                XingDunFeatureActivity.start(context, XingDunFeatureActivity.MODE_FAVORITES)
+            }
+        }
+        renderMetrics(null)
+    }
+
+    private suspend fun refreshMetrics() {
+        val session = XingDunSessionManager.currentSession()
+        val favoriteCount = if (session?.features?.messageFavorite == true) {
+            runCatching {
+                XingDunSessionManager.apiClient().get<JsonObject>(
+                    session,
+                    "message/favorites",
+                    mapOf("page" to "1", "page_size" to "1"),
+                    JsonObject::class.java
+                ).get("total")?.asInt
+            }.getOrNull()
+        } else null
+        renderMetrics(favoriteCount)
+    }
+
+    private fun renderMetrics(favoriteCount: Int?) {
+        val friendCount = runCatching { ContactStore.shared.state.friendList.value.size }.getOrDefault(0)
+        val groupCount = runCatching { GroupStore.shared.state.joinedGroupList.value.size }.getOrDefault(0)
+        metricFriends.text = context.getString(R.string.xingdun_metric_friends, friendCount)
+        metricGroups.text = context.getString(R.string.xingdun_metric_groups, groupCount)
+        metricFavorites.text = context.getString(R.string.xingdun_metric_favorites, favoriteCount ?: 0)
+        metricFavorites.alpha = if (XingDunSessionManager.currentSession()?.features?.messageFavorite == true) 1f else 0.55f
     }
 
     private fun updateFriendAddRuleDisplay(allowType: AllowType?) {

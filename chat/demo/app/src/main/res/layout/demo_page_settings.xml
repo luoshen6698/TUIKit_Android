@@ -86,6 +86,48 @@
                 android:layout_height="10dp" />
 
             <LinearLayout
+                android:id="@+id/xingdun_profileMetrics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="12dp">
+
+                <TextView
+                    android:id="@+id/xingdun_metricFriends"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:padding="8dp"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/xingdun_metricGroups"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:padding="8dp"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/xingdun_metricFavorites"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:padding="8dp"
+                    android:textSize="15sp" />
+            </LinearLayout>
+
+            <View
+                android:id="@+id/xingdun_metricsSpacer"
+                android:layout_width="match_parent"
+                android:layout_height="10dp" />
+
+            <LinearLayout
                 android:id="@+id/demo_settingsGroup1"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

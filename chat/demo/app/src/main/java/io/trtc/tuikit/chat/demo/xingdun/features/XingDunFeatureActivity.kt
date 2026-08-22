@@ -4,12 +4,20 @@ import android.Manifest
 import android.app.NotificationManager
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.Settings
 import android.text.InputType
 import android.text.format.Formatter
@@ -28,6 +36,7 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
@@ -58,6 +67,10 @@ import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspaceContracts
+import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspaceSubmissionError
+import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspaceSubmissionValidator
+import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspaceType
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeParser
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeRoute
@@ -65,6 +78,8 @@ import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 
 /** Thin, product-owned screens for XingDun services that are not provided by TUIKit. */
@@ -80,6 +95,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private val targetID: String by lazy { intent.getStringExtra(EXTRA_TARGET_ID).orEmpty() }
     private val targetType: String by lazy { intent.getStringExtra(EXTRA_TARGET_TYPE).orEmpty() }
     private var attachmentSelectionHandler: ((List<XingDunAttachment>) -> Unit)? = null
+    private var pendingInvitePoster: Bitmap? = null
 
     private val attachmentPicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isEmpty()) return@registerForActivityResult
@@ -108,6 +124,13 @@ open class XingDunFeatureActivity : BaseActivity() {
         showNotificationSettings()
     }
 
+    private val invitePosterStoragePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val poster = pendingInvitePoster
+        pendingInvitePoster = null
+        if (granted && poster != null) saveInvitePoster(poster)
+        else status.setText(R.string.xingdun_invite_poster_permission_denied)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (isFinishing) return
@@ -131,6 +154,14 @@ open class XingDunFeatureActivity : BaseActivity() {
             MODE_DEACTIVATE -> showDeactivation()
             MODE_NOTIFICATIONS -> showNotificationSettings()
             MODE_STORAGE -> showStorageManagement()
+            MODE_HELP -> showHelpCenter()
+            MODE_PERMISSIONS -> showPermissionManagement()
+            MODE_ABOUT -> showAbout()
+            MODE_USER_AGREEMENT -> showLegalDocument(false)
+            MODE_PRIVACY_POLICY -> showLegalDocument(true)
+            MODE_FAVORITES -> showFavorites()
+            MODE_REDPACKET_ACCOUNT -> showRedpacketAccount()
+            MODE_REDPACKET_DETAIL -> showRedpacketDetail()
             else -> finish()
         }
     }
@@ -247,6 +278,35 @@ open class XingDunFeatureActivity : BaseActivity() {
                         item.string("create_time")
                     ).joinToString("\n")
                 )
+                item.getAsJsonObject("applicant")?.let { person ->
+                    addCard(
+                        getString(R.string.xingdun_workspace_applicant),
+                        listOfNotNull(person.string("name") ?: person.string("nickname"), person.string("tim_user_id")).joinToString(" · ")
+                    )
+                }
+                item.getAsJsonObject("approver")?.let { person ->
+                    addCard(
+                        getString(R.string.xingdun_workspace_approver_title),
+                        listOfNotNull(person.string("name") ?: person.string("nickname"), person.string("tim_user_id")).joinToString(" · ")
+                    )
+                }
+                val logs = item.array("logs")
+                if (!logs.isEmpty) {
+                    addCard(getString(R.string.xingdun_workspace_timeline), "")
+                    logs.forEach { element ->
+                        val log = element.asJsonObject
+                        val operator = log.getAsJsonObject("operator")
+                        addCard(
+                            log.string("action_text") ?: log.string("status_text") ?: log.string("action") ?: getString(R.string.xingdun_updated),
+                            listOfNotNull(
+                                operator?.string("name") ?: operator?.string("tim_user_id")
+                                    ?: log.string("operator_name") ?: log.string("operator_tim_user_id"),
+                                log.string("comment"),
+                                log.string("create_time")
+                            ).joinToString("\n")
+                        )
+                    }
+                }
                 if (applicant == session.timUserId && applicationStatus in 1..2) {
                     content.addView(actionButton(R.string.xingdun_workspace_withdraw) {
                         submitEmpty("workspace/withdraw", mapOf("id" to itemId), R.string.xingdun_workspace_withdrawn)
@@ -304,10 +364,31 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showWorkspaceForm() {
-        val typeValues = resources.getStringArray(R.array.xingdun_workspace_type_values)
-        val typeLabels = resources.getStringArray(R.array.xingdun_workspace_type_labels)
+        setBusy(true)
+        lifecycleScope.launch {
+            runCatching {
+                val values = XingDunSessionManager.apiClient().get<JsonArray>(
+                    requireSession(), "workspace/types", emptyMap(), JsonArray::class.java
+                )
+                XingDunWorkspaceContracts.parseTypes(values).filter(XingDunWorkspaceType::available)
+            }.onSuccess(::renderWorkspaceForm).onFailure(::showFailure)
+        }
+    }
+
+    private fun renderWorkspaceForm(types: List<XingDunWorkspaceType>) {
+        setBusy(false)
+        if (types.isEmpty()) {
+            addMessage(R.string.xingdun_workspace_no_available_types)
+            return
+        }
+        val initialIndex = types.indexOfFirst { it.type == targetID }.takeIf { it >= 0 } ?: 0
         val type = Spinner(this).apply {
-            adapter = ArrayAdapter(this@XingDunFeatureActivity, android.R.layout.simple_spinner_dropdown_item, typeLabels.toList())
+            adapter = ArrayAdapter(
+                this@XingDunFeatureActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                types.map(XingDunWorkspaceType::name)
+            )
+            setSelection(initialIndex)
         }
         val title = input(R.string.xingdun_workspace_form_title)
         val reason = input(R.string.xingdun_workspace_form_reason, multiline = true)
@@ -316,18 +397,44 @@ open class XingDunFeatureActivity : BaseActivity() {
         val amount = input(R.string.xingdun_workspace_form_amount, decimal = true)
         content.addView(type)
         listOf(title, reason, start, end, amount).forEach(content::addView)
+        val updateRequirements = {
+            val selected = types[type.selectedItemPosition]
+            start.visibility = if (selected.requiresTime) View.VISIBLE else View.GONE
+            end.visibility = if (selected.requiresTime) View.VISIBLE else View.GONE
+            amount.visibility = if (selected.requiresAmount) View.VISIBLE else View.GONE
+            status.text = selected.approverName?.let { getString(R.string.xingdun_workspace_approver, it) }.orEmpty()
+        }
+        type.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) = updateRequirements()
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+        }
+        updateRequirements()
         content.addView(actionButton(R.string.xingdun_submit) {
-            if (title.text.toString().isBlank()) {
-                status.setText(R.string.xingdun_workspace_title_required)
+            val selected = types[type.selectedItemPosition]
+            val validation = XingDunWorkspaceSubmissionValidator.validate(
+                selected,
+                title.text.toString(),
+                reason.text.toString(),
+                start.text.toString(),
+                end.text.toString(),
+                amount.text.toString()
+            )
+            if (validation != null) {
+                status.setText(when (validation) {
+                    XingDunWorkspaceSubmissionError.TITLE -> R.string.xingdun_workspace_title_required
+                    XingDunWorkspaceSubmissionError.REASON -> R.string.xingdun_workspace_reason_invalid
+                    XingDunWorkspaceSubmissionError.TIME -> R.string.xingdun_workspace_time_invalid
+                    XingDunWorkspaceSubmissionError.AMOUNT -> R.string.xingdun_workspace_amount_invalid
+                })
                 return@actionButton
             }
             val body = linkedMapOf<String, Any?>(
-                "type" to typeValues[type.selectedItemPosition],
+                "type" to selected.type,
                 "title" to title.text.toString().trim(),
                 "reason" to reason.text.toString().trim().takeIf(String::isNotEmpty),
-                "start_time" to start.text.toString().trim().takeIf(String::isNotEmpty),
-                "end_time" to end.text.toString().trim().takeIf(String::isNotEmpty),
-                "amount" to amount.text.toString().trim().takeIf(String::isNotEmpty),
+                "start_time" to start.text.toString().trim().takeIf { selected.requiresTime && it.isNotEmpty() },
+                "end_time" to end.text.toString().trim().takeIf { selected.requiresTime && it.isNotEmpty() },
+                "amount" to amount.text.toString().trim().toBigDecimalOrNull().takeIf { selected.requiresAmount },
                 "client_request_id" to UUID.randomUUID().toString()
             )
             submitEmpty("workspace/save", body, R.string.xingdun_workspace_submitted)
@@ -589,19 +696,155 @@ open class XingDunFeatureActivity : BaseActivity() {
             }.onSuccess { invitation ->
                 setBusy(false)
                 val shareUrl = invitation.string("share_url").orEmpty()
+                val qrPayload = invitation.string("qr_payload").orEmpty()
+                val inviteCode = invitation.string("invite_code").orEmpty()
                 addCard(
                     getString(R.string.xingdun_invite_title),
-                    listOfNotNull(invitation.string("invite_code"), shareUrl.takeIf(String::isNotBlank)).joinToString("\n")
+                    listOfNotNull(
+                        inviteCode,
+                        getString(R.string.xingdun_invited_count, invitation.int("invited_count") ?: 0),
+                        shareUrl.takeIf(String::isNotBlank)
+                    ).joinToString("\n")
                 )
+                val qrBitmap = qrPayload.takeIf(String::isNotBlank)?.let { payload ->
+                    runCatching { BarcodeEncoder().encodeBitmap(payload, BarcodeFormat.QR_CODE, 720, 720) }
+                        .getOrNull()
+                }
+                if (qrBitmap != null) {
+                    createInvitePoster(qrBitmap, inviteCode, requireSession().nickname).let { poster ->
+                        content.addView(ImageView(this@XingDunFeatureActivity).apply {
+                            setImageBitmap(poster)
+                            contentDescription = getString(R.string.xingdun_invite_poster_description)
+                            adjustViewBounds = true
+                        })
+                        content.addView(actionButton(R.string.xingdun_save_invite_poster) {
+                            saveInvitePoster(poster)
+                        })
+                    }
+                }
                 if (shareUrl.isNotBlank()) {
+                    content.addView(actionButton(R.string.xingdun_copy_share_link) {
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.xingdun_copy_share_link), shareUrl))
+                        status.setText(R.string.xingdun_share_link_copied)
+                    })
                     content.addView(actionButton(R.string.xingdun_share) {
                         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, shareUrl)
+                            putExtra(
+                                Intent.EXTRA_TEXT,
+                                getString(
+                                    R.string.xingdun_invite_share_text,
+                                    requireSession().nickname,
+                                    invitation.string("invite_code").orEmpty(),
+                                    shareUrl
+                                )
+                            )
                         }, getString(R.string.xingdun_share)))
                     })
                 }
             }.onFailure(::showFailure)
+        }
+    }
+
+    private fun createInvitePoster(qrBitmap: Bitmap, inviteCode: String, nickname: String): Bitmap {
+        val poster = Bitmap.createBitmap(1_080, 1_440, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(poster)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+        canvas.drawColor(Color.rgb(245, 247, 250))
+        paint.color = Color.rgb(20, 46, 74)
+        canvas.drawRect(0f, 0f, 1_080f, 430f, paint)
+        paint.color = Color.rgb(31, 140, 89)
+        canvas.drawRect(0f, 414f, 1_080f, 430f, paint)
+        drawPosterText(canvas, paint, getString(R.string.demo_app_name), 120f, 62f, Color.WHITE, true)
+        drawPosterText(canvas, paint, getString(R.string.xingdun_invite_poster_tagline), 210f, 32f, Color.WHITE)
+        drawPosterText(
+            canvas,
+            paint,
+            getString(R.string.xingdun_invite_poster_invitation, nickname.ifBlank { getString(R.string.demo_app_name) }),
+            326f,
+            32f,
+            Color.rgb(220, 229, 238)
+        )
+        paint.color = Color.WHITE
+        canvas.drawRoundRect(90f, 500f, 990f, 1_320f, 24f, 24f, paint)
+        canvas.drawBitmap(qrBitmap, null, android.graphics.RectF(230f, 570f, 850f, 1_190f), paint)
+        drawPosterText(canvas, paint, getString(R.string.xingdun_invite_poster_code, inviteCode), 1_255f, 34f, Color.rgb(20, 46, 74), true)
+        drawPosterText(canvas, paint, getString(R.string.xingdun_invite_poster_scan_hint), 1_390f, 27f, Color.rgb(89, 99, 112))
+        return poster
+    }
+
+    private fun drawPosterText(
+        canvas: Canvas,
+        paint: Paint,
+        text: String,
+        baseline: Float,
+        size: Float,
+        color: Int,
+        bold: Boolean = false
+    ) {
+        paint.textSize = size
+        paint.color = color
+        paint.typeface = if (bold) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
+        while (paint.textSize > 18f && paint.measureText(text) > 900f) {
+            paint.textSize -= 1f
+        }
+        canvas.drawText(text, 540f, baseline, paint)
+    }
+
+    private fun saveInvitePoster(poster: Bitmap) {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingInvitePoster = poster
+            invitePosterStoragePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            return
+        }
+        lifecycleScope.launch {
+            setBusy(true)
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val name = "xingdun_invite_${System.currentTimeMillis()}.png"
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val values = ContentValues().apply {
+                            put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                            put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/XingDun")
+                            put(MediaStore.Images.Media.IS_PENDING, 1)
+                        }
+                        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                            ?: error(getString(R.string.xingdun_invite_poster_save_failed))
+                        runCatching {
+                            contentResolver.openOutputStream(uri)?.use { output ->
+                                check(poster.compress(Bitmap.CompressFormat.PNG, 100, output))
+                            } ?: error(getString(R.string.xingdun_invite_poster_save_failed))
+                            values.clear()
+                            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                            contentResolver.update(uri, values, null, null)
+                        }.getOrElse { error ->
+                            contentResolver.delete(uri, null, null)
+                            throw error
+                        }
+                    } else {
+                        @Suppress("DEPRECATION")
+                        val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                        val target = File(directory, "XingDun/$name")
+                        val parent = requireNotNull(target.parentFile)
+                        check(parent.exists() || parent.mkdirs())
+                        FileOutputStream(target).use { output ->
+                            check(poster.compress(Bitmap.CompressFormat.PNG, 100, output))
+                        }
+                        @Suppress("DEPRECATION")
+                        sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(target)))
+                    }
+                }
+            }.onSuccess {
+                setBusy(false)
+                status.setText(R.string.xingdun_invite_poster_saved)
+            }.onFailure {
+                setBusy(false)
+                status.setText(R.string.xingdun_invite_poster_save_failed)
+            }
         }
     }
 
@@ -1114,6 +1357,200 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
     }
 
+    private fun showHelpCenter() {
+        listOf(
+            R.string.xingdun_help_login_question to R.string.xingdun_help_login_answer,
+            R.string.xingdun_help_offline_question to R.string.xingdun_help_offline_answer,
+            R.string.xingdun_help_contact_question to R.string.xingdun_help_contact_answer,
+            R.string.xingdun_help_notification_question to R.string.xingdun_help_notification_answer,
+            R.string.xingdun_help_media_question to R.string.xingdun_help_media_answer,
+            R.string.xingdun_help_storage_question to R.string.xingdun_help_storage_answer,
+            R.string.xingdun_help_colleague_question to R.string.xingdun_help_colleague_answer,
+            R.string.xingdun_help_group_question to R.string.xingdun_help_group_answer
+        ).forEach { (question, answer) -> addCard(getString(question), getString(answer)) }
+        if (XingDunSessionManager.currentSession()?.features?.customerService == true) {
+            content.addView(actionButton(R.string.xingdun_customer_service) { start(this, MODE_CUSTOMER_SERVICE) })
+        }
+        content.addView(actionButton(R.string.xingdun_feedback) { start(this, MODE_FEEDBACK) })
+        content.addView(actionButton(R.string.xingdun_report) {
+            status.setText(R.string.xingdun_report_from_target_hint)
+        })
+    }
+
+    private fun showPermissionManagement() {
+        addMessage(R.string.xingdun_permission_description)
+        val permissions = listOf(
+            R.string.xingdun_permission_camera to Manifest.permission.CAMERA,
+            R.string.xingdun_permission_microphone to Manifest.permission.RECORD_AUDIO,
+            R.string.xingdun_notification_permission to Manifest.permission.POST_NOTIFICATIONS
+        )
+        permissions.forEach { (label, permission) ->
+            val unavailable = permission == Manifest.permission.POST_NOTIFICATIONS && Build.VERSION.SDK_INT < 33
+            val enabled = unavailable || ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+            addCard(
+                getString(label),
+                getString(if (enabled) R.string.xingdun_permission_enabled else R.string.xingdun_permission_disabled)
+            )
+        }
+        addCard(getString(R.string.xingdun_permission_files), getString(R.string.xingdun_permission_files_scoped))
+        content.addView(actionButton(R.string.xingdun_open_system_settings) {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        })
+    }
+
+    private fun showAbout() {
+        val session = XingDunSessionManager.currentSession()
+        addCard(
+            session?.companyName?.ifBlank { getString(R.string.demo_app_name) } ?: getString(R.string.demo_app_name),
+            getString(R.string.xingdun_version_current, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+        )
+        session?.companyCode?.takeIf(String::isNotBlank)?.let {
+            addCard(getString(R.string.xingdun_company_code), it)
+        }
+        addMessage(R.string.xingdun_about_description)
+        content.addView(actionButton(R.string.xingdun_check_updates) { start(this, MODE_VERSION) })
+        content.addView(actionButton(R.string.xingdun_user_agreement) { start(this, MODE_USER_AGREEMENT) })
+        content.addView(actionButton(R.string.xingdun_privacy_policy) { start(this, MODE_PRIVACY_POLICY) })
+    }
+
+    private fun showLegalDocument(privacy: Boolean) {
+        val session = XingDunSessionManager.currentSession()
+        if (session == null) {
+            addMessage(R.string.xingdun_legal_unavailable)
+            return
+        }
+        val url = if (privacy) session.privacy.privacyUrl else session.privacy.userAgreementUrl
+        if (url.isBlank()) {
+            addMessage(R.string.xingdun_legal_unavailable)
+            return
+        }
+        addCard(getString(if (privacy) R.string.xingdun_privacy_policy else R.string.xingdun_user_agreement), url)
+        content.addView(actionButton(R.string.xingdun_open_document) {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        })
+    }
+
+    private fun showFavorites() {
+        if (XingDunSessionManager.currentSession()?.features?.messageFavorite != true) {
+            addMessage(R.string.xingdun_feature_unavailable)
+            return
+        }
+        setBusy(true)
+        lifecycleScope.launch {
+            runCatching {
+                XingDunSessionManager.apiClient().get<JsonObject>(
+                    requireSession(), "message/favorites", mapOf("page" to "1", "page_size" to "50"), JsonObject::class.java
+                )
+            }.onSuccess { page ->
+                setBusy(false)
+                val list = page.array("items").takeIf { !it.isEmpty } ?: page.array("list")
+                if (list.isEmpty) addMessage(R.string.xingdun_favorites_empty)
+                list.forEach { element ->
+                    val favorite = element.asJsonObject
+                    val snapshot = favorite.getAsJsonObject("message") ?: favorite
+                    val favoriteID = favorite.int("favorite_id") ?: favorite.int("id")
+                    val summary = snapshot.string("text").orEmpty().ifBlank {
+                        getString(R.string.xingdun_favorite_type_summary, snapshot.string("message_type").orEmpty())
+                    }
+                    addCard(
+                        snapshot.string("sender_nickname") ?: snapshot.string("sender") ?: getString(R.string.xingdun_message),
+                        listOfNotNull(summary, snapshot.string("conversation_name"), favorite.string("favorited_at")).joinToString("\n")
+                    ) {
+                        if (favoriteID != null) confirmRemoveFavorite(favoriteID)
+                    }
+                }
+            }.onFailure(::showFailure)
+        }
+    }
+
+    private fun confirmRemoveFavorite(favoriteID: Int) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.xingdun_remove_favorite)
+            .setMessage(R.string.xingdun_remove_favorite_confirm)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.xingdun_remove_favorite) { _, _ ->
+                setBusy(true)
+                lifecycleScope.launch {
+                    runCatching {
+                        XingDunSessionManager.apiClient().deleteEmpty(
+                            requireSession(), "message/favorite", mapOf("favorite_id" to favoriteID)
+                        )
+                    }.onSuccess {
+                        content.removeAllViews()
+                        showFavorites()
+                    }.onFailure(::showFailure)
+                }
+            }.show()
+    }
+
+    private fun showRedpacketAccount() {
+        if (XingDunSessionManager.currentSession()?.features?.redpacket != true) {
+            addMessage(R.string.xingdun_redpacket_closed_detail)
+            return
+        }
+        setBusy(true)
+        lifecycleScope.launch {
+            runCatching {
+                val api = XingDunSessionManager.apiClient()
+                val session = requireSession()
+                val balance = api.get<JsonObject>(session, "redpacket/myBalance", emptyMap(), JsonObject::class.java)
+                val sent = api.get<JsonObject>(session, "redpacket/mySent", mapOf("page" to "1", "page_size" to "20"), JsonObject::class.java)
+                val received = api.get<JsonObject>(session, "redpacket/myReceived", mapOf("page" to "1", "page_size" to "20"), JsonObject::class.java)
+                Triple(balance, sent, received)
+            }.onSuccess { (balance, sent, received) ->
+                setBusy(false)
+                addCard(
+                    getString(R.string.xingdun_redpacket_balance),
+                    centsText(balance.int("redpacket_balance") ?: 0)
+                )
+                addSectionList(getString(R.string.xingdun_redpacket_sent), sent.array("list"))
+                addSectionList(getString(R.string.xingdun_redpacket_received), received.array("list"))
+            }.onFailure(::showFailure)
+        }
+    }
+
+    private fun addSectionList(title: String, items: JsonArray) {
+        addCard(title, getString(R.string.xingdun_items_count, items.size()))
+        items.forEach { element ->
+            val wrapper = element.asJsonObject
+            val item = wrapper.getAsJsonObject("packet") ?: wrapper
+            val packetNo = item.string("packet_no").orEmpty()
+            addCard(
+                item.string("greeting") ?: getString(R.string.xingdun_redpacket_default_greeting),
+                listOfNotNull(item.string("status_name"), centsText(item.int("total_amount") ?: 0), item.string("create_time")).joinToString(" · ")
+            ) { if (packetNo.isNotBlank()) start(this, MODE_REDPACKET_DETAIL, packetNo) }
+        }
+    }
+
+    private fun showRedpacketDetail() {
+        if (XingDunSessionManager.currentSession()?.features?.redpacket != true) {
+            addMessage(R.string.xingdun_redpacket_closed_detail)
+            return
+        }
+        if (targetID.isBlank()) return addMessage(R.string.xingdun_redpacket_invalid)
+        setBusy(true)
+        lifecycleScope.launch {
+            runCatching {
+                XingDunSessionManager.apiClient().get<JsonObject>(
+                    requireSession(), "redpacket/detail", mapOf("packet_no" to targetID), JsonObject::class.java
+                )
+            }.onSuccess { detail ->
+                setBusy(false)
+                addCard(
+                    detail.string("greeting") ?: getString(R.string.xingdun_redpacket_default_greeting),
+                    listOfNotNull(
+                        detail.string("status_name"),
+                        centsText(detail.int("total_amount") ?: 0),
+                        getString(R.string.xingdun_redpacket_claimed_progress, detail.int("claimed_count") ?: 0, detail.int("count") ?: 0),
+                        detail.string("expire_time")
+                    ).joinToString("\n")
+                )
+            }.onFailure(::showFailure)
+        }
+    }
+
+    private fun centsText(value: Int): String = getString(R.string.xingdun_currency_amount, value / 100.0)
+
     private fun clearStorage(selected: Set<XingDunCacheCategory>) {
         setBusy(true)
         lifecycleScope.launch {
@@ -1388,6 +1825,14 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_DEACTIVATE -> R.string.xingdun_deactivate_account
         MODE_NOTIFICATIONS -> R.string.xingdun_notification_settings
         MODE_STORAGE -> R.string.xingdun_storage_management
+        MODE_HELP -> R.string.xingdun_help_center
+        MODE_PERMISSIONS -> R.string.xingdun_permission_management
+        MODE_ABOUT -> R.string.xingdun_about
+        MODE_USER_AGREEMENT -> R.string.xingdun_user_agreement
+        MODE_PRIVACY_POLICY -> R.string.xingdun_privacy_policy
+        MODE_FAVORITES -> R.string.xingdun_message_favorites
+        MODE_REDPACKET_ACCOUNT -> R.string.xingdun_redpacket_account
+        MODE_REDPACKET_DETAIL -> R.string.xingdun_redpacket_detail
         else -> R.string.demo_app_name
     })
 
@@ -1432,6 +1877,14 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_DEACTIVATE = "deactivate"
         const val MODE_NOTIFICATIONS = "notifications"
         const val MODE_STORAGE = "storage"
+        const val MODE_HELP = "help"
+        const val MODE_PERMISSIONS = "permissions"
+        const val MODE_ABOUT = "about"
+        const val MODE_USER_AGREEMENT = "user_agreement"
+        const val MODE_PRIVACY_POLICY = "privacy_policy"
+        const val MODE_FAVORITES = "favorites"
+        const val MODE_REDPACKET_ACCOUNT = "redpacket_account"
+        const val MODE_REDPACKET_DETAIL = "redpacket_detail"
 
         fun start(context: Context, mode: String, itemId: Int = 0) {
             context.startActivity(Intent(context, XingDunFeatureActivity::class.java).apply {
