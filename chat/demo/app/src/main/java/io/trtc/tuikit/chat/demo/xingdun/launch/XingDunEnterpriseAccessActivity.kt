@@ -28,6 +28,7 @@ class XingDunEnterpriseAccessActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var connect: Button
     private lateinit var progress: ProgressBar
+    private lateinit var enterpriseLogo: XingDunEnterpriseLogoView
     private var lookupMode = XingDunEnterpriseLookupMode.COMPANY_CODE
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,6 +67,7 @@ class XingDunEnterpriseAccessActivity : AppCompatActivity() {
         status = findViewById(R.id.xingdun_enterprise_status)
         connect = findViewById(R.id.xingdun_enterprise_connect)
         progress = findViewById(R.id.xingdun_enterprise_progress)
+        enterpriseLogo = findViewById(R.id.xingdun_enterprise_logo)
     }
 
     private fun bindActions() {
@@ -127,6 +129,7 @@ class XingDunEnterpriseAccessActivity : AppCompatActivity() {
             return
         }
         if (stored != null) {
+            enterpriseLogo.loadLogo(lifecycleScope, stored.company?.logoUrl)
             revalidateStoredEnterprise(stored)
             return
         }
@@ -148,7 +151,10 @@ class XingDunEnterpriseAccessActivity : AppCompatActivity() {
         setLoading(true, getString(R.string.xingdun_enterprise_revalidating))
         lifecycleScope.launch {
             runCatching { XingDunSessionManager.resolveEnterprise(stored.companyCode, null) }
-                .onSuccess { openAuthentication() }
+                .onSuccess { bootstrap ->
+                    enterpriseLogo.loadLogo(lifecycleScope, bootstrap.company?.logoUrl)
+                    openAuthentication()
+                }
                 .onFailure { error ->
                     if (XingDunSessionManager.shouldRetainCachedEnterprise(error)) {
                         openAuthentication()
@@ -175,6 +181,7 @@ class XingDunEnterpriseAccessActivity : AppCompatActivity() {
             runCatching {
                 XingDunSessionManager.resolveEnterprise(lookup.companyCode, lookup.domain)
             }.onSuccess { bootstrap ->
+                enterpriseLogo.loadLogo(lifecycleScope, bootstrap.company?.logoUrl)
                 if (previousCompanyCode != null &&
                     !previousCompanyCode.equals(bootstrap.companyCode, ignoreCase = true)
                 ) {

@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 class XingDunLaunchActivity : BaseLoginActivity() {
 
     private lateinit var status: TextView
+    private lateinit var enterpriseLogo: XingDunEnterpriseLogoView
     private lateinit var selectedEnterprise: TextView
     private lateinit var switchEnterprise: Button
     private lateinit var companyCode: EditText
@@ -68,6 +69,7 @@ class XingDunLaunchActivity : BaseLoginActivity() {
 
     private fun bindViews() {
         status = findViewById(R.id.xingdun_launch_status)
+        enterpriseLogo = findViewById(R.id.xingdun_auth_logo)
         selectedEnterprise = findViewById(R.id.xingdun_selected_enterprise)
         switchEnterprise = findViewById(R.id.xingdun_switch_enterprise)
         companyCode = findViewById(R.id.xingdun_company_code)
@@ -94,6 +96,7 @@ class XingDunLaunchActivity : BaseLoginActivity() {
             return false
         }
         resolvedBootstrap = bootstrap
+        enterpriseLogo.loadLogo(lifecycleScope, bootstrap.company?.logoUrl)
         companyCode.setText(bootstrap.companyCode)
         selectedEnterprise.text = getString(
             R.string.xingdun_selected_enterprise,

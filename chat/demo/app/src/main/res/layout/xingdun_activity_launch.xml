@@ -15,11 +15,11 @@
         android:paddingEnd="28dp"
         android:paddingBottom="36dp">
 
-        <ImageView
-            android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:contentDescription="@string/demo_app_name"
-            android:src="@drawable/demo_ic_launcher" />
+        <io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseLogoView
+            android:id="@+id/xingdun_auth_logo"
+            android:layout_width="96dp"
+            android:layout_height="96dp"
+            android:contentDescription="@string/demo_app_name" />
 
         <TextView
             android:layout_width="wrap_content"
