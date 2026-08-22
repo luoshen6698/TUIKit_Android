@@ -13,6 +13,8 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginListener
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessagePresentation
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBusinessActionHandler
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
@@ -36,6 +38,8 @@ class Application : Application() {
         XingDunSessionManager.initialize(this)
         XingDunRouter.initialize(this)
         XingDunPushManager.initialize(this)
+        XingDunCustomMessagePresentation.registerGlobalSummaries()
+        XingDunForegroundNotificationManager.initialize(this)
         BusinessActionRegistry.handler = XingDunBusinessActionHandler(this)
 
         applyLanguageFromSettings()

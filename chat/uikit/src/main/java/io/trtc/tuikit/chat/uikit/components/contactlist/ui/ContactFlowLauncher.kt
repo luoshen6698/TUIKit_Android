@@ -83,4 +83,20 @@ object ContactFlowLauncher {
             initialContactInfo = contactInfo
         ).show()
     }
+
+    @JvmStatic
+    fun showAddGroupForInfo(
+        context: Context,
+        groupInfo: ContactInfo,
+        contactStore: ContactStore = ContactStore.shared,
+        groupStore: GroupStore = GroupStore.shared
+    ) {
+        AddContactAndGroupDialog(
+            context = context,
+            addType = AddType.GROUP,
+            contactStore = contactStore,
+            groupStore = groupStore,
+            initialContactInfo = groupInfo
+        ).show()
+    }
 }

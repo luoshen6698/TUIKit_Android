@@ -323,6 +323,10 @@ class SettingsPageView @JvmOverloads constructor(
         findViewById<View>(R.id.demo_spacerVoice).visibility = View.VISIBLE
         val entries = listOf(
             R.string.xingdun_personal_qr to XingDunFeatureActivity.MODE_PERSONAL_QR,
+            R.string.xingdun_scan_qr to XingDunFeatureActivity.MODE_QR_SCANNER,
+            R.string.xingdun_account_security to XingDunFeatureActivity.MODE_ACCOUNT_SECURITY,
+            R.string.xingdun_notification_settings to XingDunFeatureActivity.MODE_NOTIFICATIONS,
+            R.string.xingdun_storage_management to XingDunFeatureActivity.MODE_STORAGE,
             R.string.xingdun_invite_title to XingDunFeatureActivity.MODE_INVITE,
             R.string.xingdun_feedback to XingDunFeatureActivity.MODE_FEEDBACK,
             R.string.xingdun_reports to XingDunFeatureActivity.MODE_REPORTS,

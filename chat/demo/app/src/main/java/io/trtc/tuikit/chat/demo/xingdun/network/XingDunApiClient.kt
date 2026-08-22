@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -111,6 +112,33 @@ class XingDunApiClient(
         executeAllowEmpty(request)
     }
 
+    suspend fun postMultipartEmpty(
+        session: XingDunStoredSession,
+        path: String,
+        fields: Map<String, Any?>,
+        files: List<XingDunUploadFile>
+    ) {
+        val multipart = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .apply {
+                fields.forEach { (name, value) ->
+                    if (value != null) addFormDataPart(name, value.toString())
+                }
+                files.forEach { file ->
+                    addFormDataPart(
+                        file.fieldName,
+                        file.fileName,
+                        file.bytes.toRequestBody(file.mimeType.toMediaType())
+                    )
+                }
+            }
+            .build()
+        val request = requestBuilder(endpointUrl(session.apiBaseUrl, path), session)
+            .post(multipart)
+            .build()
+        executeAllowEmpty(request)
+    }
+
     suspend fun deleteEmpty(session: XingDunStoredSession, path: String, body: Any) {
         val requestBody = gson.toJson(body).toRequestBody(JSON_MEDIA_TYPE)
         val request = requestBuilder(endpointUrl(session.apiBaseUrl, path), session).delete(requestBody).build()
@@ -133,7 +161,6 @@ class XingDunApiClient(
         val builder = Request.Builder()
             .url(url)
             .header("Accept", "application/json")
-            .header("Content-Type", "application/json; charset=utf-8")
             .header("User-Agent", userAgent())
             .header("X-XingDun-Device-ID", sessionStore.deviceId())
             .header("X-XingDun-Trace-ID", UUID.randomUUID().toString())
@@ -235,3 +262,10 @@ class XingDunApiClient(
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 }
+
+data class XingDunUploadFile(
+    val fieldName: String,
+    val fileName: String,
+    val mimeType: String,
+    val bytes: ByteArray
+)

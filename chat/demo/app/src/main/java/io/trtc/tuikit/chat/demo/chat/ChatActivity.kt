@@ -16,8 +16,6 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.doOnPreDraw
@@ -40,7 +38,9 @@ import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.app.R
-import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessagePresentation
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.uikit.components.messageinput.config.ChatMessageInputConfig
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.ChatMessageListConfig
 import io.trtc.tuikit.chat.uikit.pages.ChatPageView
@@ -165,6 +165,7 @@ class ChatActivity : BaseActivity() {
             isSupportTranslate = false,
             isSupportListenFromHere = false,
         )
+        XingDunCustomMessagePresentation.configure(messageListConfig)
         val isC2CConversation = conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)
         val messageInputConfig = ChatMessageInputConfig(
             isShowAudioCall = isC2CConversation,
@@ -354,65 +355,20 @@ class ChatActivity : BaseActivity() {
         super.onBackPressed()
     }
 
-    private fun openSecurityReport(conversationID: String) {
-        val reasonValues = resources.getStringArray(R.array.xingdun_report_reason_values)
-        val reasonLabels = resources.getStringArray(R.array.xingdun_report_reason_labels)
-        var selectedIndex = 0
-        AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_report)
-            .setSingleChoiceItems(reasonLabels, selectedIndex) { _, which -> selectedIndex = which }
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.xingdun_continue) { _, _ ->
-                val description = android.widget.EditText(this).apply {
-                    setHint(R.string.xingdun_report_description)
-                    minLines = 3
-                }
-                AlertDialog.Builder(this)
-                    .setTitle(reasonLabels[selectedIndex])
-                    .setView(description)
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .setPositiveButton(R.string.xingdun_submit) { _, _ ->
-                        submitConversationReport(
-                            conversationID,
-                            reasonValues[selectedIndex],
-                            description.text.toString().trim()
-                        )
-                    }
-                    .show()
-            }
-            .show()
+    override fun onResume() {
+        super.onResume()
+        intent?.getStringExtra(EXTRA_CONVERSATION_ID)?.let(XingDunForegroundNotificationManager::enterConversation)
     }
 
-    private fun submitConversationReport(conversationID: String, reason: String, description: String) {
+    override fun onPause() {
+        intent?.getStringExtra(EXTRA_CONVERSATION_ID)?.let(XingDunForegroundNotificationManager::leaveConversation)
+        super.onPause()
+    }
+
+    private fun openSecurityReport(conversationID: String) {
         val targetType = if (conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)) "user" else "team"
         val targetID = if (targetType == "user") getUserID(conversationID) else getGroupID(conversationID)
-        val session = XingDunSessionManager.currentSession()
-        if (session == null || targetID.isNullOrBlank()) {
-            Toast.makeText(this, R.string.xingdun_session_expired, Toast.LENGTH_LONG).show()
-            return
-        }
-        activityScope?.launch {
-            runCatching {
-                XingDunSessionManager.apiClient().postEmpty(
-                    session,
-                    "report/save",
-                    mapOf(
-                        "target_type" to targetType,
-                        "target_id" to targetID,
-                        "reason" to reason,
-                        "description" to description.takeIf(String::isNotEmpty)
-                    )
-                )
-            }.onSuccess {
-                Toast.makeText(this@ChatActivity, R.string.xingdun_report_submitted, Toast.LENGTH_LONG).show()
-            }.onFailure { error ->
-                Toast.makeText(
-                    this@ChatActivity,
-                    error.localizedMessage ?: getString(R.string.xingdun_action_failed),
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
+        if (!targetID.isNullOrBlank()) XingDunFeatureActivity.startReport(this, targetType, targetID)
     }
 
     private fun applyColors(colors: ColorTokens) {
