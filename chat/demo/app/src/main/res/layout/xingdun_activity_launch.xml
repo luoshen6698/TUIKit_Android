@@ -94,6 +94,18 @@
                 android:textSize="13sp" />
 
             <TextView
+                android:id="@+id/xingdun_deletion_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/xingdun_bg_auth_capsule"
+                android:gravity="center"
+                android:padding="10dp"
+                android:textColor="#536A66"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/xingdun_selected_enterprise"
                 android:layout_width="1dp"
                 android:layout_height="1dp"

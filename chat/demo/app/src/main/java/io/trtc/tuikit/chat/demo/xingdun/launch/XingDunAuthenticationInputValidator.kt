@@ -37,6 +37,16 @@ internal object XingDunAuthenticationInputValidator {
         }
     }
 
+    fun loginUsernameError(value: String): XingDunAuthenticationInputError? {
+        val normalized = value.trim()
+        return when {
+            normalized.isEmpty() -> XingDunAuthenticationInputError.USERNAME_REQUIRED
+            normalized.length !in 3..64 -> XingDunAuthenticationInputError.USERNAME_LENGTH
+            !usernamePattern.matches(normalized) -> XingDunAuthenticationInputError.USERNAME_FORMAT
+            else -> null
+        }
+    }
+
     fun phoneError(value: String): XingDunAuthenticationInputError? {
         val normalized = value.trim()
         return when {

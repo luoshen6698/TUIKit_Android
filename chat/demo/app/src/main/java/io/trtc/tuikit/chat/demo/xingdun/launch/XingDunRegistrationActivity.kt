@@ -1,6 +1,8 @@
 package io.trtc.tuikit.chat.demo.xingdun.launch
 
+import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -20,6 +22,7 @@ import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeParser
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeRoute
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import kotlinx.coroutines.launch
 
 class XingDunRegistrationActivity : BaseLoginActivity() {
@@ -36,11 +39,12 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
     private lateinit var password: EditText
     private lateinit var confirmation: EditText
     private lateinit var inviteCode: EditText
-    private lateinit var adultDeclaration: CheckBox
     private lateinit var agreementConsent: CheckBox
     private lateinit var primaryAction: LinearLayout
+    private lateinit var primaryActionLabel: TextView
     private var phoneMode = false
     private var loading = false
+    private var pendingSession: XingDunStoredSession? = null
 
     private val qrScanner = registerForActivityResult(ScanContract()) { result ->
         result.contents?.let(::applyScannedInvitation)
@@ -58,6 +62,10 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
         bindViews()
         bindBrand()
         bindActions()
+        if (savedInstanceState?.getBoolean(STATE_PENDING_SESSION) == true) {
+            pendingSession = XingDunSessionManager.currentSession()
+            updatePendingState()
+        }
         intent?.dataString?.let(::applyScannedInvitation)
         updateMode(false)
         updateEnabled()
@@ -78,9 +86,9 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
         password = findViewById(R.id.xingdun_registration_password)
         confirmation = findViewById(R.id.xingdun_registration_confirm_password)
         inviteCode = findViewById(R.id.xingdun_registration_invite_code)
-        adultDeclaration = findViewById(R.id.xingdun_registration_adult)
         agreementConsent = findViewById(R.id.xingdun_registration_consent)
         primaryAction = findViewById(R.id.xingdun_registration_primary_action)
+        primaryActionLabel = findViewById(R.id.xingdun_registration_primary_action_label)
     }
 
     private fun bindBrand() {
@@ -114,12 +122,12 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
             )
         }
         agreementConsent.setOnCheckedChangeListener { _, _ -> updateEnabled() }
-        adultDeclaration.setOnCheckedChangeListener { _, _ -> updateEnabled() }
         primaryAction.setOnClickListener { submit() }
         findViewById<Button>(R.id.xingdun_registration_back_login).setOnClickListener { finish() }
     }
 
     private fun updateMode(phoneRegistration: Boolean) {
+        if (pendingSession != null) return
         phoneMode = phoneRegistration
         accountGroup.visibility = if (phoneMode) View.GONE else View.VISIBLE
         phoneGroup.visibility = if (phoneMode) View.VISIBLE else View.GONE
@@ -131,13 +139,17 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
     }
 
     private fun submit() {
+        pendingSession?.let {
+            loginToIM(it)
+            return
+        }
         val identifier = if (phoneMode) phone.text.toString().trim() else username.text.toString().trim()
         val error = firstValidationError(identifier)
         if (error != null) {
             status.setText(error.messageResource())
             return
         }
-        if (!adultDeclaration.isChecked || !agreementConsent.isChecked) {
+        if (!agreementConsent.isChecked) {
             status.setText(R.string.xingdun_consent_required)
             return
         }
@@ -164,8 +176,15 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
                         inviteCode.text.toString()
                     )
                 }
-            }.onSuccess(::loginToIM).onFailure { errorValue ->
-                setLoading(false, errorValue.localizedMessage ?: getString(R.string.xingdun_authentication_failed))
+            }.onSuccess { session ->
+                pendingSession = session
+                clearSensitiveInputs()
+                updatePendingState()
+                loginToIM(session)
+            }.onFailure { errorValue ->
+                val presentation = XingDunAuthenticationErrorPresenter.registration(errorValue)
+                setLoading(false, getString(presentation.message))
+                focusRegistrationField(presentation.registrationField)
             }
         }
     }
@@ -187,7 +206,9 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
             session.sdkAppId,
             session.timUserId,
             session.userSig,
-            onFailure = { _, description -> setLoading(false, getString(R.string.demo_login_failed, description)) }
+            onFailure = { code, description ->
+                setLoading(false, getString(XingDunAuthenticationErrorPresenter.im(code, description)))
+            }
         )
     }
 
@@ -198,7 +219,7 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
             return
         }
         if (route.companyCode != null && !route.companyCode.equals(bootstrap.companyCode, ignoreCase = true)) {
-            status.setText(R.string.xingdun_invitation_company_mismatch)
+            switchToInvitationEnterprise(route)
             return
         }
         inviteCode.setText(route.code)
@@ -212,8 +233,55 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
     }
 
     private fun updateEnabled() {
-        primaryAction.isEnabled = !loading && adultDeclaration.isChecked && agreementConsent.isChecked
-        listOf(accountTab, phoneTab).forEach { it.isEnabled = !loading }
+        primaryAction.isEnabled = !loading && agreementConsent.isChecked
+        listOf(accountTab, phoneTab).forEach { it.isEnabled = !loading && pendingSession == null }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(STATE_PENDING_SESSION, pendingSession != null)
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun clearSensitiveInputs() {
+        password.text?.clear()
+        confirmation.text?.clear()
+        code.text?.clear()
+    }
+
+    private fun updatePendingState() {
+        primaryActionLabel.setText(if (pendingSession == null) R.string.xingdun_create_account else R.string.xingdun_continue_login)
+        primaryAction.contentDescription = primaryActionLabel.text
+        updateEnabled()
+    }
+
+    private fun focusRegistrationField(field: XingDunRegistrationField?) {
+        when (field) {
+            XingDunRegistrationField.USERNAME -> username
+            XingDunRegistrationField.PHONE -> phone
+            XingDunRegistrationField.CODE -> code
+            XingDunRegistrationField.NICKNAME -> nickname
+            XingDunRegistrationField.PASSWORD -> password
+            XingDunRegistrationField.CONFIRM_PASSWORD -> confirmation
+            XingDunRegistrationField.INVITE_CODE -> inviteCode
+            null -> null
+        }?.requestFocus()
+    }
+
+    private fun switchToInvitationEnterprise(invitation: XingDunQRCodeRoute.Invitation) {
+        val uri = Uri.Builder()
+            .scheme("xingdun")
+            .authority("invite")
+            .appendQueryParameter("code", invitation.code)
+            .appendQueryParameter("company_code", invitation.companyCode)
+            .build()
+        setLoading(true, getString(R.string.xingdun_switching_enterprise))
+        XingDunTenantSessionCoordinator.switchEnterprise {
+            startActivity(Intent(this, XingDunEnterpriseAccessActivity::class.java).apply {
+                data = uri
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            })
+            finish()
+        }
     }
 
     private fun XingDunAuthenticationInputError.messageResource(): Int = when (this) {
@@ -231,6 +299,7 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
     }
 
     companion object {
+        private const val STATE_PENDING_SESSION = "pending_registration_session"
         private val SELECTED_TEXT_COLOR = Color.rgb(18, 63, 58)
         private val UNSELECTED_TEXT_COLOR = Color.rgb(102, 125, 121)
     }

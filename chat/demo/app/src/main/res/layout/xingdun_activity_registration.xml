@@ -219,16 +219,6 @@
                     android:layout_gravity="end"
                     android:text="@string/xingdun_scan_invitation" />
 
-                <CheckBox
-                    android:id="@+id/xingdun_registration_adult"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:buttonTint="#1EAA91"
-                    android:text="@string/xingdun_adult_declaration"
-                    android:textColor="#536A66"
-                    android:textSize="12sp" />
-
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -266,6 +256,7 @@
                     android:focusable="true"
                     android:gravity="center">
                     <TextView
+                        android:id="@+id/xingdun_registration_primary_action_label"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/xingdun_create_account"

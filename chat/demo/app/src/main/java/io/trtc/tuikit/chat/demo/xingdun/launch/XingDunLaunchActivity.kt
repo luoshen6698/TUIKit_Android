@@ -1,14 +1,17 @@
 package io.trtc.tuikit.chat.demo.xingdun.launch
 
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
@@ -16,6 +19,9 @@ import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.login.BaseLoginActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBootstrapConfiguration
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
+import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeParser
+import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeRoute
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunAccountDeletionReceiptStore
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import kotlinx.coroutines.launch
@@ -23,6 +29,7 @@ import kotlinx.coroutines.launch
 open class XingDunLaunchActivity : BaseLoginActivity() {
 
     private lateinit var status: TextView
+    private lateinit var deletionStatus: TextView
     private lateinit var enterpriseLogo: XingDunEnterpriseLogoView
     private lateinit var brandName: TextView
     private lateinit var loginSubtitle: TextView
@@ -39,6 +46,14 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
     private lateinit var forgotPassword: Button
     private var isLoading = false
     private var resolvedBootstrap: XingDunBootstrapConfiguration? = null
+    private val initialNoticeResId: Int by lazy { intent.getIntExtra(EXTRA_NOTICE_RES_ID, 0) }
+
+    private val passwordReset = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            password.text?.clear()
+            status.setText(R.string.xingdun_password_reset_login_message)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,9 +67,12 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         findViewById<Button>(R.id.xingdun_language).setOnClickListener { showLanguageSelector() }
         setupAgreementLinks()
         privacyConsent.setOnCheckedChangeListener { _, _ -> updatePrimaryActionEnabled() }
-        forgotPassword.setOnClickListener { startActivity(Intent(this, XingDunPasswordResetActivity::class.java)) }
+        forgotPassword.setOnClickListener {
+            passwordReset.launch(Intent(this, XingDunPasswordResetActivity::class.java))
+        }
         switchEnterprise.setOnClickListener { switchEnterprise() }
         updatePrimaryActionEnabled()
+        refreshDeletionStatus()
         checkVersionThenRestore()
     }
 
@@ -72,6 +90,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
 
     private fun bindViews() {
         status = findViewById(R.id.xingdun_launch_status)
+        deletionStatus = findViewById(R.id.xingdun_deletion_status)
         enterpriseLogo = findViewById(R.id.xingdun_auth_logo)
         brandName = findViewById(R.id.xingdun_brand_name)
         loginSubtitle = findViewById(R.id.xingdun_login_subtitle)
@@ -111,6 +130,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
             bootstrap.company?.name?.takeIf(String::isNotBlank) ?: bootstrap.companyCode,
             bootstrap.companyCode
         )
+        switchEnterprise.visibility = if (bootstrap.mode.equals("simple", ignoreCase = true)) View.GONE else View.VISIBLE
         XingDunSessionManager.currentSession()?.takeIf {
             !it.companyCode.equals(bootstrap.companyCode, ignoreCase = true)
         }?.let { XingDunSessionManager.clear() }
@@ -119,7 +139,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
 
     private fun restoreSession() {
         if (XingDunSessionManager.currentSession() == null) {
-            setLoading(false)
+            setLoading(false, initialNoticeResId.takeIf { it != 0 }?.let(::getString).orEmpty())
             return
         }
         setLoading(true, getString(R.string.xingdun_restoring_session))
@@ -133,7 +153,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
                     }
                 }
                 .onFailure { error ->
-                    setLoading(false, error.localizedMessage ?: getString(R.string.xingdun_network_error))
+                    setLoading(false, getString(XingDunAuthenticationErrorPresenter.login(error)))
                 }
         }
     }
@@ -188,8 +208,21 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         val company = companyCode.text.toString().trim()
         val account = username.text.toString().trim()
         val passwordValue = password.text.toString()
-        if (account.isEmpty() || passwordValue.isEmpty()) {
-            status.setText(R.string.xingdun_required_fields)
+        val accountError = XingDunAuthenticationInputValidator.loginUsernameError(account)
+        if (accountError != null) {
+            status.setText(
+                when (accountError) {
+                    XingDunAuthenticationInputError.USERNAME_REQUIRED -> R.string.xingdun_username_required
+                    XingDunAuthenticationInputError.USERNAME_LENGTH -> R.string.xingdun_login_username_length
+                    else -> R.string.xingdun_username_format
+                }
+            )
+            username.requestFocus()
+            return
+        }
+        if (passwordValue.isEmpty()) {
+            status.setText(R.string.xingdun_login_password_required)
+            password.requestFocus()
             return
         }
         if (!privacyConsent.isChecked) {
@@ -200,7 +233,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         lifecycleScope.launch {
             val result = runCatching { XingDunSessionManager.login(company, account, passwordValue) }
             result.onSuccess(::loginToIM).onFailure { error ->
-                setLoading(false, error.localizedMessage ?: getString(R.string.xingdun_authentication_failed))
+                setLoading(false, getString(XingDunAuthenticationErrorPresenter.login(error)))
             }
         }
     }
@@ -211,8 +244,8 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
             sdkAppId = session.sdkAppId,
             userId = session.timUserId,
             userSig = session.userSig,
-            onFailure = { _, description ->
-                setLoading(false, getString(R.string.demo_login_failed, description))
+            onFailure = { code, description ->
+                setLoading(false, getString(XingDunAuthenticationErrorPresenter.im(code, description)))
             }
         )
     }
@@ -239,11 +272,43 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
 
     private fun openInvitationRegistration(uri: Uri?): Boolean {
         if (uri == null) return false
-        val validRoute = (uri.scheme == "xingdun" && uri.host == "invite") ||
-            (uri.scheme == "https" && uri.host == "api.xingdunim.com" && uri.path == "/prod/xingdun/share.html")
-        if (!validRoute) return false
+        val invitation = runCatching { XingDunQRCodeParser.parse(uri.toString()) }.getOrNull()
+            as? XingDunQRCodeRoute.Invitation ?: return false
+        val currentCompany = resolvedBootstrap?.companyCode
+        if (invitation.companyCode != null && !invitation.companyCode.equals(currentCompany, ignoreCase = true)) {
+            setLoading(true, getString(R.string.xingdun_switching_enterprise))
+            XingDunTenantSessionCoordinator.switchEnterprise {
+                startActivity(Intent(this, XingDunEnterpriseAccessActivity::class.java).apply {
+                    data = uri
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                })
+                finish()
+            }
+            return true
+        }
         startActivity(Intent(this, XingDunRegistrationActivity::class.java).apply { data = uri })
         return true
+    }
+
+    private fun refreshDeletionStatus() {
+        val receipt = XingDunAccountDeletionReceiptStore.load(this) ?: return
+        lifecycleScope.launch {
+            runCatching { XingDunSessionManager.deletionStatus(receipt.receipt) }
+                .onSuccess { result ->
+                    deletionStatus.text = when (result.status.lowercase()) {
+                        "completed" -> getString(R.string.xingdun_deletion_completed)
+                        "cancelled" -> getString(R.string.xingdun_deletion_cancelled)
+                        else -> getString(
+                            R.string.xingdun_deletion_pending,
+                            result.purgeAfter?.takeIf(String::isNotBlank) ?: receipt.purgeAfter.orEmpty()
+                        )
+                    }
+                    deletionStatus.visibility = View.VISIBLE
+                    if (result.status.equals("completed", true) || result.status.equals("cancelled", true)) {
+                        XingDunAccountDeletionReceiptStore.clear(this@XingDunLaunchActivity)
+                    }
+                }
+        }
     }
 
     private fun setLoading(loading: Boolean, message: String = "") {
@@ -259,5 +324,9 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         if (::primaryAction.isInitialized) {
             primaryAction.isEnabled = !isLoading && privacyConsent.isChecked
         }
+    }
+
+    companion object {
+        const val EXTRA_NOTICE_RES_ID = "xingdun_authentication_notice_res_id"
     }
 }

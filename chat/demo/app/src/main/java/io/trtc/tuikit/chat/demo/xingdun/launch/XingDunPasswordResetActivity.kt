@@ -1,5 +1,6 @@
 package io.trtc.tuikit.chat.demo.xingdun.launch
 
+import android.app.Activity
 import android.graphics.Color
 import android.os.Bundle
 import android.os.CountDownTimer
@@ -88,7 +89,10 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
         emailTab.setOnClickListener { updateMode(false) }
         getCode.setOnClickListener { requestCode() }
         primaryAction.setOnClickListener { resetPassword() }
-        findViewById<Button>(R.id.xingdun_password_reset_back_login).setOnClickListener { finish() }
+        findViewById<Button>(R.id.xingdun_password_reset_back_login).setOnClickListener {
+            setResult(Activity.RESULT_OK)
+            finish()
+        }
     }
 
     private fun updateMode(usePhone: Boolean) {
@@ -120,7 +124,7 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
             return
         }
         if (phoneMode) {
-            status.setText(R.string.xingdun_phone_code_placeholder)
+            status.setText(R.string.xingdun_phone_reset_code_placeholder)
             return
         }
         setLoading(true, getString(R.string.xingdun_sending_verification_code))
@@ -131,7 +135,7 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
                 setLoading(false, getString(R.string.xingdun_verification_code_sent, ((response.expiresIn ?: 300L) + 59L) / 60L))
                 startCooldown()
             }.onFailure { error ->
-                setLoading(false, error.localizedMessage ?: getString(R.string.xingdun_authentication_failed))
+                setLoading(false, getString(XingDunAuthenticationErrorPresenter.reset(error)))
             }
         }
     }
@@ -181,7 +185,7 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
                 form.visibility = View.GONE
                 completion.visibility = View.VISIBLE
             }.onFailure { error ->
-                setLoading(false, error.localizedMessage ?: getString(R.string.xingdun_authentication_failed))
+                setLoading(false, getString(XingDunAuthenticationErrorPresenter.reset(error)))
             }
         }
     }

@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.annotation.StringRes
 import io.trtc.tuikit.chat.app.BuildConfig
 import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunAccountDeletionStatus
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiClient
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiException
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunAuthResponse
@@ -176,7 +177,7 @@ object XingDunSessionManager {
         inviteCode: String?
     ): XingDunStoredSession {
         val bootstrap = bootstrap(companyCode)
-        client.register(
+        val response = client.register(
             resolveApiBaseUrl(bootstrap),
             XingDunRegisterRequest(
                 username = username.trim(),
@@ -192,13 +193,6 @@ object XingDunSessionManager {
                 consentEvidenceId = "android:${store.deviceId()}:${UUID.randomUUID()}".take(64)
             )
         )
-        // The registration contract deliberately returns no long-lived refresh token. Reuse the
-        // normal password-login contract immediately so a newly registered account has the same
-        // restorable session shape as an existing account.
-        val response = client.login(
-            resolveApiBaseUrl(bootstrap),
-            XingDunLoginRequest(username.trim(), password, normalizedCompanyCode(companyCode))
-        )
         return persist(bootstrap, response)
     }
 
@@ -212,7 +206,7 @@ object XingDunSessionManager {
         inviteCode: String?
     ): XingDunStoredSession {
         val bootstrap = bootstrap(companyCode)
-        val registration = client.registerByPhone(
+        val response = client.registerByPhone(
             resolveApiBaseUrl(bootstrap),
             XingDunPhoneRegisterRequest(
                 phone = phone.trim(),
@@ -229,14 +223,12 @@ object XingDunSessionManager {
                 consentEvidenceId = "android:${store.deviceId()}:${UUID.randomUUID()}".take(64)
             )
         )
-        val generatedUsername = registration.username?.trim()?.takeIf(String::isNotEmpty)
-            ?: registration.user?.username?.trim()?.takeIf(String::isNotEmpty)
-            ?: throw IllegalArgumentException(message(R.string.xingdun_error_credential_missing))
-        val response = client.login(
-            resolveApiBaseUrl(bootstrap),
-            XingDunLoginRequest(generatedUsername, password, normalizedCompanyCode(companyCode))
-        )
         return persist(bootstrap, response)
+    }
+
+    suspend fun deletionStatus(deletionReceipt: String): XingDunAccountDeletionStatus {
+        val bootstrap = currentEnterprise() ?: throw IllegalStateException(message(R.string.xingdun_enterprise_lookup_required))
+        return client.deletionStatus(resolveApiBaseUrl(bootstrap), deletionReceipt)
     }
 
     suspend fun sendResetCode(
@@ -280,8 +272,13 @@ object XingDunSessionManager {
     suspend fun restore(): XingDunStoredSession? = refreshMutex.withLock {
         val existing = store.loadBoundSession() ?: return null
         val now = System.currentTimeMillis()
-        if (existing.refreshExpiresAtMillis <= now) {
-            store.clear()
+        val accessAndIMAreUsable = existing.accessExpiresAtMillis > now + EXPIRY_SAFETY_MILLIS &&
+            existing.userSigExpiresAtMillis > now + EXPIRY_SAFETY_MILLIS
+        val canRefresh = !existing.refreshToken.isNullOrBlank() &&
+            (existing.refreshExpiresAtMillis ?: 0L) > now
+        if (!canRefresh) {
+            if (accessAndIMAreUsable) return existing
+            store.clearSession()
             return null
         }
         return try {
@@ -291,9 +288,7 @@ object XingDunSessionManager {
             if (error.isUnauthorized) {
                 store.clear()
                 null
-            } else if (existing.accessExpiresAtMillis > now + EXPIRY_SAFETY_MILLIS &&
-                existing.userSigExpiresAtMillis > now + EXPIRY_SAFETY_MILLIS
-            ) {
+            } else if (accessAndIMAreUsable) {
                 existing
             } else {
                 throw error
@@ -350,15 +345,19 @@ object XingDunSessionManager {
         validateIMCredential(credential, bootstrap.sdkAppId)
         val now = System.currentTimeMillis()
         val accessExpiresIn = requirePositive(response.expiresIn, message(R.string.xingdun_error_credential_expiry))
-        val refreshToken = response.refreshToken?.trim().orEmpty()
-        val refreshExpiresIn = requirePositive(response.refreshExpiresIn, message(R.string.xingdun_error_credential_expiry))
-        require(response.accessToken.isNotBlank() && refreshToken.isNotBlank()) { message(R.string.xingdun_error_credential_missing) }
+        val refreshToken = response.refreshToken?.trim()?.takeIf(String::isNotEmpty)
+        val refreshExpiresAtMillis = if (refreshToken == null) {
+            null
+        } else {
+            now + requirePositive(response.refreshExpiresIn, message(R.string.xingdun_error_credential_expiry)) * 1000L
+        }
+        require(response.accessToken.isNotBlank()) { message(R.string.xingdun_error_credential_missing) }
         return XingDunStoredSession(
             accessToken = response.accessToken,
             tokenType = response.tokenType?.takeIf(String::isNotBlank) ?: "Bearer",
             accessExpiresAtMillis = now + accessExpiresIn * 1000L,
             refreshToken = refreshToken,
-            refreshExpiresAtMillis = now + refreshExpiresIn * 1000L,
+            refreshExpiresAtMillis = refreshExpiresAtMillis,
             companyCode = companyCode,
             companyId = bootstrap.company?.id,
             companyName = response.company?.name?.takeIf(String::isNotBlank)

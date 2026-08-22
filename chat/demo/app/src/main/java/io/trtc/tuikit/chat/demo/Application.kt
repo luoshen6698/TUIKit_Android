@@ -74,6 +74,7 @@ class Application : Application() {
         MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, "")
         Toast.makeText(this, getString(messageResId), Toast.LENGTH_LONG).show()
         startActivity(Intent(this, XingDunLaunchActivity::class.java).apply {
+            putExtra(XingDunLaunchActivity.EXTRA_NOTICE_RES_ID, messageResId)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         })
     }

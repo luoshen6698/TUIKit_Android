@@ -69,6 +69,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspaceSubmi
 import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspaceType
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeParser
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeRoute
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunAccountDeletionReceiptStore
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import kotlinx.coroutines.launch
@@ -1207,10 +1208,11 @@ open class XingDunFeatureActivity : BaseActivity() {
                     JsonObject::class.java
                 )
             }.onSuccess { result ->
-                getSharedPreferences(DELETION_PREFERENCES, Context.MODE_PRIVATE).edit()
-                    .putString(KEY_DELETION_RECEIPT, result.string("deletion_receipt"))
-                    .putString(KEY_DELETION_PURGE_AFTER, result.string("purge_after"))
-                    .apply()
+                XingDunAccountDeletionReceiptStore.save(
+                    this@XingDunFeatureActivity,
+                    result.string("deletion_receipt"),
+                    result.string("purge_after")
+                )
                 completeSecurityLogout()
             }.onFailure(::showFailure)
         }
@@ -1840,9 +1842,6 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
 
     companion object {
-        private const val DELETION_PREFERENCES = "xingdun_account_deletion"
-        private const val KEY_DELETION_RECEIPT = "deletion_receipt"
-        private const val KEY_DELETION_PURGE_AFTER = "purge_after"
         private const val EXTRA_MODE = "mode"
         private const val EXTRA_DEBUG_BYPASS_LOGIN = "debug_bypass_login"
         private const val EXTRA_ITEM_ID = "item_id"

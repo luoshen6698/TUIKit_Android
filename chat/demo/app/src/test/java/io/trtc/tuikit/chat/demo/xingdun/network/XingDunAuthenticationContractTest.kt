@@ -58,4 +58,21 @@ class XingDunAuthenticationContractTest {
         assertTrue(resetJson.contains("\"confirm_password\""))
         assertTrue(resetJson.contains("\"company_code\":\"xc2026\""))
     }
+
+    @Test
+    fun registrationAuthenticationResponseMayOmitRefreshTokenLikeIosContract() {
+        val response = gson.fromJson(
+            """{"access_token":"access","expires_in":7200,"company_code":"xc2026"}""",
+            XingDunAuthResponse::class.java
+        )
+
+        assertEquals("access", response.accessToken)
+        assertEquals(null, response.refreshToken)
+    }
+
+    @Test
+    fun deletionStatusUsesPublicReceiptContract() {
+        val json = gson.toJson(mapOf("deletion_receipt" to "signed-receipt"))
+        assertEquals(setOf("deletion_receipt"), gson.fromJson(json, Map::class.java).keys)
+    }
 }

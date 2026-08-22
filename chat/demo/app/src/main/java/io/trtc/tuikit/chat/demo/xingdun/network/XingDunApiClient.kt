@@ -96,12 +96,23 @@ class XingDunApiClient(
         executeAllowEmpty(request)
     }
 
+    suspend fun deletionStatus(
+        baseUrl: String,
+        deletionReceipt: String
+    ): XingDunAccountDeletionStatus = post(
+        baseUrl,
+        "user/deletionStatus",
+        mapOf("deletion_receipt" to deletionReceipt),
+        null,
+        XingDunAccountDeletionStatus::class.java
+    )
+
     suspend fun refresh(
         session: XingDunStoredSession
     ): XingDunAuthResponse = post(
         session.apiBaseUrl,
         "auth/refreshToken",
-        XingDunRefreshRequest(session.refreshToken, session.companyCode),
+        XingDunRefreshRequest(requireNotNull(session.refreshToken), session.companyCode),
         null,
         XingDunAuthResponse::class.java
     )

@@ -31,6 +31,19 @@ class XingDunAuthenticationInputValidatorTest {
     }
 
     @Test
+    fun loginUsernameAllowsExistingLongerAccountsButKeepsSafeFormat() {
+        assertNull(XingDunAuthenticationInputValidator.loginUsernameError("enterprise_member_2026"))
+        assertEquals(
+            XingDunAuthenticationInputError.USERNAME_LENGTH,
+            XingDunAuthenticationInputValidator.loginUsernameError("x".repeat(65))
+        )
+        assertEquals(
+            XingDunAuthenticationInputError.USERNAME_FORMAT,
+            XingDunAuthenticationInputValidator.loginUsernameError("member@example.com")
+        )
+    }
+
+    @Test
     fun passwordMatchesIosAndServerStrengthPolicy() {
         assertNull(XingDunAuthenticationInputValidator.passwordError("Safe#Entry9A"))
         assertEquals(

@@ -174,6 +174,14 @@ data class XingDunResetPasswordRequest(
     val companyCode: String
 )
 
+data class XingDunAccountDeletionStatus(
+    val status: String = "",
+    val requestedAt: String? = null,
+    val purgeAfter: String? = null,
+    val retentionDays: Int? = null,
+    val completedAt: String? = null
+)
+
 data class XingDunRefreshRequest(
     val refreshToken: String,
     val companyCode: String
@@ -184,8 +192,8 @@ data class XingDunStoredSession(
     val accessToken: String,
     val tokenType: String,
     val accessExpiresAtMillis: Long,
-    val refreshToken: String,
-    val refreshExpiresAtMillis: Long,
+    val refreshToken: String? = null,
+    val refreshExpiresAtMillis: Long? = null,
     val companyCode: String,
     val companyId: Int? = null,
     val companyName: String,
