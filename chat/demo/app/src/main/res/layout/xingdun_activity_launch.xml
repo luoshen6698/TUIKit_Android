@@ -39,6 +39,24 @@
             android:textColor="#B3261E"
             android:textSize="14sp" />
 
+        <TextView
+            android:id="@+id/xingdun_selected_enterprise"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:textColor="#536A66"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/xingdun_switch_enterprise"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:layout_marginTop="4dp"
+            android:text="@string/xingdun_switch_enterprise"
+            android:textAllCaps="false" />
+
         <EditText
             android:id="@+id/xingdun_company_code"
             android:layout_width="match_parent"
@@ -49,7 +67,8 @@
             android:imeOptions="actionNext"
             android:inputType="textNoSuggestions"
             android:maxLength="20"
-            android:singleLine="true" />
+            android:singleLine="true"
+            android:visibility="gone" />
 
         <EditText
             android:id="@+id/xingdun_username"

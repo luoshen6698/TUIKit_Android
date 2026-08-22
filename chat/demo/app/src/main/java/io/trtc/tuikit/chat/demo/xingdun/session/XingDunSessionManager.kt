@@ -16,6 +16,7 @@ import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunVersionCheckResult
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.IOException
 import java.time.Instant
 import java.util.UUID
 
@@ -37,19 +38,89 @@ object XingDunSessionManager {
 
     fun currentSession(): XingDunStoredSession? = if (::store.isInitialized) store.load() else null
 
+    fun currentEnterprise(): XingDunBootstrapConfiguration? =
+        if (::store.isInitialized) store.loadEnterprise() else null
+
     fun deviceId(): String = store.deviceId()
 
     internal fun apiClient(): XingDunApiClient = client
 
+    suspend fun resolveEnterprise(
+        companyCode: String?,
+        domain: String?
+    ): XingDunBootstrapConfiguration {
+        val normalizedCode = companyCode?.let(::normalizedCompanyCode)
+        val normalizedDomain = domain?.trim()?.lowercase()?.takeIf(String::isNotEmpty)
+        require(normalizedCode != null || normalizedDomain != null || (companyCode == null && domain == null)) {
+            message(R.string.xingdun_enterprise_lookup_required)
+        }
+        val bootstrap = client.resolveEnterprise(normalizedCode, normalizedDomain)
+        validateBootstrap(bootstrap, normalizedCode)
+        storeEnterprise(bootstrap)
+        return bootstrap
+    }
+
+    suspend fun attemptSimpleEnterprise(): XingDunBootstrapConfiguration? {
+        val bootstrap = client.resolveEnterprise(null, null)
+        if (!bootstrap.mode.equals("simple", ignoreCase = true)) return null
+        validateBootstrap(bootstrap, null)
+        storeEnterprise(bootstrap)
+        return bootstrap
+    }
+
+    suspend fun refreshSelectedEnterprise(): XingDunBootstrapConfiguration? {
+        val selected = store.loadEnterprise() ?: return null
+        return resolveEnterprise(selected.companyCode, null)
+    }
+
+    fun shouldRetainCachedEnterprise(error: Throwable): Boolean = when (error) {
+        is IOException -> true
+        is XingDunApiException -> error.httpStatus == 429 || (error.httpStatus ?: 500) >= 500
+        else -> false
+    }
+
     suspend fun bootstrap(companyCode: String): XingDunBootstrapConfiguration {
         val code = normalizedCompanyCode(companyCode)
-        val bootstrap = client.bootstrap(code)
+        store.loadEnterprise()?.takeIf { it.companyCode.equals(code, ignoreCase = true) }?.let {
+            validateBootstrap(it, code)
+            return it
+        }
+        return resolveEnterprise(code, null)
+    }
+
+    private fun validateBootstrap(bootstrap: XingDunBootstrapConfiguration, requestedCode: String?) {
         require(bootstrap.configured) { message(R.string.xingdun_error_im_not_configured) }
         require(bootstrap.imProvider.equals("tencent", ignoreCase = true)) { message(R.string.xingdun_error_im_provider) }
-        require(bootstrap.companyCode.equals(code, ignoreCase = true)) { message(R.string.xingdun_error_company_mismatch) }
+        require(bootstrap.companyCode.isNotBlank()) { message(R.string.xingdun_error_company_mismatch) }
+        require(bootstrap.company?.code?.equals(bootstrap.companyCode, ignoreCase = true) == true) {
+            message(R.string.xingdun_error_company_mismatch)
+        }
+        if (requestedCode != null) {
+            require(bootstrap.companyCode.equals(requestedCode, ignoreCase = true)) {
+                message(R.string.xingdun_error_company_mismatch)
+            }
+        }
         require(bootstrap.sdkAppId > 0) { message(R.string.xingdun_error_sdk_app_id) }
         validateBaseUrl(resolveApiBaseUrl(bootstrap))
-        return bootstrap
+    }
+
+    private fun storeEnterprise(bootstrap: XingDunBootstrapConfiguration) {
+        store.saveEnterprise(bootstrap)
+        val session = store.load() ?: return
+        if (!session.companyCode.equals(bootstrap.companyCode, ignoreCase = true) ||
+            session.sdkAppId != bootstrap.sdkAppId
+        ) {
+            store.clearSession()
+            return
+        }
+        store.save(
+            session.copy(
+                companyName = bootstrap.company?.name?.takeIf(String::isNotBlank) ?: session.companyName,
+                apiBaseUrl = resolveApiBaseUrl(bootstrap),
+                features = bootstrap.features.copy(redpacket = false, groupCall = false),
+                privacy = bootstrap.privacy
+            )
+        )
     }
 
     suspend fun login(companyCode: String, username: String, password: String): XingDunStoredSession {
@@ -143,7 +214,13 @@ object XingDunSessionManager {
     )
 
     fun clear() {
-        if (::store.isInitialized) store.clear()
+        if (::store.isInitialized) store.clearSession()
+    }
+
+    fun clearEnterpriseSelection() {
+        if (!::store.isInitialized) return
+        store.clearSession()
+        store.clearEnterprise()
     }
 
     private fun persist(
@@ -181,7 +258,10 @@ object XingDunSessionManager {
                 ?: credential.userId,
             features = bootstrap.features.copy(redpacket = false, groupCall = false),
             privacy = bootstrap.privacy
-        ).also(store::save)
+        ).also {
+            storeEnterprise(bootstrap)
+            store.save(it)
+        }
     }
 
     private fun persist(existing: XingDunStoredSession, response: XingDunAuthResponse): XingDunStoredSession {

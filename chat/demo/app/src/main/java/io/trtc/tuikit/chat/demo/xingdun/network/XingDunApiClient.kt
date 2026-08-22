@@ -39,12 +39,22 @@ class XingDunApiClient(
         .retryOnConnectionFailure(true)
         .build()
 
-    suspend fun bootstrap(companyCode: String): XingDunBootstrapConfiguration {
-        val url = centralBaseUrl().toHttpUrl().newBuilder()
+    suspend fun resolveEnterprise(
+        companyCode: String?,
+        domain: String?
+    ): XingDunBootstrapConfiguration {
+        val urlBuilder = centralBaseUrl().toHttpUrl().newBuilder()
             .addPathSegments("config/bootstrap")
-            .addQueryParameter("company_code", companyCode)
+        companyCode?.takeIf(String::isNotBlank)?.let {
+            urlBuilder.addQueryParameter("company_code", it)
+        }
+        domain?.takeIf(String::isNotBlank)?.let {
+            urlBuilder.addQueryParameter("domain", it)
+        }
+        val request = requestBuilder(urlBuilder.build().toString(), null)
+            .header("Cache-Control", "no-cache")
+            .get()
             .build()
-        val request = requestBuilder(url.toString(), null).get().build()
         return execute(request, XingDunBootstrapConfiguration::class.java)
     }
 

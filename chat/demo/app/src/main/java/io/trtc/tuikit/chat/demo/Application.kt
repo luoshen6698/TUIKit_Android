@@ -1,7 +1,9 @@
 package io.trtc.tuikit.chat.demo
 
+import android.app.Activity
 import android.app.Application
 import android.content.Intent
+import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
@@ -13,14 +15,25 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginListener
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
+import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseAccessActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessagePresentation
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBusinessActionHandler
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class Application : Application() {
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var enterpriseRefreshJob: Job? = null
+    private var startedActivityCount = 0
+    private var hasObservedFirstForeground = false
 
     private val loginListener = object : LoginListener() {
         override fun onKickedOffline() {
@@ -49,6 +62,7 @@ class Application : Application() {
         }
 
         LoginStore.shared.addLoginListener(loginListener)
+        registerEnterpriseForegroundRefresh()
     }
 
     private fun redirectToLogin(messageResId: Int, clearSession: Boolean) {
@@ -72,6 +86,59 @@ class Application : Application() {
         if (AppCompatDelegate.getApplicationLocales() != targetLocales) {
             AppCompatDelegate.setApplicationLocales(targetLocales)
         }
+    }
+
+    private fun registerEnterpriseForegroundRefresh() {
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) {
+                val enteringForeground = startedActivityCount == 0
+                startedActivityCount += 1
+                if (!enteringForeground) return
+                if (!hasObservedFirstForeground) {
+                    hasObservedFirstForeground = true
+                    return
+                }
+                refreshEnterpriseAfterForeground()
+            }
+
+            override fun onActivityStopped(activity: Activity) {
+                startedActivityCount = (startedActivityCount - 1).coerceAtLeast(0)
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
+    }
+
+    private fun refreshEnterpriseAfterForeground() {
+        if (XingDunSessionManager.currentEnterprise() == null) return
+        enterpriseRefreshJob?.cancel()
+        enterpriseRefreshJob = applicationScope.launch {
+            runCatching { XingDunSessionManager.refreshSelectedEnterprise() }
+                .onFailure { error ->
+                    if (!XingDunSessionManager.shouldRetainCachedEnterprise(error)) {
+                        redirectToEnterpriseSelection()
+                    }
+                }
+        }
+    }
+
+    private fun redirectToEnterpriseSelection() {
+        XingDunSessionManager.clearEnterpriseSelection()
+        MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, "")
+        LoginStore.shared.logout(object : io.trtc.tuikit.atomicxcore.api.CompletionHandler {
+            override fun onSuccess() = openEnterpriseSelection()
+            override fun onFailure(code: Int, desc: String) = openEnterpriseSelection()
+        })
+    }
+
+    private fun openEnterpriseSelection() {
+        startActivity(Intent(this, XingDunEnterpriseAccessActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        })
     }
 
 }

@@ -21,6 +21,8 @@ import kotlinx.coroutines.launch
 class XingDunLaunchActivity : BaseLoginActivity() {
 
     private lateinit var status: TextView
+    private lateinit var selectedEnterprise: TextView
+    private lateinit var switchEnterprise: Button
     private lateinit var companyCode: EditText
     private lateinit var username: EditText
     private lateinit var nickname: EditText
@@ -39,6 +41,7 @@ class XingDunLaunchActivity : BaseLoginActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.xingdun_activity_launch)
         bindViews()
+        if (!applySelectedEnterprise()) return
         applyThemeColors(themeStore.themeState.value.currentTheme.tokens.color)
         applyInvitation(intent?.data)
         primaryAction.setOnClickListener { authenticate() }
@@ -46,6 +49,7 @@ class XingDunLaunchActivity : BaseLoginActivity() {
         findViewById<Button>(R.id.xingdun_language).setOnClickListener { showLanguageSelector() }
         findViewById<Button>(R.id.xingdun_user_agreement).setOnClickListener { openLegalDocument(false) }
         findViewById<Button>(R.id.xingdun_privacy_policy).setOnClickListener { openLegalDocument(true) }
+        switchEnterprise.setOnClickListener { switchEnterprise() }
         checkVersionThenRestore()
     }
 
@@ -64,6 +68,8 @@ class XingDunLaunchActivity : BaseLoginActivity() {
 
     private fun bindViews() {
         status = findViewById(R.id.xingdun_launch_status)
+        selectedEnterprise = findViewById(R.id.xingdun_selected_enterprise)
+        switchEnterprise = findViewById(R.id.xingdun_switch_enterprise)
         companyCode = findViewById(R.id.xingdun_company_code)
         username = findViewById(R.id.xingdun_username)
         nickname = findViewById(R.id.xingdun_nickname)
@@ -75,6 +81,29 @@ class XingDunLaunchActivity : BaseLoginActivity() {
         legalLinks = findViewById(R.id.xingdun_legal_links)
         primaryAction = findViewById(R.id.xingdun_primary_action)
         switchMode = findViewById(R.id.xingdun_switch_mode)
+    }
+
+    private fun applySelectedEnterprise(): Boolean {
+        val bootstrap = XingDunSessionManager.currentEnterprise()
+        if (bootstrap == null) {
+            startActivity(Intent(this, XingDunEnterpriseAccessActivity::class.java).apply {
+                data = intent?.data
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            })
+            finish()
+            return false
+        }
+        resolvedBootstrap = bootstrap
+        companyCode.setText(bootstrap.companyCode)
+        selectedEnterprise.text = getString(
+            R.string.xingdun_selected_enterprise,
+            bootstrap.company?.name?.takeIf(String::isNotBlank) ?: bootstrap.companyCode,
+            bootstrap.companyCode
+        )
+        XingDunSessionManager.currentSession()?.takeIf {
+            !it.companyCode.equals(bootstrap.companyCode, ignoreCase = true)
+        }?.let { XingDunSessionManager.clear() }
+        return true
     }
 
     private fun restoreSession() {
@@ -148,7 +177,7 @@ class XingDunLaunchActivity : BaseLoginActivity() {
         val company = companyCode.text.toString().trim()
         val account = username.text.toString().trim()
         val passwordValue = password.text.toString()
-        if (company.isEmpty() || account.isEmpty() || passwordValue.isEmpty()) {
+        if (account.isEmpty() || passwordValue.isEmpty()) {
             status.setText(R.string.xingdun_required_fields)
             return
         }
@@ -214,19 +243,11 @@ class XingDunLaunchActivity : BaseLoginActivity() {
     }
 
     private fun openLegalDocument(privacy: Boolean) {
-        val code = companyCode.text.toString().trim()
-        if (code.isEmpty()) {
-            status.setText(R.string.xingdun_company_code_required)
+        val bootstrap = resolvedBootstrap ?: run {
+            status.setText(R.string.xingdun_enterprise_lookup_required)
             return
         }
         lifecycleScope.launch {
-            val bootstrap = runCatching {
-                resolvedBootstrap?.takeIf { it.companyCode.equals(code, ignoreCase = true) }
-                    ?: XingDunSessionManager.bootstrap(code).also { resolvedBootstrap = it }
-            }.getOrElse { error ->
-                status.text = error.localizedMessage ?: getString(R.string.xingdun_network_error)
-                return@launch
-            }
             val value = if (privacy) bootstrap.privacy.privacyUrl else bootstrap.privacy.userAgreementUrl
             val uri = runCatching { Uri.parse(value) }.getOrNull()
             if (uri?.scheme != "https" || uri.host.isNullOrBlank()) {
@@ -235,6 +256,14 @@ class XingDunLaunchActivity : BaseLoginActivity() {
             }
             startActivity(Intent(Intent.ACTION_VIEW, uri))
         }
+    }
+
+    private fun switchEnterprise() {
+        XingDunSessionManager.clearEnterpriseSelection()
+        startActivity(Intent(this, XingDunEnterpriseAccessActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        })
+        finish()
     }
 
     private fun applyInvitation(uri: Uri?) {
@@ -260,6 +289,7 @@ class XingDunLaunchActivity : BaseLoginActivity() {
     private fun setLoading(loading: Boolean, message: String = "") {
         primaryAction.isEnabled = !loading
         switchMode.isEnabled = !loading
+        switchEnterprise.isEnabled = !loading
         status.text = message
     }
 

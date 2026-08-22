@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import com.google.gson.Gson
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBootstrapConfiguration
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import java.security.KeyStore
 import java.util.UUID
@@ -21,35 +22,33 @@ class XingDunSessionStore(context: Context) {
     private val gson = Gson()
 
     fun save(session: XingDunStoredSession) {
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
-        val encrypted = cipher.doFinal(gson.toJson(session).toByteArray(Charsets.UTF_8))
+        saveEncrypted(KEY_SESSION_IV, KEY_SESSION_DATA, session)
+    }
+
+    fun load(): XingDunStoredSession? =
+        loadEncrypted(KEY_SESSION_IV, KEY_SESSION_DATA, XingDunStoredSession::class.java)
+
+    fun saveEnterprise(configuration: XingDunBootstrapConfiguration) {
+        saveEncrypted(KEY_ENTERPRISE_IV, KEY_ENTERPRISE_DATA, configuration)
+    }
+
+    fun loadEnterprise(): XingDunBootstrapConfiguration? =
+        loadEncrypted(KEY_ENTERPRISE_IV, KEY_ENTERPRISE_DATA, XingDunBootstrapConfiguration::class.java)
+
+    fun clear() = clearSession()
+
+    fun clearSession() {
         securePreferences.edit()
-            .putString(KEY_SESSION_IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
-            .putString(KEY_SESSION_DATA, Base64.encodeToString(encrypted, Base64.NO_WRAP))
+            .remove(KEY_SESSION_IV)
+            .remove(KEY_SESSION_DATA)
             .apply()
     }
 
-    fun load(): XingDunStoredSession? {
-        val encodedIv = securePreferences.getString(KEY_SESSION_IV, null) ?: return null
-        val encodedData = securePreferences.getString(KEY_SESSION_DATA, null) ?: return null
-        return try {
-            val cipher = Cipher.getInstance(TRANSFORMATION)
-            cipher.init(
-                Cipher.DECRYPT_MODE,
-                secretKey(),
-                GCMParameterSpec(GCM_TAG_LENGTH_BITS, Base64.decode(encodedIv, Base64.NO_WRAP))
-            )
-            val json = cipher.doFinal(Base64.decode(encodedData, Base64.NO_WRAP)).toString(Charsets.UTF_8)
-            gson.fromJson(json, XingDunStoredSession::class.java)
-        } catch (_: Exception) {
-            clear()
-            null
-        }
-    }
-
-    fun clear() {
-        securePreferences.edit().clear().apply()
+    fun clearEnterprise() {
+        securePreferences.edit()
+            .remove(KEY_ENTERPRISE_IV)
+            .remove(KEY_ENTERPRISE_DATA)
+            .apply()
     }
 
     fun deviceId(): String {
@@ -60,6 +59,34 @@ class XingDunSessionStore(context: Context) {
         val created = UUID.randomUUID().toString().lowercase()
         devicePreferences.edit().putString(KEY_DEVICE_ID, created).apply()
         return created
+    }
+
+    private fun saveEncrypted(ivKey: String, dataKey: String, value: Any) {
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+        val encrypted = cipher.doFinal(gson.toJson(value).toByteArray(Charsets.UTF_8))
+        securePreferences.edit()
+            .putString(ivKey, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+            .putString(dataKey, Base64.encodeToString(encrypted, Base64.NO_WRAP))
+            .apply()
+    }
+
+    private fun <T> loadEncrypted(ivKey: String, dataKey: String, type: Class<T>): T? {
+        val encodedIv = securePreferences.getString(ivKey, null) ?: return null
+        val encodedData = securePreferences.getString(dataKey, null) ?: return null
+        return try {
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(
+                Cipher.DECRYPT_MODE,
+                secretKey(),
+                GCMParameterSpec(GCM_TAG_LENGTH_BITS, Base64.decode(encodedIv, Base64.NO_WRAP))
+            )
+            val json = cipher.doFinal(Base64.decode(encodedData, Base64.NO_WRAP)).toString(Charsets.UTF_8)
+            gson.fromJson(json, type)
+        } catch (_: Exception) {
+            securePreferences.edit().remove(ivKey).remove(dataKey).apply()
+            null
+        }
     }
 
     private fun secretKey(): SecretKey {
@@ -86,6 +113,8 @@ class XingDunSessionStore(context: Context) {
         private const val DEVICE_PREFERENCES = "xingdun_device"
         private const val KEY_SESSION_IV = "session_iv"
         private const val KEY_SESSION_DATA = "session_data"
+        private const val KEY_ENTERPRISE_IV = "enterprise_iv"
+        private const val KEY_ENTERPRISE_DATA = "enterprise_data"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
         private const val KEY_ALIAS = "xingdun.session.aes.v1"
