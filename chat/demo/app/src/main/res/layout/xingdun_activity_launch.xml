@@ -1,192 +1,389 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/xingdun_launch_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:layout_height="match_parent">
 
-    <LinearLayout
+    <io.trtc.tuikit.chat.demo.xingdun.launch.XingDunCircuitBackdropView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        android:paddingStart="28dp"
-        android:paddingTop="72dp"
-        android:paddingEnd="28dp"
-        android:paddingBottom="36dp">
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no" />
 
-        <io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseLogoView
-            android:id="@+id/xingdun_auth_logo"
-            android:layout_width="96dp"
-            android:layout_height="96dp"
-            android:contentDescription="@string/demo_app_name" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/demo_app_name"
-            android:textSize="26sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/xingdun_launch_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:gravity="center"
-            android:minHeight="24dp"
-            android:textColor="#B3261E"
-            android:textSize="14sp" />
-
-        <TextView
-            android:id="@+id/xingdun_selected_enterprise"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:gravity="center"
-            android:textColor="#536A66"
-            android:textSize="14sp"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/xingdun_switch_enterprise"
-            android:layout_width="wrap_content"
-            android:layout_height="44dp"
-            android:layout_marginTop="4dp"
-            android:text="@string/xingdun_switch_enterprise"
-            android:textAllCaps="false" />
-
-        <EditText
-            android:id="@+id/xingdun_company_code"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="16dp"
-            android:autofillHints="organizationName"
-            android:hint="@string/xingdun_company_code"
-            android:imeOptions="actionNext"
-            android:inputType="textNoSuggestions"
-            android:maxLength="20"
-            android:singleLine="true"
-            android:visibility="gone" />
-
-        <EditText
-            android:id="@+id/xingdun_username"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="8dp"
-            android:autofillHints="username"
-            android:hint="@string/xingdun_account"
-            android:imeOptions="actionNext"
-            android:inputType="textNoSuggestions"
-            android:singleLine="true" />
-
-        <EditText
-            android:id="@+id/xingdun_nickname"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="8dp"
-            android:hint="@string/xingdun_nickname"
-            android:imeOptions="actionNext"
-            android:inputType="textPersonName"
-            android:singleLine="true"
-            android:visibility="gone" />
-
-        <EditText
-            android:id="@+id/xingdun_password"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="8dp"
-            android:autofillHints="password"
-            android:hint="@string/xingdun_password"
-            android:imeOptions="actionDone"
-            android:inputType="textPassword"
-            android:singleLine="true" />
-
-        <EditText
-            android:id="@+id/xingdun_confirm_password"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="8dp"
-            android:autofillHints="password"
-            android:hint="@string/xingdun_confirm_password"
-            android:imeOptions="actionNext"
-            android:inputType="textPassword"
-            android:singleLine="true"
-            android:visibility="gone" />
-
-        <EditText
-            android:id="@+id/xingdun_invite_code"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="8dp"
-            android:hint="@string/xingdun_invite_code"
-            android:imeOptions="actionDone"
-            android:inputType="textNoSuggestions"
-            android:maxLength="20"
-            android:singleLine="true"
-            android:visibility="gone" />
-
-        <CheckBox
-            android:id="@+id/xingdun_adult_declaration"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/xingdun_adult_declaration"
-            android:visibility="gone" />
-
-        <CheckBox
-            android:id="@+id/xingdun_privacy_consent"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/xingdun_privacy_consent" />
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true">
 
         <LinearLayout
-            android:id="@+id/xingdun_legal_links"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="horizontal">
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingStart="24dp"
+            android:paddingTop="20dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="24dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <View
+                    android:layout_width="34dp"
+                    android:layout_height="1dp"
+                    android:background="#F4BD48" />
+
+                <TextView
+                    android:id="@+id/xingdun_brand_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:ellipsize="end"
+                    android:letterSpacing="0.12"
+                    android:maxLines="1"
+                    android:text="@string/demo_app_name"
+                    android:textColor="#179A84"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <View
+                    android:layout_width="34dp"
+                    android:layout_height="1dp"
+                    android:background="#F4BD48" />
+            </LinearLayout>
+
+            <io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseLogoView
+                android:id="@+id/xingdun_auth_logo"
+                android:layout_width="112dp"
+                android:layout_height="112dp"
+                android:layout_marginTop="12dp"
+                android:contentDescription="@string/demo_app_name" />
+
+            <TextView
+                android:id="@+id/xingdun_welcome_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/xingdun_welcome_back"
+                android:textColor="#123F3A"
+                android:textSize="25sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/xingdun_login_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:text="@string/xingdun_login_platform_account"
+                android:textColor="#667D79"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/xingdun_launch_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:minHeight="20dp"
+                android:textColor="#B3261E"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/xingdun_selected_enterprise"
+                android:layout_width="1dp"
+                android:layout_height="1dp"
+                android:visibility="gone" />
+
+            <EditText
+                android:id="@+id/xingdun_company_code"
+                android:layout_width="1dp"
+                android:layout_height="1dp"
+                android:autofillHints="organizationName"
+                android:inputType="textNoSuggestions"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/xingdun_login_panel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/xingdun_bg_enterprise_card"
+                android:elevation="8dp"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/xingdun_username"
+                    android:textColor="#536A66"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/xingdun_username"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="6dp"
+                    android:autofillHints="username"
+                    android:background="@drawable/xingdun_bg_enterprise_input"
+                    android:drawableStart="@drawable/xingdun_ic_user"
+                    android:drawablePadding="8dp"
+                    android:drawableTint="#9AABA8"
+                    android:hint="@string/xingdun_enterprise_username_placeholder"
+                    android:imeOptions="actionNext"
+                    android:inputType="textNoSuggestions"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:singleLine="true"
+                    android:textColor="#123F3A"
+                    android:textColorHint="#A6B4B1"
+                    android:textSize="15sp" />
+
+                <EditText
+                    android:id="@+id/xingdun_nickname"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/xingdun_bg_enterprise_input"
+                    android:hint="@string/xingdun_nickname"
+                    android:imeOptions="actionNext"
+                    android:inputType="textPersonName"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:singleLine="true"
+                    android:textColor="#123F3A"
+                    android:textColorHint="#A6B4B1"
+                    android:textSize="15sp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/xingdun_password"
+                    android:textColor="#536A66"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/xingdun_password"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="6dp"
+                    android:autofillHints="password"
+                    android:background="@drawable/xingdun_bg_enterprise_input"
+                    android:drawableStart="@drawable/xingdun_ic_password"
+                    android:drawablePadding="8dp"
+                    android:drawableTint="#9AABA8"
+                    android:hint="@string/xingdun_password_placeholder"
+                    android:imeOptions="actionDone"
+                    android:inputType="textPassword"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:singleLine="true"
+                    android:textColor="#123F3A"
+                    android:textColorHint="#A6B4B1"
+                    android:textSize="15sp" />
+
+                <EditText
+                    android:id="@+id/xingdun_confirm_password"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="14dp"
+                    android:autofillHints="password"
+                    android:background="@drawable/xingdun_bg_enterprise_input"
+                    android:hint="@string/xingdun_confirm_password"
+                    android:imeOptions="actionNext"
+                    android:inputType="textPassword"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:singleLine="true"
+                    android:textColor="#123F3A"
+                    android:textColorHint="#A6B4B1"
+                    android:textSize="15sp"
+                    android:visibility="gone" />
+
+                <EditText
+                    android:id="@+id/xingdun_invite_code"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/xingdun_bg_enterprise_input"
+                    android:hint="@string/xingdun_invite_code"
+                    android:imeOptions="actionDone"
+                    android:inputType="textNoSuggestions"
+                    android:maxLength="20"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:singleLine="true"
+                    android:textColor="#123F3A"
+                    android:textColorHint="#A6B4B1"
+                    android:textSize="15sp"
+                    android:visibility="gone" />
+
+                <CheckBox
+                    android:id="@+id/xingdun_adult_declaration"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:buttonTint="#1EAA91"
+                    android:text="@string/xingdun_adult_declaration"
+                    android:textColor="#536A66"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="36dp"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <CheckBox
+                        android:id="@+id/xingdun_privacy_consent"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:buttonTint="#1EAA91"
+                        android:contentDescription="@string/xingdun_privacy_consent_accessibility"
+                        android:minHeight="0dp"
+                        android:minWidth="0dp"
+                        android:padding="0dp" />
+
+                    <TextView
+                        android:id="@+id/xingdun_agreement_text"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="center_vertical"
+                        android:maxLines="2"
+                        android:text="@string/xingdun_privacy_consent"
+                        android:textColor="#667D79"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/xingdun_primary_action"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/xingdun_bg_auth_primary"
+                    android:clickable="true"
+                    android:contentDescription="@string/xingdun_login"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/xingdun_ic_login_arrow" />
+
+                    <TextView
+                        android:id="@+id/xingdun_primary_action_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/xingdun_login"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/xingdun_account_actions"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginTop="14dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/xingdun_no_account"
+                    android:textColor="#667D79"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/xingdun_switch_mode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:background="@android:color/transparent"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:text="@string/xingdun_register_now"
+                    android:textAllCaps="false"
+                    android:textColor="#179A84"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=" | "
+                    android:textColor="#849793"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/xingdun_forgot_password"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:background="@android:color/transparent"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:text="@string/xingdun_forgot_password"
+                    android:textAllCaps="false"
+                    android:textColor="#179A84"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
             <Button
-                android:id="@+id/xingdun_user_agreement"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:text="@string/xingdun_user_agreement"
-                android:textAllCaps="false" />
+                android:id="@+id/xingdun_switch_enterprise"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/xingdun_bg_auth_capsule"
+                android:drawableStart="@drawable/xingdun_ic_enterprise"
+                android:drawablePadding="6dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="@string/xingdun_switch_enterprise"
+                android:textAllCaps="false"
+                android:textColor="#536A66"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/xingdun_copyright"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:text="@string/demo_app_name"
+                android:textColor="#88718581"
+                android:textSize="12sp" />
 
             <Button
-                android:id="@+id/xingdun_privacy_policy"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:text="@string/xingdun_privacy_policy"
-                android:textAllCaps="false" />
+                android:id="@+id/xingdun_language"
+                android:layout_width="1dp"
+                android:layout_height="1dp"
+                android:visibility="gone" />
         </LinearLayout>
-
-        <Button
-            android:id="@+id/xingdun_primary_action"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="20dp"
-            android:text="@string/xingdun_login"
-            android:textAllCaps="false" />
-
-        <Button
-            android:id="@+id/xingdun_switch_mode"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="8dp"
-            android:text="@string/xingdun_create_account"
-            android:textAllCaps="false" />
-
-        <Button
-            android:id="@+id/xingdun_language"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="8dp"
-            android:text="@string/demo_settings_language"
-            android:textAllCaps="false" />
-    </LinearLayout>
-</ScrollView>
+    </ScrollView>
+</FrameLayout>

@@ -15,6 +15,7 @@ data class XingDunBootstrapConfiguration(
     val sdkAppId: Int = 0,
     val apiBaseUrl: String? = null,
     val company: XingDunCompany? = null,
+    val platform: XingDunPlatformConfiguration? = null,
     val push: XingDunPushConfiguration = XingDunPushConfiguration(),
     val features: XingDunFeatures = XingDunFeatures(),
     val privacy: XingDunPrivacy = XingDunPrivacy()
@@ -35,6 +36,12 @@ data class XingDunPushConfiguration(
     val businessIdProd: String = "",
     val voipCertificateIdDev: String = "",
     val voipCertificateIdProd: String = ""
+)
+
+data class XingDunPlatformConfiguration(
+    val platformName: String? = null,
+    val platformLogo: String? = null,
+    val siteCopyright: String? = null,
 )
 
 data class XingDunFeatures(

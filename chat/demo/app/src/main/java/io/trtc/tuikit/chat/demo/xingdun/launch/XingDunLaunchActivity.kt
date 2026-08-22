@@ -1,12 +1,19 @@
 package io.trtc.tuikit.chat.demo.xingdun.launch
 
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.TextPaint
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
@@ -19,10 +26,13 @@ import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import kotlinx.coroutines.launch
 
-class XingDunLaunchActivity : BaseLoginActivity() {
+open class XingDunLaunchActivity : BaseLoginActivity() {
 
     private lateinit var status: TextView
     private lateinit var enterpriseLogo: XingDunEnterpriseLogoView
+    private lateinit var brandName: TextView
+    private lateinit var loginSubtitle: TextView
+    private lateinit var copyright: TextView
     private lateinit var selectedEnterprise: TextView
     private lateinit var switchEnterprise: Button
     private lateinit var companyCode: EditText
@@ -33,10 +43,13 @@ class XingDunLaunchActivity : BaseLoginActivity() {
     private lateinit var inviteCode: EditText
     private lateinit var adultDeclaration: CheckBox
     private lateinit var privacyConsent: CheckBox
-    private lateinit var legalLinks: View
-    private lateinit var primaryAction: Button
+    private lateinit var agreementText: TextView
+    private lateinit var primaryAction: LinearLayout
+    private lateinit var primaryActionLabel: TextView
     private lateinit var switchMode: Button
+    private lateinit var forgotPassword: Button
     private var registrationMode = false
+    private var isLoading = false
     private var resolvedBootstrap: XingDunBootstrapConfiguration? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,9 +62,11 @@ class XingDunLaunchActivity : BaseLoginActivity() {
         primaryAction.setOnClickListener { authenticate() }
         switchMode.setOnClickListener { setRegistrationMode(!registrationMode) }
         findViewById<Button>(R.id.xingdun_language).setOnClickListener { showLanguageSelector() }
-        findViewById<Button>(R.id.xingdun_user_agreement).setOnClickListener { openLegalDocument(false) }
-        findViewById<Button>(R.id.xingdun_privacy_policy).setOnClickListener { openLegalDocument(true) }
+        setupAgreementLinks()
+        privacyConsent.setOnCheckedChangeListener { _, _ -> updatePrimaryActionEnabled() }
+        forgotPassword.setOnClickListener { showForgotPasswordSupport() }
         switchEnterprise.setOnClickListener { switchEnterprise() }
+        updatePrimaryActionEnabled()
         checkVersionThenRestore()
     }
 
@@ -63,14 +78,16 @@ class XingDunLaunchActivity : BaseLoginActivity() {
 
     override fun applyThemeColors(colors: ColorTokens) {
         if (::status.isInitialized) {
-            findViewById<View>(R.id.xingdun_launch_root).setBackgroundColor(colors.bgColorDefault)
-            status.setTextColor(colors.textColorSecondary)
+            status.setTextColor(Color.rgb(102, 125, 121))
         }
     }
 
     private fun bindViews() {
         status = findViewById(R.id.xingdun_launch_status)
         enterpriseLogo = findViewById(R.id.xingdun_auth_logo)
+        brandName = findViewById(R.id.xingdun_brand_name)
+        loginSubtitle = findViewById(R.id.xingdun_login_subtitle)
+        copyright = findViewById(R.id.xingdun_copyright)
         selectedEnterprise = findViewById(R.id.xingdun_selected_enterprise)
         switchEnterprise = findViewById(R.id.xingdun_switch_enterprise)
         companyCode = findViewById(R.id.xingdun_company_code)
@@ -81,9 +98,11 @@ class XingDunLaunchActivity : BaseLoginActivity() {
         inviteCode = findViewById(R.id.xingdun_invite_code)
         adultDeclaration = findViewById(R.id.xingdun_adult_declaration)
         privacyConsent = findViewById(R.id.xingdun_privacy_consent)
-        legalLinks = findViewById(R.id.xingdun_legal_links)
+        agreementText = findViewById(R.id.xingdun_agreement_text)
         primaryAction = findViewById(R.id.xingdun_primary_action)
+        primaryActionLabel = findViewById(R.id.xingdun_primary_action_label)
         switchMode = findViewById(R.id.xingdun_switch_mode)
+        forgotPassword = findViewById(R.id.xingdun_forgot_password)
     }
 
     private fun applySelectedEnterprise(): Boolean {
@@ -97,7 +116,14 @@ class XingDunLaunchActivity : BaseLoginActivity() {
             return false
         }
         resolvedBootstrap = bootstrap
-        enterpriseLogo.loadLogo(lifecycleScope, bootstrap.company?.logoUrl)
+        val displayName = bootstrap.platform?.platformName?.trim()?.takeIf(String::isNotEmpty)
+            ?: bootstrap.company?.name?.trim()?.takeIf(String::isNotEmpty)
+            ?: getString(R.string.demo_app_name)
+        brandName.text = displayName
+        loginSubtitle.text = getString(R.string.xingdun_login_platform_account, displayName)
+        copyright.text = bootstrap.platform?.siteCopyright?.trim()?.takeIf(String::isNotEmpty) ?: displayName
+        enterpriseLogo.contentDescription = displayName
+        enterpriseLogo.loadLogo(lifecycleScope, resolveBrandLogoUrl(bootstrap))
         companyCode.setText(bootstrap.companyCode)
         selectedEnterprise.text = getString(
             R.string.xingdun_selected_enterprise,
@@ -240,10 +266,68 @@ class XingDunLaunchActivity : BaseLoginActivity() {
             it.visibility = if (enabled) View.VISIBLE else View.GONE
         }
         privacyConsent.visibility = View.VISIBLE
-        legalLinks.visibility = View.VISIBLE
-        primaryAction.setText(if (enabled) R.string.xingdun_register else R.string.xingdun_login)
-        switchMode.setText(if (enabled) R.string.xingdun_back_to_login else R.string.xingdun_create_account)
+        val primaryLabel = if (enabled) R.string.xingdun_register else R.string.xingdun_login
+        primaryActionLabel.setText(primaryLabel)
+        primaryAction.contentDescription = getString(primaryLabel)
+        switchMode.setText(if (enabled) R.string.xingdun_back_to_login else R.string.xingdun_register_now)
         status.text = ""
+        updatePrimaryActionEnabled()
+    }
+
+    private fun setupAgreementLinks() {
+        val prefix = getString(R.string.xingdun_agreement_prefix)
+        val agreement = getString(R.string.xingdun_user_agreement_link)
+        val connector = getString(R.string.xingdun_agreement_connector)
+        val privacy = getString(R.string.xingdun_privacy_policy_link)
+        agreementText.text = SpannableStringBuilder().apply {
+            append(prefix)
+            val agreementStart = length
+            append(agreement)
+            setSpan(legalLinkSpan(false), agreementStart, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            append(connector)
+            val privacyStart = length
+            append(privacy)
+            setSpan(legalLinkSpan(true), privacyStart, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        agreementText.movementMethod = LinkMovementMethod.getInstance()
+        agreementText.highlightColor = Color.TRANSPARENT
+    }
+
+    private fun legalLinkSpan(privacy: Boolean): ClickableSpan = object : ClickableSpan() {
+        override fun onClick(widget: View) = openLegalDocument(privacy)
+
+        override fun updateDrawState(ds: TextPaint) {
+            ds.color = Color.rgb(23, 154, 132)
+            ds.isUnderlineText = false
+            ds.isFakeBoldText = true
+        }
+    }
+
+    private fun showForgotPasswordSupport() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.xingdun_forgot_password)
+            .setMessage(R.string.xingdun_forgot_password_support)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun resolveBrandLogoUrl(bootstrap: XingDunBootstrapConfiguration): String? {
+        val raw = bootstrap.platform?.platformLogo?.trim()?.takeIf(String::isNotEmpty)
+            ?: bootstrap.company?.logoUrl?.trim()?.takeIf(String::isNotEmpty)
+            ?: return null
+        val candidate = runCatching { Uri.parse(raw) }.getOrNull() ?: return null
+        if (!candidate.scheme.isNullOrBlank()) return raw
+        val baseValue = bootstrap.apiBaseUrl?.trim()?.takeIf(String::isNotEmpty)
+            ?: bootstrap.company?.apiBaseUrl?.trim()?.takeIf(String::isNotEmpty)
+            ?: return null
+        val base = runCatching { Uri.parse(baseValue) }.getOrNull() ?: return null
+        if (!base.scheme.equals("https", ignoreCase = true) || base.host.isNullOrBlank()) return null
+        return Uri.Builder()
+            .scheme("https")
+            .encodedAuthority(base.encodedAuthority)
+            .encodedPath(if (raw.startsWith('/')) raw else "/$raw")
+            .build()
+            .toString()
     }
 
     private fun openLegalDocument(privacy: Boolean) {
@@ -293,10 +377,18 @@ class XingDunLaunchActivity : BaseLoginActivity() {
     }
 
     private fun setLoading(loading: Boolean, message: String = "") {
-        primaryAction.isEnabled = !loading
+        isLoading = loading
+        updatePrimaryActionEnabled()
         switchMode.isEnabled = !loading
+        forgotPassword.isEnabled = !loading
         switchEnterprise.isEnabled = !loading
         status.text = message
+    }
+
+    private fun updatePrimaryActionEnabled() {
+        if (::primaryAction.isInitialized) {
+            primaryAction.isEnabled = !isLoading && privacyConsent.isChecked
+        }
     }
 
     companion object {
