@@ -14,9 +14,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
+import io.trtc.tuikit.atomicxcore.api.login.LoginStatus
+import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBootstrapConfiguration
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantBoundary
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import kotlinx.coroutines.launch
 
 class XingDunEnterpriseAccessActivity : AppCompatActivity() {
@@ -150,17 +154,18 @@ class XingDunEnterpriseAccessActivity : AppCompatActivity() {
     private fun revalidateStoredEnterprise(stored: XingDunBootstrapConfiguration) {
         setLoading(true, getString(R.string.xingdun_enterprise_revalidating))
         lifecycleScope.launch {
-            runCatching { XingDunSessionManager.resolveEnterprise(stored.companyCode, null) }
+            runCatching { XingDunSessionManager.discoverEnterprise(stored.companyCode, null) }
                 .onSuccess { bootstrap ->
                     enterpriseLogo.loadLogo(lifecycleScope, bootstrap.company?.logoUrl)
-                    openAuthentication()
+                    applyResolvedEnterprise(bootstrap)
                 }
                 .onFailure { error ->
                     if (XingDunSessionManager.shouldRetainCachedEnterprise(error)) {
                         openAuthentication()
                     } else {
-                        XingDunSessionManager.clearEnterpriseSelection()
-                        setLoading(false, getString(R.string.xingdun_enterprise_expired))
+                        XingDunTenantSessionCoordinator.switchEnterprise {
+                            setLoading(false, getString(R.string.xingdun_enterprise_expired))
+                        }
                     }
                 }
         }
@@ -176,18 +181,12 @@ class XingDunEnterpriseAccessActivity : AppCompatActivity() {
             return
         }
         setLoading(true, getString(R.string.xingdun_enterprise_connecting))
-        val previousCompanyCode = XingDunSessionManager.currentEnterprise()?.companyCode
         lifecycleScope.launch {
             runCatching {
-                XingDunSessionManager.resolveEnterprise(lookup.companyCode, lookup.domain)
+                XingDunSessionManager.discoverEnterprise(lookup.companyCode, lookup.domain)
             }.onSuccess { bootstrap ->
                 enterpriseLogo.loadLogo(lifecycleScope, bootstrap.company?.logoUrl)
-                if (previousCompanyCode != null &&
-                    !previousCompanyCode.equals(bootstrap.companyCode, ignoreCase = true)
-                ) {
-                    XingDunSessionManager.clear()
-                }
-                openAuthentication()
+                applyResolvedEnterprise(bootstrap)
             }.onFailure { error ->
                 setLoading(
                     false,
@@ -195,6 +194,25 @@ class XingDunEnterpriseAccessActivity : AppCompatActivity() {
                         ?: getString(R.string.xingdun_enterprise_connection_failed)
                 )
             }
+        }
+    }
+
+    private fun applyResolvedEnterprise(bootstrap: XingDunBootstrapConfiguration) {
+        val currentIdentity = XingDunTenantBoundary.identity(XingDunSessionManager.currentSession())
+        val selectedIdentity = XingDunTenantBoundary.identity(XingDunSessionManager.currentEnterprise())
+        val nextIdentity = requireNotNull(XingDunTenantBoundary.identity(bootstrap))
+        val imLoggedIn = LoginStore.shared.loginState.loginStatus.value != LoginStatus.UNLOGIN
+        val activeIMMismatch = imLoggedIn && LoginStore.shared.sdkAppID != nextIdentity.sdkAppId
+        val storedSessionMismatch = currentIdentity != null && !currentIdentity.matches(nextIdentity)
+        val selectedEnterpriseMismatch = selectedIdentity != null && !selectedIdentity.matches(nextIdentity)
+        if (activeIMMismatch || storedSessionMismatch || (imLoggedIn && selectedEnterpriseMismatch)) {
+            XingDunTenantSessionCoordinator.switchEnterprise {
+                XingDunSessionManager.selectEnterprise(bootstrap)
+                openAuthentication()
+            }
+        } else {
+            XingDunSessionManager.selectEnterprise(bootstrap)
+            openAuthentication()
         }
     }
 

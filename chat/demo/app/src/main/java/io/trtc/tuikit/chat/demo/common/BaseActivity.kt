@@ -13,6 +13,8 @@ import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicxcore.api.login.LoginStatus
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,13 +45,25 @@ abstract class BaseActivity : AppCompatActivity() {
         if (!requiresLogin) {
             return false
         }
-        if (LoginStore.shared.loginState.loginStatus.value != LoginStatus.UNLOGIN) {
+        val session = XingDunSessionManager.currentSession()
+        val loginStatus = LoginStore.shared.loginState.loginStatus.value
+        val loginUserID = LoginStore.shared.loginState.loginUserInfo.value?.userID
+        val sdkMatches = session != null && LoginStore.shared.sdkAppID == session.sdkAppId
+        val userMatches = session != null && loginUserID == session.timUserId
+        if (loginStatus != LoginStatus.UNLOGIN && sdkMatches && userMatches) {
             return false
         }
-        startActivity(Intent(this, XingDunLaunchActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        })
-        finish()
+        val openLogin = {
+            startActivity(Intent(this, XingDunLaunchActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            })
+            finish()
+        }
+        if (loginStatus == LoginStatus.UNLOGIN) {
+            openLogin()
+        } else {
+            XingDunTenantSessionCoordinator.logout(openLogin)
+        }
         return true
     }
 

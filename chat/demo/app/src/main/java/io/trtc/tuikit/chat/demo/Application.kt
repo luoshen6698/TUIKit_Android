@@ -22,6 +22,7 @@ import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBusinessActionHandler
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -49,6 +50,7 @@ class Application : Application() {
         super.onCreate()
         MMKV.initialize(this)
         XingDunSessionManager.initialize(this)
+        XingDunTenantSessionCoordinator.initialize(this)
         XingDunRouter.initialize(this)
         XingDunPushManager.initialize(this)
         XingDunCustomMessagePresentation.registerGlobalSummaries()
@@ -127,12 +129,7 @@ class Application : Application() {
     }
 
     private fun redirectToEnterpriseSelection() {
-        XingDunSessionManager.clearEnterpriseSelection()
-        MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, "")
-        LoginStore.shared.logout(object : io.trtc.tuikit.atomicxcore.api.CompletionHandler {
-            override fun onSuccess() = openEnterpriseSelection()
-            override fun onFailure(code: Int, desc: String) = openEnterpriseSelection()
-        })
+        XingDunTenantSessionCoordinator.switchEnterprise(::openEnterpriseSelection)
     }
 
     private fun openEnterpriseSelection() {

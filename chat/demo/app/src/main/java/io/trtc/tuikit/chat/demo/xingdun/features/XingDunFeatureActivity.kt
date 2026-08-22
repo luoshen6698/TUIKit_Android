@@ -51,19 +51,15 @@ import com.journeyapps.barcodescanner.BarcodeEncoder
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.google.zxing.common.HybridBinarizer
-import com.tencent.mmkv.MMKV
-import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.atomicxcore.api.contact.GetContactInfoCompletionHandler
 import io.trtc.tuikit.atomicxcore.api.group.GetGroupInfoCompletionHandler
 import io.trtc.tuikit.atomicxcore.api.group.GroupInfo
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
-import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.app.BuildConfig
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
-import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
@@ -71,10 +67,10 @@ import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspaceContr
 import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspaceSubmissionError
 import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspaceSubmissionValidator
 import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspaceType
-import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeParser
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeRoute
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1221,17 +1217,10 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun completeSecurityLogout() {
-        XingDunPushManager.unregisterDevice {
-            LoginStore.shared.logout(object : CompletionHandler {
-                override fun onSuccess() = clearSessionAndOpenLogin()
-                override fun onFailure(code: Int, desc: String) = clearSessionAndOpenLogin()
-            })
-        }
+        XingDunTenantSessionCoordinator.logout(::clearSessionAndOpenLogin)
     }
 
     private fun clearSessionAndOpenLogin() {
-        XingDunSessionManager.clear()
-        MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, "")
         startActivity(Intent(this, XingDunLaunchActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         })

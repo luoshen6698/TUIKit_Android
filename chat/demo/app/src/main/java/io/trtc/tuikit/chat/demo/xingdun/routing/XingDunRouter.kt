@@ -9,6 +9,7 @@ import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantBoundary
 
 object XingDunRouter {
 
@@ -21,23 +22,33 @@ object XingDunRouter {
     fun routeNotification(extension: String?) {
         val payload = extension?.trim().orEmpty()
         if (payload.isEmpty() || payload.toByteArray().size > MAX_PAYLOAD_BYTES) return
-        MMKV.defaultMMKV().encode(KEY_PENDING_PUSH_ROUTE, payload)
-        if (XingDunSessionManager.currentSession() == null) {
+        val session = XingDunSessionManager.currentSession()
+        if (session == null) {
+            clearPendingRoute()
             launch(XingDunLaunchActivity::class.java)
             return
         }
+        MMKV.defaultMMKV().encode(KEY_PENDING_PUSH_ROUTE, payload)
+        val tenantKey = XingDunTenantBoundary.identity(session)?.key ?: return
+        MMKV.defaultMMKV().encode(KEY_PENDING_PUSH_TENANT, tenantKey)
         consumePendingRoute()
     }
 
     fun consumePendingRoute() {
-        if (!::appContext.isInitialized || XingDunSessionManager.currentSession() == null) return
+        if (!::appContext.isInitialized) return
+        val session = XingDunSessionManager.currentSession() ?: return
         val raw = MMKV.defaultMMKV().decodeString(KEY_PENDING_PUSH_ROUTE, "").orEmpty()
         if (raw.isEmpty()) return
-        val json = runCatching { JsonParser.parseString(raw).asJsonObject }.getOrNull() ?: run {
-            MMKV.defaultMMKV().removeValueForKey(KEY_PENDING_PUSH_ROUTE)
+        val pendingTenant = MMKV.defaultMMKV().decodeString(KEY_PENDING_PUSH_TENANT, "").orEmpty()
+        if (pendingTenant != XingDunTenantBoundary.identity(session)?.key) {
+            clearPendingRoute()
             return
         }
-        MMKV.defaultMMKV().removeValueForKey(KEY_PENDING_PUSH_ROUTE)
+        val json = runCatching { JsonParser.parseString(raw).asJsonObject }.getOrNull() ?: run {
+            clearPendingRoute()
+            return
+        }
+        clearPendingRoute()
 
         val route = json.string("route")?.lowercase()
         val pushVersion = json.int("xd_push_version")
@@ -82,6 +93,11 @@ object XingDunRouter {
         })
     }
 
+    fun clearPendingRoute() {
+        MMKV.defaultMMKV().removeValueForKey(KEY_PENDING_PUSH_ROUTE)
+        MMKV.defaultMMKV().removeValueForKey(KEY_PENDING_PUSH_TENANT)
+    }
+
     private fun JsonObject.string(name: String): String? =
         get(name)?.takeUnless { it.isJsonNull }?.asString?.trim()?.takeIf(String::isNotEmpty)
 
@@ -89,6 +105,7 @@ object XingDunRouter {
         get(name)?.takeUnless { it.isJsonNull }?.asInt
 
     private const val KEY_PENDING_PUSH_ROUTE = "xingdun.pending.push.route"
+    private const val KEY_PENDING_PUSH_TENANT = "xingdun.pending.push.tenant"
     private const val PUSH_PAYLOAD_VERSION = 1
     private const val VOIP_PAYLOAD_VERSION = 1
     private const val MAX_PAYLOAD_BYTES = 1024

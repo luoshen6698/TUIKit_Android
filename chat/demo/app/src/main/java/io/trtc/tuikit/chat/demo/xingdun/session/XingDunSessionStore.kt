@@ -28,6 +28,18 @@ class XingDunSessionStore(context: Context) {
     fun load(): XingDunStoredSession? =
         loadEncrypted(KEY_SESSION_IV, KEY_SESSION_DATA, XingDunStoredSession::class.java)
 
+    fun loadBoundSession(): XingDunStoredSession? {
+        val session = load() ?: return null
+        if (!XingDunTenantBoundary.matches(session, loadEnterprise())) {
+            clearSession()
+            return null
+        }
+        return session
+    }
+
+    fun isBoundToCurrentEnterprise(session: XingDunStoredSession): Boolean =
+        XingDunTenantBoundary.matches(session, loadEnterprise())
+
     fun saveEnterprise(configuration: XingDunBootstrapConfiguration) {
         saveEncrypted(KEY_ENTERPRISE_IV, KEY_ENTERPRISE_DATA, configuration)
     }

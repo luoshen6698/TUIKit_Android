@@ -168,6 +168,9 @@ class XingDunApiClient(
     }
 
     private fun requestBuilder(url: String, session: XingDunStoredSession?): Request.Builder {
+        if (session != null && !sessionStore.isBoundToCurrentEnterprise(session)) {
+            throw IllegalStateException(appContext.getString(R.string.xingdun_error_company_mismatch))
+        }
         val builder = Request.Builder()
             .url(url)
             .header("Accept", "application/json")

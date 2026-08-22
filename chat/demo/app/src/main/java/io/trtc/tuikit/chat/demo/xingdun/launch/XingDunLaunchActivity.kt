@@ -16,6 +16,7 @@ import io.trtc.tuikit.chat.demo.login.BaseLoginActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBootstrapConfiguration
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import kotlinx.coroutines.launch
 
 class XingDunLaunchActivity : BaseLoginActivity() {
@@ -262,11 +263,13 @@ class XingDunLaunchActivity : BaseLoginActivity() {
     }
 
     private fun switchEnterprise() {
-        XingDunSessionManager.clearEnterpriseSelection()
-        startActivity(Intent(this, XingDunEnterpriseAccessActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        })
-        finish()
+        setLoading(true, getString(R.string.xingdun_switching_enterprise))
+        XingDunTenantSessionCoordinator.switchEnterprise {
+            startActivity(Intent(this, XingDunEnterpriseAccessActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            })
+            finish()
+        }
     }
 
     private fun applyInvitation(uri: Uri?) {

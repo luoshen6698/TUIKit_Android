@@ -17,6 +17,7 @@ import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageType
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantBoundary
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.ChatMessageListConfig
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.BubbleStyle
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.MessageContentRenderer
@@ -119,8 +120,10 @@ internal object XingDunRedpacketStatusLoader {
     private val cache = ConcurrentHashMap<String, Map<String, String>>()
 
     fun load(packetNo: String, completion: (Map<String, String>) -> Unit) {
-        cache[packetNo]?.let(completion) ?: scope.launch {
-            val session = XingDunSessionManager.currentSession() ?: return@launch
+        val session = XingDunSessionManager.currentSession() ?: return
+        val tenantKey = XingDunTenantBoundary.identity(session)?.key ?: return
+        val cacheKey = "$tenantKey:$packetNo"
+        cache[cacheKey]?.let(completion) ?: scope.launch {
             val values = runCatching {
                 val response = XingDunSessionManager.apiClient().get<JsonObject>(
                     session,
@@ -135,9 +138,16 @@ internal object XingDunRedpacketStatusLoader {
                     }
                 }
             }.getOrNull() ?: return@launch
-            if (values.isNotEmpty()) cache[packetNo] = values
-            mainHandler.post { completion(values) }
+            val stillCurrentTenant = XingDunTenantBoundary.identity(XingDunSessionManager.currentSession())?.key == tenantKey
+            if (values.isNotEmpty() && stillCurrentTenant) {
+                cache[cacheKey] = values
+            }
+            if (stillCurrentTenant) mainHandler.post { completion(values) }
         }
+    }
+
+    fun clearTenantCache() {
+        cache.clear()
     }
 }
 

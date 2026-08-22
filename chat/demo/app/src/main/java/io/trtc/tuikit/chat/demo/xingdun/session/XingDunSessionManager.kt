@@ -36,16 +36,34 @@ object XingDunSessionManager {
         client = XingDunApiClient(context.applicationContext, store)
     }
 
-    fun currentSession(): XingDunStoredSession? = if (::store.isInitialized) store.load() else null
+    fun currentSession(): XingDunStoredSession? = if (::store.isInitialized) store.loadBoundSession() else null
 
-    fun currentEnterprise(): XingDunBootstrapConfiguration? =
-        if (::store.isInitialized) store.loadEnterprise() else null
+    fun currentEnterprise(): XingDunBootstrapConfiguration? {
+        if (!::store.isInitialized) return null
+        val enterprise = store.loadEnterprise() ?: return null
+        val hasPushSnapshot = runCatching { enterprise.push }.getOrNull() != null
+        if (XingDunTenantBoundary.identity(enterprise) == null || !hasPushSnapshot) {
+            store.clearEnterprise()
+            store.clearSession()
+            return null
+        }
+        return enterprise
+    }
 
     fun deviceId(): String = store.deviceId()
 
     internal fun apiClient(): XingDunApiClient = client
 
     suspend fun resolveEnterprise(
+        companyCode: String?,
+        domain: String?
+    ): XingDunBootstrapConfiguration {
+        val bootstrap = discoverEnterprise(companyCode, domain)
+        selectEnterprise(bootstrap)
+        return bootstrap
+    }
+
+    suspend fun discoverEnterprise(
         companyCode: String?,
         domain: String?
     ): XingDunBootstrapConfiguration {
@@ -56,21 +74,31 @@ object XingDunSessionManager {
         }
         val bootstrap = client.resolveEnterprise(normalizedCode, normalizedDomain)
         validateBootstrap(bootstrap, normalizedCode)
-        storeEnterprise(bootstrap)
         return bootstrap
     }
 
-    suspend fun attemptSimpleEnterprise(): XingDunBootstrapConfiguration? {
-        val bootstrap = client.resolveEnterprise(null, null)
-        if (!bootstrap.mode.equals("simple", ignoreCase = true)) return null
-        validateBootstrap(bootstrap, null)
+    fun selectEnterprise(bootstrap: XingDunBootstrapConfiguration) {
+        validateBootstrap(bootstrap, bootstrap.companyCode)
         storeEnterprise(bootstrap)
+    }
+
+    suspend fun attemptSimpleEnterprise(): XingDunBootstrapConfiguration? {
+        val bootstrap = discoverEnterprise(null, null)
+        if (!bootstrap.mode.equals("simple", ignoreCase = true)) return null
+        selectEnterprise(bootstrap)
         return bootstrap
     }
 
     suspend fun refreshSelectedEnterprise(): XingDunBootstrapConfiguration? {
         val selected = store.loadEnterprise() ?: return null
-        return resolveEnterprise(selected.companyCode, null)
+        val refreshed = discoverEnterprise(selected.companyCode, null)
+        val selectedIdentity = XingDunTenantBoundary.identity(selected)
+        val refreshedIdentity = XingDunTenantBoundary.identity(refreshed)
+        require(selectedIdentity != null && refreshedIdentity != null && selectedIdentity.matches(refreshedIdentity)) {
+            message(R.string.xingdun_error_company_mismatch)
+        }
+        selectEnterprise(refreshed)
+        return refreshed
     }
 
     fun shouldRetainCachedEnterprise(error: Throwable): Boolean = when (error) {
@@ -95,6 +123,7 @@ object XingDunSessionManager {
         require(bootstrap.company?.code?.equals(bootstrap.companyCode, ignoreCase = true) == true) {
             message(R.string.xingdun_error_company_mismatch)
         }
+        require((bootstrap.company?.id ?: 0) > 0) { message(R.string.xingdun_error_company_mismatch) }
         if (requestedCode != null) {
             require(bootstrap.companyCode.equals(requestedCode, ignoreCase = true)) {
                 message(R.string.xingdun_error_company_mismatch)
@@ -117,6 +146,8 @@ object XingDunSessionManager {
             session.copy(
                 companyName = bootstrap.company?.name?.takeIf(String::isNotBlank) ?: session.companyName,
                 apiBaseUrl = resolveApiBaseUrl(bootstrap),
+                companyId = bootstrap.company?.id,
+                push = bootstrap.push,
                 features = bootstrap.features.copy(redpacket = false, groupCall = false),
                 privacy = bootstrap.privacy
             )
@@ -168,7 +199,7 @@ object XingDunSessionManager {
     }
 
     suspend fun restore(): XingDunStoredSession? = refreshMutex.withLock {
-        val existing = store.load() ?: return null
+        val existing = store.loadBoundSession() ?: return null
         val now = System.currentTimeMillis()
         if (existing.refreshExpiresAtMillis <= now) {
             store.clear()
@@ -192,9 +223,11 @@ object XingDunSessionManager {
     }
 
     suspend fun refreshIMCredential(): XingDunStoredSession = refreshMutex.withLock {
-        val existing = store.load() ?: throw XingDunApiException(401, 401, message(R.string.xingdun_session_expired))
+        val existing = store.loadBoundSession()
+            ?: throw XingDunApiException(401, 401, message(R.string.xingdun_session_expired))
         val credential = client.refreshIMCredential(existing)
         validateIMCredential(credential, existing.sdkAppId)
+        require(credential.userId == existing.timUserId) { message(R.string.xingdun_error_company_mismatch) }
         existing.copy(
             timUserId = credential.userId,
             userSig = credential.userSig,
@@ -228,8 +261,12 @@ object XingDunSessionManager {
         response: XingDunAuthResponse
     ): XingDunStoredSession {
         val companyCode = normalizedCompanyCode(bootstrap.companyCode)
-        val responseCompanyCode = response.company?.code ?: response.companyCode ?: companyCode
-        require(responseCompanyCode.equals(companyCode, ignoreCase = true)) { message(R.string.xingdun_error_company_mismatch) }
+        val tenantIdentity = requireNotNull(XingDunTenantBoundary.identity(bootstrap)) {
+            message(R.string.xingdun_error_company_mismatch)
+        }
+        require(XingDunTenantBoundary.responseMatches(response, tenantIdentity, bootstrap.company?.id)) {
+            message(R.string.xingdun_error_company_mismatch)
+        }
         val credential = requireNotNull(response.imCredential) { message(R.string.xingdun_error_im_credential_missing) }
         validateIMCredential(credential, bootstrap.sdkAppId)
         val now = System.currentTimeMillis()
@@ -244,6 +281,7 @@ object XingDunSessionManager {
             refreshToken = refreshToken,
             refreshExpiresAtMillis = now + refreshExpiresIn * 1000L,
             companyCode = companyCode,
+            companyId = bootstrap.company?.id,
             companyName = response.company?.name?.takeIf(String::isNotBlank)
                 ?: bootstrap.company?.name?.takeIf(String::isNotBlank)
                 ?: companyCode,
@@ -256,6 +294,7 @@ object XingDunSessionManager {
                 ?: response.nickname?.takeIf(String::isNotBlank)
                 ?: response.username?.takeIf(String::isNotBlank)
                 ?: credential.userId,
+            push = bootstrap.push,
             features = bootstrap.features.copy(redpacket = false, groupCall = false),
             privacy = bootstrap.privacy
         ).also {
@@ -265,8 +304,15 @@ object XingDunSessionManager {
     }
 
     private fun persist(existing: XingDunStoredSession, response: XingDunAuthResponse): XingDunStoredSession {
+        val tenantIdentity = requireNotNull(XingDunTenantBoundary.identity(existing)) {
+            message(R.string.xingdun_error_company_mismatch)
+        }
+        require(XingDunTenantBoundary.responseMatches(response, tenantIdentity, existing.companyId)) {
+            message(R.string.xingdun_error_company_mismatch)
+        }
         val credential = requireNotNull(response.imCredential) { message(R.string.xingdun_error_im_credential_missing) }
         validateIMCredential(credential, existing.sdkAppId)
+        require(credential.userId == existing.timUserId) { message(R.string.xingdun_error_company_mismatch) }
         val now = System.currentTimeMillis()
         return existing.copy(
             accessToken = response.accessToken.takeIf(String::isNotBlank)
@@ -287,6 +333,11 @@ object XingDunSessionManager {
         require(credential.sdkAppId == expectedSDKAppId) { message(R.string.xingdun_error_company_mismatch) }
         require(credential.userId.isNotBlank() && credential.userSig.isNotBlank()) { message(R.string.xingdun_error_im_credential_missing) }
         require(credentialExpiryMillis(credential) > System.currentTimeMillis()) { message(R.string.xingdun_error_im_credential_expired) }
+    }
+
+    fun matchesCurrentIMIdentity(sdkAppId: Int, userId: String): Boolean {
+        val session = currentSession() ?: return false
+        return session.sdkAppId == sdkAppId && session.timUserId == userId
     }
 
     private fun credentialExpiryMillis(credential: XingDunIMCredential): Long {

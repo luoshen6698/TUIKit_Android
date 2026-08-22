@@ -13,6 +13,7 @@ import android.widget.TextView
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.appcompat.app.AlertDialog
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -36,9 +37,10 @@ import io.trtc.tuikit.atomicxcore.api.login.UserProfile
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
+import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseAccessActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
-import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import io.trtc.tuikit.chat.uikit.pages.PageHeaderView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -338,6 +340,13 @@ class SettingsPageView @JvmOverloads constructor(
         settingsGroupVoice.visibility = View.VISIBLE
         findViewById<View>(R.id.demo_spacerVoice).visibility = View.VISIBLE
         val session = XingDunSessionManager.currentSession()
+        setupEntryItem(
+            itemVoiceMessage,
+            context.getString(R.string.xingdun_switch_enterprise),
+            session?.let { "${it.companyName} (${it.companyCode})" }.orEmpty()
+        ) {
+            confirmSwitchEnterprise()
+        }
         val entries = buildList {
             add(R.string.xingdun_reports to XingDunFeatureActivity.MODE_REPORTS)
             if (session?.features?.messageFavorite == true) {
@@ -362,12 +371,14 @@ class SettingsPageView @JvmOverloads constructor(
             add(R.string.xingdun_privacy_policy to XingDunFeatureActivity.MODE_PRIVACY_POLICY)
             add(R.string.xingdun_about to XingDunFeatureActivity.MODE_ABOUT)
         }
-        entries.forEachIndexed { index, (title, mode) ->
-            val entry = if (index == 0) itemVoiceMessage else {
-                LayoutInflater.from(context).inflate(R.layout.demo_item_settings_entry, settingsGroupVoice, false).also {
-                    settingsGroupVoice.addView(it)
-                    productFeatureItems.add(it)
-                }
+        entries.forEach { (title, mode) ->
+            val entry = LayoutInflater.from(context).inflate(
+                R.layout.demo_item_settings_entry,
+                settingsGroupVoice,
+                false
+            ).also {
+                settingsGroupVoice.addView(it)
+                productFeatureItems.add(it)
             }
             setupEntryItem(entry, context.getString(title), "") {
                 XingDunFeatureActivity.start(context, mode)
@@ -408,26 +419,34 @@ class SettingsPageView @JvmOverloads constructor(
 
     private fun setupLogout() {
         btnLogout.setOnClickListener {
-            XingDunPushManager.unregisterDevice {
-                LoginStore.shared.logout(object : CompletionHandler {
-                    override fun onSuccess() {
-                        completeLocalLogout()
-                    }
-
-                    override fun onFailure(code: Int, desc: String) {
-                        completeLocalLogout()
-                    }
-                })
-            }
+            XingDunTenantSessionCoordinator.logout(::openLogin)
         }
     }
 
-    private fun completeLocalLogout() {
-        XingDunSessionManager.clear()
-        MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, "")
+    private fun confirmSwitchEnterprise() {
+        AlertDialog.Builder(context)
+            .setTitle(R.string.xingdun_switch_enterprise)
+            .setMessage(R.string.xingdun_switch_enterprise_confirmation)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.xingdun_switch_enterprise) { _, _ ->
+                XingDunTenantSessionCoordinator.switchEnterprise(::openEnterpriseSelection)
+            }
+            .show()
+    }
+
+    private fun openLogin() {
         val activity = context
         if (activity is AppCompatActivity) {
             activity.startActivity(Intent(activity, XingDunLaunchActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            })
+        }
+    }
+
+    private fun openEnterpriseSelection() {
+        val activity = context
+        if (activity is AppCompatActivity) {
+            activity.startActivity(Intent(activity, XingDunEnterpriseAccessActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             })
         }

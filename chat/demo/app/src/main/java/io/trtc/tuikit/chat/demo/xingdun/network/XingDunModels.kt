@@ -15,6 +15,7 @@ data class XingDunBootstrapConfiguration(
     val sdkAppId: Int = 0,
     val apiBaseUrl: String? = null,
     val company: XingDunCompany? = null,
+    val push: XingDunPushConfiguration = XingDunPushConfiguration(),
     val features: XingDunFeatures = XingDunFeatures(),
     val privacy: XingDunPrivacy = XingDunPrivacy()
 )
@@ -25,7 +26,15 @@ data class XingDunCompany(
     val name: String = "",
     val logoUrl: String? = null,
     val domain: String? = null,
-    val apiBaseUrl: String? = null
+    val apiBaseUrl: String? = null,
+    val expireTime: String? = null
+)
+
+data class XingDunPushConfiguration(
+    val businessIdDev: String = "",
+    val businessIdProd: String = "",
+    val voipCertificateIdDev: String = "",
+    val voipCertificateIdProd: String = ""
 )
 
 data class XingDunFeatures(
@@ -128,12 +137,14 @@ data class XingDunRefreshRequest(
 )
 
 data class XingDunStoredSession(
+    val tenantSchemaVersion: Int = 2,
     val accessToken: String,
     val tokenType: String,
     val accessExpiresAtMillis: Long,
     val refreshToken: String,
     val refreshExpiresAtMillis: Long,
     val companyCode: String,
+    val companyId: Int? = null,
     val companyName: String,
     val apiBaseUrl: String,
     val sdkAppId: Int,
@@ -141,8 +152,9 @@ data class XingDunStoredSession(
     val userSig: String,
     val userSigExpiresAtMillis: Long,
     val nickname: String,
-    val features: XingDunFeatures,
-    val privacy: XingDunPrivacy
+    val push: XingDunPushConfiguration = XingDunPushConfiguration(),
+    val features: XingDunFeatures = XingDunFeatures(),
+    val privacy: XingDunPrivacy = XingDunPrivacy()
 )
 
 class XingDunApiException(

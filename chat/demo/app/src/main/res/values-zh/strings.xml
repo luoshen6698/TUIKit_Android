@@ -37,6 +37,8 @@
     <string name="xingdun_enterprise_expired">企业接入已失效，请重新验证。</string>
     <string name="xingdun_selected_enterprise">当前企业：%1$s（%2$s）</string>
     <string name="xingdun_switch_enterprise">切换企业</string>
+    <string name="xingdun_switching_enterprise">正在切换企业…</string>
+    <string name="xingdun_switch_enterprise_confirmation">切换前将清理当前企业的登录会话、腾讯 IM 连接和设备登记，然后重新选择企业。</string>
     <string name="xingdun_account">账号</string>
     <string name="xingdun_nickname">昵称</string>
     <string name="xingdun_password">密码</string>

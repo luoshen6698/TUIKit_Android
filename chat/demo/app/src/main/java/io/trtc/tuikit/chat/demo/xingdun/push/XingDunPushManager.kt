@@ -56,6 +56,14 @@ object XingDunPushManager {
                 session.userSig,
                 object : CompletionHandler {
                     override fun onSuccess() {
+                        if (!XingDunSessionManager.matchesCurrentIMIdentity(session.sdkAppId, session.timUserId) ||
+                            LoginStore.shared.sdkAppID != session.sdkAppId ||
+                            LoginStore.shared.loginState.loginUserInfo.value?.userID != session.timUserId
+                        ) {
+                            LoginStore.shared.logout(null)
+                            XingDunRouter.clearPendingRoute()
+                            return
+                        }
                         syncDeviceRegistration()
                         XingDunRouter.consumePendingRoute()
                     }

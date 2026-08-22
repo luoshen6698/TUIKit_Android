@@ -121,6 +121,10 @@ internal object XingDunForegroundNotificationManager {
         if (activeConversationID == conversationID) activeConversationID = null
     }
 
+    fun resetTenantState() {
+        activeConversationID = null
+    }
+
     fun soundEnabled(context: Context): Boolean = preferences(context).getBoolean(KEY_SOUND, true)
 
     fun vibrationEnabled(context: Context): Boolean = preferences(context).getBoolean(KEY_VIBRATION, true)

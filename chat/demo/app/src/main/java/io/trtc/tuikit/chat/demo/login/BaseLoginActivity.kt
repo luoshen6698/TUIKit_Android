@@ -29,6 +29,7 @@ import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.ActionItem
 import io.trtc.tuikit.chat.uikit.components.widgets.ActionSheet
 import kotlinx.coroutines.CoroutineScope
@@ -101,10 +102,21 @@ abstract class BaseLoginActivity : BaseActivity() {
         onSuccess: (() -> Unit)? = null,
         onFailure: ((Int, String) -> Unit)? = null
     ) {
+        if (!XingDunSessionManager.matchesCurrentIMIdentity(sdkAppId, userId)) {
+            onFailure?.invoke(-1, getString(R.string.xingdun_error_company_mismatch))
+            return
+        }
         LoginStore.shared.login(
             this, sdkAppId, userId, userSig,
             object : CompletionHandler {
                 override fun onSuccess() {
+                    if (LoginStore.shared.sdkAppID != sdkAppId ||
+                        LoginStore.shared.loginState.loginUserInfo.value?.userID != userId
+                    ) {
+                        LoginStore.shared.logout(null)
+                        onFailure?.invoke(-1, getString(R.string.xingdun_error_company_mismatch))
+                        return
+                    }
                     initCall(sdkAppId, userId, userSig)
                     XingDunPushManager.syncDeviceRegistration()
                     MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, userId)

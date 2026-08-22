@@ -37,6 +37,8 @@
     <string name="xingdun_enterprise_expired">Enterprise access has expired. Verify it again.</string>
     <string name="xingdun_selected_enterprise">Enterprise: %1$s (%2$s)</string>
     <string name="xingdun_switch_enterprise">Switch enterprise</string>
+    <string name="xingdun_switching_enterprise">Switching enterprise…</string>
+    <string name="xingdun_switch_enterprise_confirmation">The current enterprise session, IM connection and device registration will be cleared before selecting another enterprise.</string>
     <string name="xingdun_account">Account</string>
     <string name="xingdun_nickname">Display name</string>
     <string name="xingdun_password">Password</string>
