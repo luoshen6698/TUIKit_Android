@@ -11,7 +11,11 @@ import io.trtc.tuikit.chat.demo.xingdun.network.XingDunAuthResponse
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBootstrapConfiguration
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunIMCredential
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunLoginRequest
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPhoneRegisterRequest
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunRegisterRequest
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunResetCodeResponse
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunResetPasswordRequest
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunSendResetCodeRequest
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunVersionCheckResult
 import kotlinx.coroutines.sync.Mutex
@@ -196,6 +200,81 @@ object XingDunSessionManager {
             XingDunLoginRequest(username.trim(), password, normalizedCompanyCode(companyCode))
         )
         return persist(bootstrap, response)
+    }
+
+    suspend fun registerByPhone(
+        companyCode: String,
+        phone: String,
+        code: String,
+        password: String,
+        confirmPassword: String,
+        nickname: String,
+        inviteCode: String?
+    ): XingDunStoredSession {
+        val bootstrap = bootstrap(companyCode)
+        val registration = client.registerByPhone(
+            resolveApiBaseUrl(bootstrap),
+            XingDunPhoneRegisterRequest(
+                phone = phone.trim(),
+                code = code.trim(),
+                password = password,
+                confirmPassword = confirmPassword,
+                nickname = nickname.trim().takeIf(String::isNotEmpty),
+                inviteCode = inviteCode?.trim()?.takeIf(String::isNotEmpty),
+                companyCode = normalizedCompanyCode(companyCode),
+                adultDeclaration = true,
+                consent = true,
+                userAgreementVersion = PRIVACY_VERSION,
+                privacyPolicyVersion = PRIVACY_VERSION,
+                consentEvidenceId = "android:${store.deviceId()}:${UUID.randomUUID()}".take(64)
+            )
+        )
+        val generatedUsername = registration.username?.trim()?.takeIf(String::isNotEmpty)
+            ?: registration.user?.username?.trim()?.takeIf(String::isNotEmpty)
+            ?: throw IllegalArgumentException(message(R.string.xingdun_error_credential_missing))
+        val response = client.login(
+            resolveApiBaseUrl(bootstrap),
+            XingDunLoginRequest(generatedUsername, password, normalizedCompanyCode(companyCode))
+        )
+        return persist(bootstrap, response)
+    }
+
+    suspend fun sendResetCode(
+        companyCode: String,
+        verifyType: String,
+        target: String
+    ): XingDunResetCodeResponse {
+        val bootstrap = bootstrap(companyCode)
+        return client.sendResetCode(
+            resolveApiBaseUrl(bootstrap),
+            XingDunSendResetCodeRequest(
+                verifyType = verifyType,
+                target = target.trim(),
+                companyCode = normalizedCompanyCode(companyCode)
+            )
+        )
+    }
+
+    suspend fun resetPassword(
+        companyCode: String,
+        verifyType: String,
+        target: String,
+        code: String,
+        newPassword: String,
+        confirmPassword: String
+    ) {
+        val bootstrap = bootstrap(companyCode)
+        client.resetPassword(
+            resolveApiBaseUrl(bootstrap),
+            XingDunResetPasswordRequest(
+                verifyType = verifyType,
+                target = target.trim(),
+                code = code.trim(),
+                newPassword = newPassword,
+                confirmPassword = confirmPassword,
+                companyCode = normalizedCompanyCode(companyCode)
+            )
+        )
     }
 
     suspend fun restore(): XingDunStoredSession? = refreshMutex.withLock {

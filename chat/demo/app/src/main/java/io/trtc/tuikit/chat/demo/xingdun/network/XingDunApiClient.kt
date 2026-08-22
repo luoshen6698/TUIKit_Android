@@ -68,6 +68,34 @@ class XingDunApiClient(
         requestBody: XingDunRegisterRequest
     ): XingDunAuthResponse = post(baseUrl, "auth/register", requestBody, null, XingDunAuthResponse::class.java)
 
+    suspend fun registerByPhone(
+        baseUrl: String,
+        requestBody: XingDunPhoneRegisterRequest
+    ): XingDunAuthResponse = post(
+        baseUrl,
+        "auth/registerByPhone",
+        requestBody,
+        null,
+        XingDunAuthResponse::class.java
+    )
+
+    suspend fun sendResetCode(
+        baseUrl: String,
+        requestBody: XingDunSendResetCodeRequest
+    ): XingDunResetCodeResponse = post(
+        baseUrl,
+        "auth/sendResetCode",
+        requestBody,
+        null,
+        XingDunResetCodeResponse::class.java
+    )
+
+    suspend fun resetPassword(baseUrl: String, requestBody: XingDunResetPasswordRequest) {
+        val body = gson.toJson(requestBody).toRequestBody(JSON_MEDIA_TYPE)
+        val request = requestBuilder(endpointUrl(baseUrl, "auth/resetPassword"), null).post(body).build()
+        executeAllowEmpty(request)
+    }
+
     suspend fun refresh(
         session: XingDunStoredSession
     ): XingDunAuthResponse = post(

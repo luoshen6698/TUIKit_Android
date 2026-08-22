@@ -49,6 +49,18 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunRegistrationActivity"
+            android:exported="false"
+            android:theme="@style/Chat_UIKit_Theme"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunPasswordResetActivity"
+            android:exported="false"
+            android:theme="@style/Chat_UIKit_Theme"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name="io.trtc.tuikit.chat.demo.main.MainActivity"
             android:exported="true"
             android:theme="@style/Chat_UIKit_Theme"

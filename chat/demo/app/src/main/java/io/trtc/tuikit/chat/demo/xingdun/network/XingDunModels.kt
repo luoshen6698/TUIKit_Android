@@ -138,6 +138,42 @@ data class XingDunRegisterRequest(
     val consentEvidenceId: String
 )
 
+data class XingDunPhoneRegisterRequest(
+    val phone: String,
+    val code: String,
+    val password: String,
+    val confirmPassword: String,
+    val nickname: String?,
+    val inviteCode: String?,
+    val companyCode: String,
+    val adultDeclaration: Boolean,
+    val consent: Boolean,
+    val userAgreementVersion: String,
+    val privacyPolicyVersion: String,
+    val consentSource: String = "android_registration",
+    val consentEvidenceId: String
+)
+
+data class XingDunSendResetCodeRequest(
+    val verifyType: String,
+    val target: String,
+    val companyCode: String
+)
+
+data class XingDunResetCodeResponse(
+    val verifyType: String? = null,
+    val expiresIn: Long? = null
+)
+
+data class XingDunResetPasswordRequest(
+    val verifyType: String,
+    val target: String,
+    val code: String,
+    val newPassword: String,
+    val confirmPassword: String,
+    val companyCode: String
+)
+
 data class XingDunRefreshRequest(
     val refreshToken: String,
     val companyCode: String

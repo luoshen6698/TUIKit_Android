@@ -145,23 +145,6 @@
                     android:textColorHint="#A6B4B1"
                     android:textSize="15sp" />
 
-                <EditText
-                    android:id="@+id/xingdun_nickname"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:layout_marginTop="14dp"
-                    android:background="@drawable/xingdun_bg_enterprise_input"
-                    android:hint="@string/xingdun_nickname"
-                    android:imeOptions="actionNext"
-                    android:inputType="textPersonName"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="14dp"
-                    android:singleLine="true"
-                    android:textColor="#123F3A"
-                    android:textColorHint="#A6B4B1"
-                    android:textSize="15sp"
-                    android:visibility="gone" />
-
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -190,53 +173,6 @@
                     android:textColor="#123F3A"
                     android:textColorHint="#A6B4B1"
                     android:textSize="15sp" />
-
-                <EditText
-                    android:id="@+id/xingdun_confirm_password"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:layout_marginTop="14dp"
-                    android:autofillHints="password"
-                    android:background="@drawable/xingdun_bg_enterprise_input"
-                    android:hint="@string/xingdun_confirm_password"
-                    android:imeOptions="actionNext"
-                    android:inputType="textPassword"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="14dp"
-                    android:singleLine="true"
-                    android:textColor="#123F3A"
-                    android:textColorHint="#A6B4B1"
-                    android:textSize="15sp"
-                    android:visibility="gone" />
-
-                <EditText
-                    android:id="@+id/xingdun_invite_code"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:layout_marginTop="14dp"
-                    android:background="@drawable/xingdun_bg_enterprise_input"
-                    android:hint="@string/xingdun_invite_code"
-                    android:imeOptions="actionDone"
-                    android:inputType="textNoSuggestions"
-                    android:maxLength="20"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="14dp"
-                    android:singleLine="true"
-                    android:textColor="#123F3A"
-                    android:textColorHint="#A6B4B1"
-                    android:textSize="15sp"
-                    android:visibility="gone" />
-
-                <CheckBox
-                    android:id="@+id/xingdun_adult_declaration"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:buttonTint="#1EAA91"
-                    android:text="@string/xingdun_adult_declaration"
-                    android:textColor="#536A66"
-                    android:textSize="12sp"
-                    android:visibility="gone" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
