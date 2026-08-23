@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.tencent.qcloud.tuicore.TUILogin
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicxcore.api.login.LoginStatus
@@ -47,10 +48,11 @@ abstract class BaseActivity : AppCompatActivity() {
         }
         val session = XingDunSessionManager.currentSession()
         val loginStatus = LoginStore.shared.loginState.loginStatus.value
-        val loginUserID = LoginStore.shared.loginState.loginUserInfo.value?.userID
+        val loginUserID = TUILogin.getLoginUser().orEmpty().takeIf(String::isNotBlank)
+            ?: LoginStore.shared.loginState.loginUserInfo.value?.userID
         val sdkMatches = session != null && LoginStore.shared.sdkAppID == session.sdkAppId
         val userMatches = session != null && loginUserID == session.timUserId
-        if (loginStatus != LoginStatus.UNLOGIN && sdkMatches && userMatches) {
+        if (!loginUserID.isNullOrBlank() && sdkMatches && userMatches) {
             return false
         }
         val openLogin = {
@@ -59,7 +61,7 @@ abstract class BaseActivity : AppCompatActivity() {
             })
             finish()
         }
-        if (loginStatus == LoginStatus.UNLOGIN) {
+        if (loginStatus == LoginStatus.UNLOGIN && loginUserID.isNullOrBlank()) {
             openLogin()
         } else {
             XingDunTenantSessionCoordinator.logout(openLogin)

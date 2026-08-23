@@ -14,7 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
-import io.trtc.tuikit.atomicxcore.api.login.LoginStatus
+import com.tencent.qcloud.tuicore.TUILogin
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBootstrapConfiguration
@@ -201,7 +201,7 @@ class XingDunEnterpriseAccessActivity : AppCompatActivity() {
         val currentIdentity = XingDunTenantBoundary.identity(XingDunSessionManager.currentSession())
         val selectedIdentity = XingDunTenantBoundary.identity(XingDunSessionManager.currentEnterprise())
         val nextIdentity = requireNotNull(XingDunTenantBoundary.identity(bootstrap))
-        val imLoggedIn = LoginStore.shared.loginState.loginStatus.value != LoginStatus.UNLOGIN
+        val imLoggedIn = TUILogin.getLoginUser().orEmpty().isNotBlank()
         val activeIMMismatch = imLoggedIn && LoginStore.shared.sdkAppID != nextIdentity.sdkAppId
         val storedSessionMismatch = currentIdentity != null && !currentIdentity.matches(nextIdentity)
         val selectedEnterpriseMismatch = selectedIdentity != null && !selectedIdentity.matches(nextIdentity)

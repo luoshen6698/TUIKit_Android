@@ -8,6 +8,7 @@ import com.tencent.qcloud.tim.push.TIMPushListener
 import com.tencent.qcloud.tim.push.TIMPushManager
 import com.tencent.qcloud.tuicore.TUIConstants
 import com.tencent.qcloud.tuicore.TUICore
+import com.tencent.qcloud.tuicore.TUILogin
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
@@ -58,7 +59,7 @@ object XingDunPushManager {
                     override fun onSuccess() {
                         if (!XingDunSessionManager.matchesCurrentIMIdentity(session.sdkAppId, session.timUserId) ||
                             LoginStore.shared.sdkAppID != session.sdkAppId ||
-                            LoginStore.shared.loginState.loginUserInfo.value?.userID != session.timUserId
+                            TUILogin.getLoginUser() != session.timUserId
                         ) {
                             LoginStore.shared.logout(null)
                             XingDunRouter.clearPendingRoute()

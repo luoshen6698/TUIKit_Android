@@ -19,6 +19,7 @@ import com.tencent.qcloud.tuikit.tuicallkit.TUICallKit
 import com.tencent.qcloud.tuikit.tuicallkit.manager.feature.CallingBellFeature
 import com.tencent.qcloud.tuikit.tuicallkit.manager.feature.CallingVibratorFeature
 import com.tencent.qcloud.tuikit.tuicallkit.manager.feature.NotificationFeature
+import com.tencent.qcloud.tuicore.TUILogin
 import io.trtc.tuikit.atomicx.theme.Theme
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
@@ -111,7 +112,7 @@ abstract class BaseLoginActivity : BaseActivity() {
             object : CompletionHandler {
                 override fun onSuccess() {
                     if (LoginStore.shared.sdkAppID != sdkAppId ||
-                        LoginStore.shared.loginState.loginUserInfo.value?.userID != userId
+                        TUILogin.getLoginUser() != userId
                     ) {
                         LoginStore.shared.logout(null)
                         onFailure?.invoke(-1, getString(R.string.xingdun_error_company_mismatch))
