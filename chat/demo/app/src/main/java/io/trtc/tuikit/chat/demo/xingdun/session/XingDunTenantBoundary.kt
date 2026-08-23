@@ -42,7 +42,7 @@ internal object XingDunTenantBoundary {
     fun matches(session: XingDunStoredSession?, configuration: XingDunBootstrapConfiguration?): Boolean {
         val sessionIdentity = identity(session) ?: return false
         val enterpriseIdentity = identity(configuration) ?: return false
-        return sessionIdentity.matches(enterpriseIdentity) && session?.push == configuration?.push
+        return sessionIdentity.matches(enterpriseIdentity)
     }
 
     fun responseMatches(

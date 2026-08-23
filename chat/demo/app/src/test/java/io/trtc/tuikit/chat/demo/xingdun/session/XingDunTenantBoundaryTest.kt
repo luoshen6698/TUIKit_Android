@@ -13,12 +13,12 @@ import org.junit.Test
 class XingDunTenantBoundaryTest {
 
     @Test
-    fun `session is bound to company id code sdk app id and push configuration`() {
+    fun `session is bound to company id code and sdk app id`() {
         assertTrue(XingDunTenantBoundary.matches(session("company_a", 1001), enterprise("company_a", 1001)))
         assertFalse(XingDunTenantBoundary.matches(session("company_a", 1001, companyId = 2), enterprise("company_a", 1001)))
         assertFalse(XingDunTenantBoundary.matches(session("company_a", 1001), enterprise("company_b", 1001)))
         assertFalse(XingDunTenantBoundary.matches(session("company_a", 1001), enterprise("company_a", 2002)))
-        assertFalse(
+        assertTrue(
             XingDunTenantBoundary.matches(
                 session("company_a", 1001).copy(push = XingDunPushConfiguration(businessIdProd = "other")),
                 enterprise("company_a", 1001)

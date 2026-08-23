@@ -141,9 +141,9 @@ object XingDunSessionManager {
     private fun storeEnterprise(bootstrap: XingDunBootstrapConfiguration) {
         store.saveEnterprise(bootstrap)
         val session = store.load() ?: return
-        if (!session.companyCode.equals(bootstrap.companyCode, ignoreCase = true) ||
-            session.sdkAppId != bootstrap.sdkAppId
-        ) {
+        val sessionIdentity = XingDunTenantBoundary.identity(session)
+        val enterpriseIdentity = XingDunTenantBoundary.identity(bootstrap)
+        if (sessionIdentity == null || enterpriseIdentity == null || !sessionIdentity.matches(enterpriseIdentity)) {
             store.clearSession()
             return
         }
