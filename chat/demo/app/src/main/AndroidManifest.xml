@@ -88,6 +88,11 @@
             android:theme="@style/Chat_UIKit_Theme" />
 
         <activity
+            android:name="io.trtc.tuikit.chat.demo.settings.XingDunSystemSettingsActivity"
+            android:exported="false"
+            android:theme="@style/Chat_UIKit_Theme" />
+
+        <activity
             android:name="io.trtc.tuikit.chat.demo.settings.VoiceMessageSettingActivity"
             android:exported="false"
             android:theme="@style/Chat_UIKit_Theme" />

@@ -547,6 +547,11 @@
     <string name="xingdun_metric_friends">%1$d\nFriends</string>
     <string name="xingdun_metric_groups">%1$d\nGroups</string>
     <string name="xingdun_metric_favorites">%1$d\nFavorites</string>
+    <string name="xingdun_login_username_format">Login username: %1$s</string>
+    <string name="xingdun_share_poster">Share poster</string>
+    <string name="xingdun_help_center_title">Help Center</string>
+    <string name="xingdun_system_settings">System Settings</string>
+    <string name="xingdun_about_platform">About XingDun IM Platform</string>
     <string name="xingdun_message_favorites">Message favorites</string>
     <string name="xingdun_redpacket_account">Red packets &amp; balance</string>
     <string name="xingdun_help_center">Help &amp; feedback</string>

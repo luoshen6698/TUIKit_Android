@@ -368,6 +368,10 @@ object XingDunSessionManager {
             timUserId = credential.userId,
             userSig = credential.userSig,
             userSigExpiresAtMillis = credentialExpiryMillis(credential),
+            username = response.user?.username?.takeIf(String::isNotBlank)
+                ?: response.username?.takeIf(String::isNotBlank)
+                ?: response.user?.nickname?.takeIf(String::isNotBlank)
+                ?: credential.userId,
             nickname = response.user?.nickname?.takeIf(String::isNotBlank)
                 ?: response.nickname?.takeIf(String::isNotBlank)
                 ?: response.username?.takeIf(String::isNotBlank)

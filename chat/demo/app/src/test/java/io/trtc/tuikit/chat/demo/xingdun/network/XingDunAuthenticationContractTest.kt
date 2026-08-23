@@ -4,6 +4,7 @@ import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -74,5 +75,31 @@ class XingDunAuthenticationContractTest {
     fun deletionStatusUsesPublicReceiptContract() {
         val json = gson.toJson(mapOf("deletion_receipt" to "signed-receipt"))
         assertEquals(setOf("deletion_receipt"), gson.fromJson(json, Map::class.java).keys)
+    }
+
+    @Test
+    fun legacyStoredSessionWithoutUsernameRemainsCopySafe() {
+        val legacy = gson.fromJson(
+            """{
+                "access_token":"access",
+                "token_type":"Bearer",
+                "access_expires_at_millis":1,
+                "company_code":"xc2026",
+                "company_name":"XingDunIM",
+                "api_base_url":"https://example.com/prod/im/v1",
+                "sdk_app_id":1001,
+                "tim_user_id":"xd_xc2026_1",
+                "user_sig":"sig",
+                "user_sig_expires_at_millis":2,
+                "nickname":"User",
+                "push":{},
+                "features":{},
+                "privacy":{}
+            }""".trimIndent(),
+            XingDunStoredSession::class.java
+        )
+
+        assertNull(legacy.username)
+        assertEquals("Updated", legacy.copy(nickname = "Updated").nickname)
     }
 }

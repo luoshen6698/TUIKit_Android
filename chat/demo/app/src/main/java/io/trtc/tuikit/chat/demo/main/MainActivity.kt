@@ -2,7 +2,6 @@ package io.trtc.tuikit.chat.demo.main
 
 import io.trtc.tuikit.chat.demo.common.BadgeDragPolicy
 import io.trtc.tuikit.chat.demo.common.BaseActivity
-import io.trtc.tuikit.chat.demo.settings.SettingsPageView
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -13,6 +12,7 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
@@ -47,6 +47,7 @@ import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.search.SearchActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspacePageView
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMinePageView
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
 import io.trtc.tuikit.chat.uikit.components.widgets.AvatarBadgeView
 import io.trtc.tuikit.chat.uikit.pages.ContactsPageView
@@ -142,18 +143,18 @@ class MainActivity : BaseActivity() {
                 iconCutoutResId = R.drawable.demo_ic_tab_messages_lines
             ),
             BottomTab(
-                tabId = R.id.demo_tab_calls,
-                root = findViewById(R.id.demo_tab_calls),
-                icon = findViewById(R.id.demo_tab_calls_icon),
-                text = findViewById(R.id.demo_tab_calls_text),
-                iconResId = R.drawable.demo_ic_tab_calls
-            ),
-            BottomTab(
                 tabId = R.id.demo_tab_contacts,
                 root = findViewById(R.id.demo_tab_contacts),
                 icon = findViewById(R.id.demo_tab_contacts_icon),
                 text = findViewById(R.id.demo_tab_contacts_text),
                 iconResId = R.drawable.demo_ic_tab_contacts
+            ),
+            BottomTab(
+                tabId = R.id.demo_tab_calls,
+                root = findViewById(R.id.demo_tab_calls),
+                icon = findViewById(R.id.demo_tab_calls_icon),
+                text = findViewById(R.id.demo_tab_calls_text),
+                iconResId = R.drawable.demo_ic_tab_calls
             ),
             BottomTab(
                 tabId = R.id.demo_tab_me,
@@ -164,6 +165,10 @@ class MainActivity : BaseActivity() {
             )
         )
         bottomTabs = allBottomTabs
+        allBottomTabs.forEach { tab ->
+            bottomNav.removeView(tab.root)
+            bottomNav.addView(tab.root)
+        }
 
         ViewCompat.setOnApplyWindowInsetsListener(mainContainer) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -236,7 +241,8 @@ class MainActivity : BaseActivity() {
 
     private fun applyColors(colors: ColorTokens) {
         updateStatusBarAreaColor(colors)
-        bottomNav.setBackgroundColor(colors.bgColorBottomBar)
+        bottomNavContainer.setBackgroundColor(colors.bgColorTopBar)
+        bottomNav.background = roundedBackground(colors.bgColorBottomBar, 32f)
 
         conversationsAddButton?.setColorFilter(colors.textColorPrimary)
         contactsAddButton?.setColorFilter(colors.textColorPrimary)
@@ -324,6 +330,11 @@ class MainActivity : BaseActivity() {
         }
         bottomTabs.forEachIndexed { index, tab ->
             val selected = index == selectedTabIndex
+            tab.root.background = if (selected) {
+                roundedBackground(colors.bgColorInput, 28f)
+            } else {
+                null
+            }
             tab.icon.setImageDrawable(renderTabIcon(tab, colors, selected))
             tab.text.setTextColor(
                 if (selected) {
@@ -364,7 +375,7 @@ class MainActivity : BaseActivity() {
             ContextCompat.getDrawable(this, tab.iconCutoutResId)?.let { cutout ->
                 val tinted = DrawableCompat.wrap(cutout)
                 tinted.setBounds(0, 0, sizePx, sizePx)
-                DrawableCompat.setTint(tinted, colors.bgColorBottomBar)
+                DrawableCompat.setTint(tinted, if (selected) colors.bgColorInput else colors.bgColorBottomBar)
                 DrawableCompat.setTintMode(tinted, PorterDuff.Mode.SRC_IN)
                 tinted.draw(canvas)
             }
@@ -817,9 +828,13 @@ class MainActivity : BaseActivity() {
     }
 
     private fun createMePage(): View {
-        val page = SettingsPageView(this)
-        page.setHeaderTitle(getString(R.string.demo_page_me_title))
-        return page
+        return XingDunMinePageView(this)
+    }
+
+    private fun roundedBackground(color: Int, radiusDp: Float) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(color)
+        cornerRadius = radiusDp * resources.displayMetrics.density
     }
 
     private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()

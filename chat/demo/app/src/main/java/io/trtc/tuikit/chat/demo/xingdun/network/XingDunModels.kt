@@ -202,6 +202,7 @@ data class XingDunStoredSession(
     val timUserId: String,
     val userSig: String,
     val userSigExpiresAtMillis: Long,
+    val username: String? = null,
     val nickname: String,
     val push: XingDunPushConfiguration = XingDunPushConfiguration(),
     val features: XingDunFeatures = XingDunFeatures(),

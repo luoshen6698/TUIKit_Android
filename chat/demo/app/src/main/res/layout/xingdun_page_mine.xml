@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layoutDirection="locale"
+    android:orientation="vertical">
+
+    <io.trtc.tuikit.chat.uikit.pages.PageHeaderView
+        android:id="@+id/xingdun_mine_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <ScrollView
+        android:id="@+id/xingdun_mine_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:overScrollMode="ifContentScrolls"
+        android:paddingBottom="18dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/xingdun_mine_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="24dp">
+
+            <LinearLayout
+                android:id="@+id/xingdun_mine_profile_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:minHeight="104dp"
+                android:orientation="horizontal"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="18dp">
+
+                <FrameLayout
+                    android:id="@+id/xingdun_mine_avatar_ring"
+                    android:layout_width="70dp"
+                    android:layout_height="70dp"
+                    android:padding="4dp">
+
+                    <io.trtc.tuikit.chat.uikit.components.widgets.Avatar
+                        android:id="@+id/xingdun_mine_avatar"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/xingdun_mine_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textSize="21sp"
+                        android:textStyle="bold"
+                        tools:text="x001" />
+
+                    <TextView
+                        android:id="@+id/xingdun_mine_account"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textSize="14sp"
+                        tools:text="登录用户名：x001" />
+                </LinearLayout>
+
+                <ImageView
+                    android:id="@+id/xingdun_mine_profile_arrow"
+                    android:layout_width="8dp"
+                    android:layout_height="14dp"
+                    android:layout_marginStart="12dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/demo_ic_arrow_right" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/xingdun_mine_stats_card"
+                android:layout_width="match_parent"
+                android:layout_height="96dp"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingVertical="16dp">
+
+                <TextView
+                    android:id="@+id/xingdun_mine_friends"
+                    style="@style/XingDunMineStat"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1" />
+
+                <View
+                    android:id="@+id/xingdun_mine_stats_divider_1"
+                    android:layout_width="1dp"
+                    android:layout_height="56dp" />
+
+                <TextView
+                    android:id="@+id/xingdun_mine_groups"
+                    style="@style/XingDunMineStat"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1" />
+
+                <View
+                    android:id="@+id/xingdun_mine_stats_divider_2"
+                    android:layout_width="1dp"
+                    android:layout_height="56dp" />
+
+                <TextView
+                    android:id="@+id/xingdun_mine_favorites"
+                    style="@style/XingDunMineStat"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/xingdun_mine_quick_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical" />
+
+            <LinearLayout
+                android:id="@+id/xingdun_mine_help_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical" />
+
+            <LinearLayout
+                android:id="@+id/xingdun_mine_settings_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

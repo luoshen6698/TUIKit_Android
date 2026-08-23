@@ -8,6 +8,7 @@ import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
@@ -88,7 +89,8 @@ class SettingsPageView @JvmOverloads constructor(
     private val scrollContent: LinearLayout
     private val allDividers = mutableListOf<View>()
     private val allSpacers = mutableListOf<View>()
-    private val productFeatureItems = mutableListOf<View>()
+    private val productFeatureItems = mutableListOf<Pair<View, String>>()
+    private var backButton: ImageView? = null
 
     private var enableReadReceipt: Boolean = AppBuilderConfig.enableReadReceipt
     private var translateTargetLanguage: String = AppBuilderConfig.translateTargetLanguage
@@ -248,7 +250,7 @@ class SettingsPageView @JvmOverloads constructor(
             itemAddRule,
             itemTranslateLanguage,
             itemVoiceMessage,
-        ) + productFeatureItems
+        ) + productFeatureItems.map { it.first }
         for (item in entryItems) {
             item.findViewById<TextView>(R.id.demo_tvSettingsTitle)?.setTextColor(colors.textColorSecondary)
             item.findViewById<TextView>(R.id.demo_tvSettingsValue)?.setTextColor(colors.textColorPrimary)
@@ -259,6 +261,7 @@ class SettingsPageView @JvmOverloads constructor(
         tvReadReceiptTitle.setTextColor(colors.textColorSecondary)
         tvReadReceiptDesc.setTextColor(colors.textColorTertiary)
         tvCallsTabTitle.setTextColor(colors.textColorSecondary)
+        backButton?.setColorFilter(colors.textColorPrimary)
 
         btnLogout.setTextColor(colors.textColorError)
         val logoutBg = GradientDrawable().apply {
@@ -270,6 +273,36 @@ class SettingsPageView @JvmOverloads constructor(
 
     fun setHeaderTitle(title: String) {
         pageHeader.setTitle(title)
+    }
+
+    /** Reuses the existing settings controls as the iOS-style My tab's child screen. */
+    fun showAsSystemSettings(onBack: () -> Unit) {
+        setHeaderTitle(context.getString(R.string.xingdun_system_settings))
+        backButton = ImageView(context).apply {
+            setImageResource(R.drawable.demo_ic_back)
+            contentDescription = context.getString(R.string.xingdun_back)
+            setPadding(10.dp(), 10.dp(), 10.dp(), 10.dp())
+            setOnClickListener { onBack() }
+            layoutParams = FrameLayout.LayoutParams(44.dp(), 44.dp())
+        }.also { button ->
+            pageHeader.setLeftAction(button)
+        }
+
+        findViewById<View>(R.id.demo_userProfileSection).visibility = View.GONE
+        findViewById<View>(R.id.demo_spacer1).visibility = View.GONE
+        profileMetrics.visibility = View.GONE
+        findViewById<View>(R.id.xingdun_metricsSpacer).visibility = View.GONE
+
+        val systemModes = setOf(
+            XingDunFeatureActivity.MODE_ACCOUNT_SECURITY,
+            XingDunFeatureActivity.MODE_NOTIFICATIONS,
+            XingDunFeatureActivity.MODE_STORAGE,
+            XingDunFeatureActivity.MODE_PERMISSIONS,
+        )
+        productFeatureItems.forEach { (view, mode) ->
+            view.visibility = if (mode in systemModes) View.VISIBLE else View.GONE
+        }
+        backButton?.setColorFilter(themeStore.themeState.value.currentTheme.tokens.color.textColorPrimary)
     }
 
     private fun setupSettingsItems() {
@@ -378,7 +411,7 @@ class SettingsPageView @JvmOverloads constructor(
                 false
             ).also {
                 settingsGroupVoice.addView(it)
-                productFeatureItems.add(it)
+                productFeatureItems.add(it to mode)
             }
             setupEntryItem(entry, context.getString(title), "") {
                 XingDunFeatureActivity.start(context, mode)
@@ -402,6 +435,8 @@ class SettingsPageView @JvmOverloads constructor(
             updateReadReceiptDescription()
         }
     }
+
+    private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
 
     private fun updateReadReceiptDescription() {
         tvReadReceiptDesc.text = if (enableReadReceipt) {
