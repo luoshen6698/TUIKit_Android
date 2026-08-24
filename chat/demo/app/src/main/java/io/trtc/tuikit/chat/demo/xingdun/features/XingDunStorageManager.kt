@@ -11,6 +11,8 @@ internal enum class XingDunCacheCategory {
     AUDIO,
     VIDEO,
     FILE,
+    THUMBNAIL,
+    TEMPORARY,
 }
 
 internal data class XingDunCacheUsage(val bytes: Map<XingDunCacheCategory, Long>) {
@@ -42,13 +44,18 @@ internal object XingDunStorageManager {
     }
 
     internal fun category(fileName: String): XingDunCacheCategory? {
-        val extension = fileName.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        val normalized = fileName.lowercase(Locale.ROOT)
+        val extension = normalized.substringAfterLast('.', "")
         return when (extension) {
-            in IMAGE_EXTENSIONS -> XingDunCacheCategory.IMAGE
-            in AUDIO_EXTENSIONS -> XingDunCacheCategory.AUDIO
-            in VIDEO_EXTENSIONS -> XingDunCacheCategory.VIDEO
-            in FILE_EXTENSIONS -> XingDunCacheCategory.FILE
-            else -> null
+            in TEMPORARY_EXTENSIONS -> XingDunCacheCategory.TEMPORARY
+            else -> when {
+                "thumbnail" in normalized || "thumb" in normalized -> XingDunCacheCategory.THUMBNAIL
+                extension in IMAGE_EXTENSIONS -> XingDunCacheCategory.IMAGE
+                extension in AUDIO_EXTENSIONS -> XingDunCacheCategory.AUDIO
+                extension in VIDEO_EXTENSIONS -> XingDunCacheCategory.VIDEO
+                extension in FILE_EXTENSIONS -> XingDunCacheCategory.FILE
+                else -> null
+            }
         }
     }
 
@@ -69,4 +76,5 @@ internal object XingDunStorageManager {
     private val AUDIO_EXTENSIONS = setOf("aac", "amr", "m4a", "mp3", "ogg", "opus", "wav")
     private val VIDEO_EXTENSIONS = setOf("mp4", "mov", "mkv", "webm", "3gp")
     private val FILE_EXTENSIONS = setOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "zip", "rar", "7z")
+    private val TEMPORARY_EXTENSIONS = setOf("tmp", "temp", "part")
 }

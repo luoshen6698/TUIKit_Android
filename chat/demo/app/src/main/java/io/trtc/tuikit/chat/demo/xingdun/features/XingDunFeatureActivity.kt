@@ -2156,50 +2156,212 @@ open class XingDunFeatureActivity : BaseActivity() {
     ).apply { bottomMargin = 8.dp() }
 
     private fun showStorageManagement() {
+        applyStorageManagementChrome()
         setBusy(true)
         lifecycleScope.launch {
             runCatching { XingDunStorageManager.usage(this@XingDunFeatureActivity) }
                 .onSuccess { usage ->
                     setBusy(false)
-                    addCard(
-                        getString(R.string.xingdun_storage_used),
-                        Formatter.formatFileSize(this@XingDunFeatureActivity, usage.totalBytes)
-                    )
-                    addMessage(R.string.xingdun_storage_scope_hint)
-                    val selected = XingDunCacheCategory.entries.toMutableSet()
-                    XingDunCacheCategory.entries.forEach { category ->
-                        content.addView(Switch(this@XingDunFeatureActivity).apply {
-                            text = getString(
-                                when (category) {
-                                    XingDunCacheCategory.IMAGE -> R.string.xingdun_storage_images
-                                    XingDunCacheCategory.AUDIO -> R.string.xingdun_storage_audio
-                                    XingDunCacheCategory.VIDEO -> R.string.xingdun_storage_video
-                                    XingDunCacheCategory.FILE -> R.string.xingdun_storage_files
-                                },
-                                Formatter.formatFileSize(this@XingDunFeatureActivity, usage.bytes[category] ?: 0L)
-                            )
-                            isChecked = true
-                            setOnCheckedChangeListener { _, checked ->
-                                if (checked) selected.add(category) else selected.remove(category)
-                            }
-                        })
-                    }
-                    content.addView(actionButton(R.string.xingdun_clear_selected_cache) {
-                        AlertDialog.Builder(this@XingDunFeatureActivity)
-                            .setTitle(R.string.xingdun_clear_selected_cache)
-                            .setMessage(R.string.xingdun_storage_clear_warning)
-                            .setNegativeButton(android.R.string.cancel, null)
-                            .setPositiveButton(R.string.xingdun_clear_selected_cache) { _, _ -> clearStorage(selected) }
-                            .show()
-                    })
-                    content.addView(actionButton(R.string.xingdun_recalculate_storage) {
-                        content.removeAllViews()
-                        showStorageManagement()
-                    })
+                    renderStorageManagement(usage)
                 }
                 .onFailure(::showFailure)
         }
     }
+
+    private fun renderStorageManagement(usage: XingDunCacheUsage) {
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(16.dp(), 14.dp(), 16.dp(), 14.dp())
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_storage_used)
+                textSize = 13f
+                setTextColor(0xFF8A8A8F.toInt())
+            })
+            addView(TextView(context).apply {
+                text = Formatter.formatFileSize(this@XingDunFeatureActivity, usage.totalBytes)
+                textSize = 28f
+                setTextColor(Color.BLACK)
+                setPadding(0, 4.dp(), 0, 4.dp())
+            })
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_storage_scope_hint)
+                textSize = 13f
+                setTextColor(0xFF8A8A8F.toInt())
+            })
+        }, storageSectionLayoutParams())
+
+        addStorageSectionHeader(R.string.xingdun_storage_select_section) {
+            content.removeAllViews()
+            showStorageManagement()
+        }
+        val selected = XingDunCacheCategory.entries
+            .filterTo(mutableSetOf()) { (usage.bytes[it] ?: 0L) > 0L }
+        lateinit var clearButton: Button
+        val selectionMarkers = mutableMapOf<XingDunCacheCategory, TextView>()
+        val updateSelectionUI = {
+            selectionMarkers.forEach { (category, marker) ->
+                val isSelected = category in selected
+                marker.text = if (isSelected) "●" else "○"
+                marker.setTextColor(if (isSelected) 0xFF168F83.toInt() else 0xFFAEAEB2.toInt())
+            }
+            val selectedBytes = selected.sumOf { usage.bytes[it] ?: 0L }
+            clearButton.text = getString(
+                R.string.xingdun_clear_selected_cache_size,
+                Formatter.formatFileSize(this@XingDunFeatureActivity, selectedBytes)
+            )
+            clearButton.isEnabled = selected.isNotEmpty()
+        }
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            XingDunCacheCategory.entries.forEachIndexed { index, category ->
+                if (index > 0) addView(storageDivider())
+                addView(storageCategoryRow(category, usage.bytes[category] ?: 0L) {
+                    if (!selected.add(category)) selected.remove(category)
+                    updateSelectionUI()
+                }.also { row ->
+                    selectionMarkers[category] = row.getChildAt(3) as TextView
+                })
+            }
+        }, storageSectionLayoutParams())
+
+        clearButton = Button(this).apply {
+            isAllCaps = false
+            textSize = 16f
+            setTextColor(0xFFD93025.toInt())
+            backgroundTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            setOnClickListener {
+                val selectedBytes = selected.sumOf { usage.bytes[it] ?: 0L }
+                AlertDialog.Builder(this@XingDunFeatureActivity)
+                    .setTitle(R.string.xingdun_storage_clear_title)
+                    .setMessage(getString(
+                        R.string.xingdun_storage_clear_confirmation,
+                        Formatter.formatFileSize(this@XingDunFeatureActivity, selectedBytes)
+                    ))
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(R.string.xingdun_clear_cache) { _, _ -> clearStorage(selected.toSet()) }
+                    .show()
+            }
+        }
+        content.addView(clearButton, storageSectionLayoutParams().apply { topMargin = 10.dp() })
+        addStorageFooter(R.string.xingdun_storage_clear_warning)
+        updateSelectionUI()
+    }
+
+    private fun applyStorageManagementChrome() {
+        val background = 0xFFF5F5F9.toInt()
+        window.statusBarColor = background
+        window.navigationBarColor = background
+        headerBar.setBackgroundColor(background)
+        scrollView.setBackgroundColor(background)
+        content.setBackgroundColor(background)
+        content.setPadding(20.dp(), 12.dp(), 20.dp(), 32.dp())
+        status.setBackgroundColor(background)
+    }
+
+    private fun addStorageSectionHeader(title: Int, refresh: () -> Unit) {
+        content.addView(LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(14.dp(), 10.dp(), 8.dp(), 8.dp())
+            addView(TextView(context).apply {
+                setText(title)
+                textSize = 14f
+                setTextColor(0xFF8A8A8F.toInt())
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_recalculate_storage)
+                textSize = 14f
+                setTextColor(0xFF168F83.toInt())
+                setPadding(12.dp(), 6.dp(), 4.dp(), 6.dp())
+                setOnClickListener { refresh() }
+            })
+        })
+    }
+
+    private fun storageCategoryRow(category: XingDunCacheCategory, bytes: Long, onClick: () -> Unit): LinearLayout =
+        LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(14.dp(), 10.dp(), 14.dp(), 10.dp())
+            addView(TextView(context).apply {
+                text = when (category) {
+                    XingDunCacheCategory.IMAGE -> "▧"
+                    XingDunCacheCategory.AUDIO -> "≋"
+                    XingDunCacheCategory.VIDEO -> "▶"
+                    XingDunCacheCategory.FILE -> "▤"
+                    XingDunCacheCategory.THUMBNAIL -> "▥"
+                    XingDunCacheCategory.TEMPORARY -> "◷"
+                }
+                textSize = 20f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF168F83.toInt())
+            }, LinearLayout.LayoutParams(34.dp(), 52.dp()))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(context).apply {
+                    setText(storageCategoryTitle(category))
+                    textSize = 15f
+                    setTextColor(Color.BLACK)
+                })
+                addView(TextView(context).apply {
+                    setText(storageCategoryDetail(category))
+                    textSize = 12f
+                    setTextColor(0xFF8A8A8F.toInt())
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(context).apply {
+                text = Formatter.formatFileSize(this@XingDunFeatureActivity, bytes)
+                textSize = 13f
+                setTextColor(0xFF8A8A8F.toInt())
+                setPadding(6.dp(), 0, 8.dp(), 0)
+            })
+            addView(TextView(context).apply {
+                textSize = 22f
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(28.dp(), 52.dp()))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+        }
+
+    private fun storageCategoryTitle(category: XingDunCacheCategory): Int = when (category) {
+        XingDunCacheCategory.IMAGE -> R.string.xingdun_storage_images
+        XingDunCacheCategory.AUDIO -> R.string.xingdun_storage_audio
+        XingDunCacheCategory.VIDEO -> R.string.xingdun_storage_video
+        XingDunCacheCategory.FILE -> R.string.xingdun_storage_files
+        XingDunCacheCategory.THUMBNAIL -> R.string.xingdun_storage_thumbnails
+        XingDunCacheCategory.TEMPORARY -> R.string.xingdun_storage_temporary
+    }
+
+    private fun storageCategoryDetail(category: XingDunCacheCategory): Int = when (category) {
+        XingDunCacheCategory.IMAGE -> R.string.xingdun_storage_images_detail
+        XingDunCacheCategory.AUDIO -> R.string.xingdun_storage_audio_detail
+        XingDunCacheCategory.VIDEO -> R.string.xingdun_storage_video_detail
+        XingDunCacheCategory.FILE -> R.string.xingdun_storage_files_detail
+        XingDunCacheCategory.THUMBNAIL -> R.string.xingdun_storage_thumbnails_detail
+        XingDunCacheCategory.TEMPORARY -> R.string.xingdun_storage_temporary_detail
+    }
+
+    private fun addStorageFooter(message: Int) {
+        content.addView(TextView(this).apply {
+            setText(message)
+            textSize = 13f
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(14.dp(), 0, 14.dp(), 8.dp())
+        })
+    }
+
+    private fun storageDivider(): View = View(this).apply {
+        setBackgroundColor(0xFFE7E7EA.toInt())
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1.dp()).apply {
+            marginStart = 48.dp()
+        }
+    }
+
+    private fun storageSectionLayoutParams() = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+    ).apply { bottomMargin = 8.dp() }
 
     private fun showHelpCenter() {
         applyHelpCenterChrome()
@@ -2691,12 +2853,13 @@ open class XingDunFeatureActivity : BaseActivity() {
         lifecycleScope.launch {
             runCatching { XingDunStorageManager.clear(this@XingDunFeatureActivity, selected) }
                 .onSuccess { removed ->
-                    status.text = if (removed > 0) getString(
+                    val resultMessage = if (removed > 0) getString(
                         R.string.xingdun_storage_cleared,
                         Formatter.formatFileSize(this@XingDunFeatureActivity, removed)
                     ) else getString(R.string.xingdun_storage_already_empty)
                     content.removeAllViews()
                     showStorageManagement()
+                    Toast.makeText(this@XingDunFeatureActivity, resultMessage, Toast.LENGTH_SHORT).show()
                 }
                 .onFailure(::showFailure)
         }
