@@ -161,6 +161,11 @@ open class XingDunFeatureActivity : BaseActivity() {
         showNotificationSettings()
     }
 
+    private val systemNotificationSettings = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        content.removeAllViews()
+        showNotificationSettings()
+    }
+
     private val invitePosterStoragePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val poster = pendingInvitePoster
         pendingInvitePoster = null
@@ -1993,21 +1998,58 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showNotificationSettings() {
+        applyNotificationSettingsChrome()
         val enabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
-        addCard(
-            getString(R.string.xingdun_notification_permission),
-            getString(if (enabled) R.string.xingdun_permission_enabled else R.string.xingdun_permission_disabled)
-        )
-        if (Build.VERSION.SDK_INT >= 33 && !enabled) {
-            content.addView(actionButton(R.string.xingdun_request_notification_permission) {
-                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        addNotificationSectionHeader(R.string.xingdun_notification_system_section)
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            addView(LinearLayout(context).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(16.dp(), 12.dp(), 16.dp(), 12.dp())
+                addView(TextView(context).apply {
+                    text = "🔔"
+                    textSize = 22f
+                    gravity = Gravity.CENTER
+                }, LinearLayout.LayoutParams(36.dp(), 52.dp()))
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(TextView(context).apply {
+                        setText(R.string.xingdun_notification_permission)
+                        textSize = 16f
+                        setTextColor(Color.BLACK)
+                    })
+                    addView(TextView(context).apply {
+                        setText(R.string.xingdun_notification_permission_detail)
+                        textSize = 13f
+                        setTextColor(0xFF8A8A8F.toInt())
+                    })
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(TextView(context).apply {
+                    setText(if (enabled) R.string.xingdun_permission_enabled else R.string.xingdun_permission_disabled)
+                    textSize = 13f
+                    setTextColor(if (enabled) 0xFF168F83.toInt() else 0xFFD93025.toInt())
+                    background = roundedDrawable(if (enabled) 0xFFDFF3EF.toInt() else 0xFFFFE7E5.toInt(), 12f)
+                    setPadding(10.dp(), 5.dp(), 10.dp(), 5.dp())
+                })
             })
-        }
-        content.addView(actionButton(R.string.xingdun_open_system_notification_settings) {
-            startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            if (Build.VERSION.SDK_INT >= 33 && !enabled &&
+                ContextCompat.checkSelfPermission(this@XingDunFeatureActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                addView(notificationDivider())
+                addView(notificationNavigationRow(R.string.xingdun_request_notification_permission) {
+                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                })
+            }
+            addView(notificationDivider())
+            addView(notificationNavigationRow(R.string.xingdun_open_system_notification_settings) {
+                systemNotificationSettings.launch(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                })
             })
-        })
+        }, notificationSectionLayoutParams())
+
+        addNotificationSectionHeader(R.string.xingdun_notification_in_app_section)
         val sound = Switch(this).apply {
             setText(R.string.xingdun_notification_sound)
             isChecked = XingDunForegroundNotificationManager.soundEnabled(this@XingDunFeatureActivity)
@@ -2022,12 +2064,96 @@ open class XingDunFeatureActivity : BaseActivity() {
                 XingDunForegroundNotificationManager.setVibrationEnabled(this@XingDunFeatureActivity, checked)
             }
         }
-        content.addView(sound)
-        content.addView(vibration)
-        addMessage(R.string.xingdun_notification_foreground_hint)
-        addMessage(R.string.xingdun_notification_conversation_mute_hint)
-        status.setText(R.string.xingdun_notification_vendor_deferred)
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(16.dp(), 0, 16.dp(), 0)
+            addView(sound, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 56.dp()))
+            addView(notificationDivider())
+            addView(vibration, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 56.dp()))
+        }, notificationSectionLayoutParams())
+        addNotificationFooter(R.string.xingdun_notification_foreground_hint)
+
+        addNotificationSectionHeader(R.string.xingdun_notification_conversation_section)
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(16.dp(), 14.dp(), 16.dp(), 14.dp())
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_notification_conversation_mute_hint)
+                textSize = 15f
+                setTextColor(Color.BLACK)
+            })
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_notification_conversation_priority_hint)
+                textSize = 13f
+                setTextColor(0xFF8A8A8F.toInt())
+                setPadding(0, 8.dp(), 0, 0)
+            })
+        }, notificationSectionLayoutParams())
     }
+
+    private fun applyNotificationSettingsChrome() {
+        val background = 0xFFF5F5F9.toInt()
+        window.statusBarColor = background
+        window.navigationBarColor = background
+        headerBar.setBackgroundColor(background)
+        scrollView.setBackgroundColor(background)
+        content.setBackgroundColor(background)
+        content.setPadding(20.dp(), 8.dp(), 20.dp(), 32.dp())
+        status.setBackgroundColor(background)
+        status.text = ""
+    }
+
+    private fun addNotificationSectionHeader(title: Int) {
+        content.addView(TextView(this).apply {
+            setText(title)
+            textSize = 14f
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(14.dp(), 12.dp(), 8.dp(), 8.dp())
+        })
+    }
+
+    private fun addNotificationFooter(message: Int) {
+        content.addView(TextView(this).apply {
+            setText(message)
+            textSize = 13f
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(14.dp(), 0, 14.dp(), 10.dp())
+        })
+    }
+
+    private fun notificationNavigationRow(title: Int, action: () -> Unit): View =
+        LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(16.dp(), 0, 10.dp(), 0)
+            addView(TextView(context).apply {
+                setText(title)
+                textSize = 15f
+                setTextColor(0xFF168F83.toInt())
+            }, LinearLayout.LayoutParams(0, 52.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
+            addView(TextView(context).apply {
+                text = "›"
+                textSize = 28f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF8A8A8F.toInt())
+            }, LinearLayout.LayoutParams(28.dp(), 52.dp()))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { action() }
+        }
+
+    private fun notificationDivider(): View = View(this).apply {
+        setBackgroundColor(0xFFE7E7EA.toInt())
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1.dp()).apply {
+            marginStart = 16.dp()
+        }
+    }
+
+    private fun notificationSectionLayoutParams() = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+    ).apply { bottomMargin = 8.dp() }
 
     private fun showStorageManagement() {
         setBusy(true)
