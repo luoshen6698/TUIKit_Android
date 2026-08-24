@@ -166,6 +166,21 @@ open class XingDunFeatureActivity : BaseActivity() {
         showNotificationSettings()
     }
 
+    private val managedPermissionRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        Toast.makeText(
+            this,
+            getString(if (granted) R.string.xingdun_permission_granted_feedback else R.string.xingdun_permission_denied_feedback),
+            Toast.LENGTH_SHORT,
+        ).show()
+        content.removeAllViews()
+        showPermissionManagement()
+    }
+
+    private val managedPermissionSettings = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        content.removeAllViews()
+        showPermissionManagement()
+    }
+
     private val invitePosterStoragePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val poster = pendingInvitePoster
         pendingInvitePoster = null
@@ -2585,24 +2600,197 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showPermissionManagement() {
-        addMessage(R.string.xingdun_permission_description)
-        val permissions = listOf(
-            R.string.xingdun_permission_camera to Manifest.permission.CAMERA,
-            R.string.xingdun_permission_microphone to Manifest.permission.RECORD_AUDIO,
-            R.string.xingdun_notification_permission to Manifest.permission.POST_NOTIFICATIONS
-        )
-        permissions.forEach { (label, permission) ->
-            val unavailable = permission == Manifest.permission.POST_NOTIFICATIONS && Build.VERSION.SDK_INT < 33
-            val enabled = unavailable || ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
-            addCard(
-                getString(label),
-                getString(if (enabled) R.string.xingdun_permission_enabled else R.string.xingdun_permission_disabled)
-            )
-        }
-        addCard(getString(R.string.xingdun_permission_files), getString(R.string.xingdun_permission_files_scoped))
-        content.addView(actionButton(R.string.xingdun_open_system_settings) {
-            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        applyPermissionManagementChrome()
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_permission_enterprise_badge)
+                textSize = 13f
+                setTextColor(0xFF168F83.toInt())
+                background = roundedDrawable(0xFFDFF3EF.toInt(), 12f)
+                setPadding(10.dp(), 5.dp(), 10.dp(), 5.dp())
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_permission_request_when_needed)
+                textSize = 21f
+                setTextColor(Color.BLACK)
+                setPadding(0, 10.dp(), 0, 4.dp())
+            })
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_permission_description)
+                textSize = 13f
+                setTextColor(0xFF8A8A8F.toInt())
+            })
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = 14.dp()
         })
+
+        addRuntimePermissionCard(
+            "♧", R.string.xingdun_notification_permission,
+            R.string.xingdun_permission_notification_summary, R.string.xingdun_permission_notification_usage,
+            Manifest.permission.POST_NOTIFICATIONS, notification = true,
+        )
+        addRuntimePermissionCard(
+            "▣", R.string.xingdun_permission_camera,
+            R.string.xingdun_permission_camera_summary, R.string.xingdun_permission_camera_usage,
+            Manifest.permission.CAMERA,
+        )
+        addPickerScopedPermissionCard(
+            "▧", R.string.xingdun_permission_photos,
+            R.string.xingdun_permission_photos_summary, R.string.xingdun_permission_photos_usage,
+        )
+        addRuntimePermissionCard(
+            "●", R.string.xingdun_permission_microphone,
+            R.string.xingdun_permission_microphone_summary, R.string.xingdun_permission_microphone_usage,
+            Manifest.permission.RECORD_AUDIO,
+        )
+        addPickerScopedPermissionCard(
+            "▤", R.string.xingdun_permission_files,
+            R.string.xingdun_permission_files_summary, R.string.xingdun_permission_files_usage,
+        )
+    }
+
+    private fun addRuntimePermissionCard(
+        icon: String,
+        title: Int,
+        summary: Int,
+        usage: Int,
+        permission: String,
+        notification: Boolean = false,
+    ) {
+        val runtimePermissionRequired = !notification || Build.VERSION.SDK_INT >= 33
+        val systemEnabled = if (notification) NotificationManagerCompat.from(this).areNotificationsEnabled()
+        else ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+        val granted = if (!runtimePermissionRequired) systemEnabled else {
+            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED && systemEnabled
+        }
+        val requested = permissionWasRequested(permission)
+        val shouldOpenSettings = !granted && (!runtimePermissionRequired ||
+            (requested && !shouldShowRequestPermissionRationale(permission)))
+        val status = when {
+            granted -> R.string.xingdun_permission_enabled
+            requested -> R.string.xingdun_permission_closed
+            else -> R.string.xingdun_permission_not_requested
+        }
+        val action = when {
+            granted -> R.string.xingdun_permission_enabled
+            shouldOpenSettings -> R.string.xingdun_permission_go_to_settings
+            else -> R.string.xingdun_permission_allow_access
+        }
+        addPermissionCard(icon, title, summary, usage, status, granted, action, !granted) {
+            if (shouldOpenSettings) {
+                managedPermissionSettings.launch(
+                    if (notification) Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                        putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                    } else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+                )
+            } else {
+                markPermissionRequested(permission)
+                managedPermissionRequest.launch(permission)
+            }
+        }
+    }
+
+    private fun addPickerScopedPermissionCard(icon: String, title: Int, summary: Int, usage: Int) {
+        addPermissionCard(
+            icon, title, summary, usage,
+            R.string.xingdun_permission_picker_scoped, true,
+            R.string.xingdun_permission_system_picker, false,
+        ) {}
+    }
+
+    private fun addPermissionCard(
+        icon: String,
+        title: Int,
+        summary: Int,
+        usage: Int,
+        statusLabel: Int,
+        positiveStatus: Boolean,
+        actionLabel: Int,
+        actionEnabled: Boolean,
+        action: () -> Unit,
+    ) {
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(16.dp(), 14.dp(), 16.dp(), 14.dp())
+            addView(LinearLayout(context).apply {
+                gravity = Gravity.TOP
+                addView(TextView(context).apply {
+                    text = icon
+                    textSize = 20f
+                    gravity = Gravity.CENTER
+                    setTextColor(0xFF168F83.toInt())
+                    background = roundedDrawable(0xFFDFF3EF.toInt(), 10f)
+                }, LinearLayout.LayoutParams(40.dp(), 40.dp()))
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(12.dp(), 0, 0, 0)
+                    addView(LinearLayout(context).apply {
+                        gravity = Gravity.CENTER_VERTICAL
+                        addView(TextView(context).apply {
+                            setText(title)
+                            textSize = 16f
+                            setTextColor(Color.BLACK)
+                        })
+                        addView(TextView(context).apply {
+                            setText(statusLabel)
+                            textSize = 12f
+                            setTextColor(if (positiveStatus) 0xFF168F83.toInt() else 0xFFD93025.toInt())
+                            background = roundedDrawable(if (positiveStatus) 0xFFDFF3EF.toInt() else 0xFFFFE7E5.toInt(), 10f)
+                            setPadding(8.dp(), 3.dp(), 8.dp(), 3.dp())
+                        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                            marginStart = 8.dp()
+                        })
+                    })
+                    addView(TextView(context).apply {
+                        setText(summary)
+                        textSize = 13f
+                        setTextColor(0xFF66666B.toInt())
+                        setPadding(0, 6.dp(), 0, 0)
+                    })
+                    addView(TextView(context).apply {
+                        setText(usage)
+                        textSize = 12f
+                        setTextColor(0xFF9A9A9F.toInt())
+                        setPadding(0, 5.dp(), 0, 0)
+                    })
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            })
+            addView(Button(context).apply {
+                setText(actionLabel)
+                isAllCaps = false
+                isEnabled = actionEnabled
+                setTextColor(if (actionEnabled) Color.WHITE else 0xFF8A8A8F.toInt())
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    if (actionEnabled) 0xFF168F83.toInt() else 0xFFE7E7EA.toInt()
+                )
+                setOnClickListener { action() }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 44.dp()).apply {
+                topMargin = 12.dp()
+            })
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = 12.dp()
+        })
+    }
+
+    private fun applyPermissionManagementChrome() {
+        val background = 0xFFF5F5F9.toInt()
+        window.statusBarColor = background
+        window.navigationBarColor = background
+        headerBar.setBackgroundColor(background)
+        scrollView.setBackgroundColor(background)
+        content.setBackgroundColor(background)
+        content.setPadding(20.dp(), 14.dp(), 20.dp(), 32.dp())
+        status.setBackgroundColor(background)
+        status.text = ""
+    }
+
+    private fun permissionWasRequested(permission: String): Boolean =
+        getSharedPreferences(PERMISSION_PREFERENCES, MODE_PRIVATE).getBoolean(permission, false)
+
+    private fun markPermissionRequested(permission: String) {
+        getSharedPreferences(PERMISSION_PREFERENCES, MODE_PRIVATE).edit().putBoolean(permission, true).apply()
     }
 
     private fun showAbout() {
@@ -3328,6 +3516,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_FAVORITES = "favorites"
         const val MODE_REDPACKET_ACCOUNT = "redpacket_account"
         const val MODE_REDPACKET_DETAIL = "redpacket_detail"
+        private const val PERMISSION_PREFERENCES = "xingdun_permission_ui"
         private const val REPORT_PAGE_SIZE = 20
 
         fun start(context: Context, mode: String, itemId: Int = 0) {
