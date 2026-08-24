@@ -360,7 +360,21 @@
     <string name="xingdun_feedback">Feedback</string>
     <string name="xingdun_feedback_content">Describe the issue or suggestion (at least 10 characters)</string>
     <string name="xingdun_feedback_contact">Contact information (optional)</string>
-    <string name="xingdun_feedback_content_required">Enter at least 10 characters.</string>
+    <string name="xingdun_feedback_type_title">Feedback type</string>
+    <string name="xingdun_feedback_description_title">Issue description</string>
+    <string name="xingdun_feedback_description_footer">Describe what happened, the expected result, and the steps needed to reproduce the issue.</string>
+    <string name="xingdun_feedback_character_count">%1$d/2000</string>
+    <string name="xingdun_feedback_images_count">Additional images (%1$d/5)</string>
+    <string name="xingdun_feedback_add_image">Add image</string>
+    <string name="xingdun_feedback_remove_image">Remove feedback image</string>
+    <string name="xingdun_feedback_contact_hint">Phone, email, or other contact information</string>
+    <string name="xingdun_feedback_contact_footer">Used only to contact you about this feedback and never shown to other users.</string>
+    <string name="xingdun_feedback_content_required">Enter 10 to 2000 characters of feedback.</string>
+    <string name="xingdun_feedback_contact_too_long">Contact information must be 128 characters or fewer.</string>
+    <string name="xingdun_feedback_submit">Submit feedback</string>
+    <string name="xingdun_feedback_success_result">Thank you for your feedback. Reference: %1$s</string>
+    <string name="xingdun_feedback_duplicate_result">This feedback was already submitted. Reference: %1$s</string>
+    <string name="xingdun_complete">Done</string>
     <string name="xingdun_feedback_submitted">Feedback submitted.</string>
     <string name="xingdun_version">Version check</string>
     <string name="xingdun_version_current">Current version: %1$s (%2$d)</string>
@@ -701,6 +715,6 @@
         <item>bug</item><item>suggestion</item><item>experience</item><item>account</item><item>other</item>
     </string-array>
     <string-array name="xingdun_feedback_type_labels">
-        <item>Bug</item><item>Suggestion</item><item>Experience</item><item>Account</item><item>Other</item>
+        <item>Function issue</item><item>Product suggestion</item><item>Experience issue</item><item>Account issue</item><item>Other feedback</item>
     </string-array>
 </resources>

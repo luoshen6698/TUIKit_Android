@@ -354,7 +354,21 @@
     <string name="xingdun_feedback">意见反馈</string>
     <string name="xingdun_feedback_content">请描述问题或建议（至少 10 个字符）</string>
     <string name="xingdun_feedback_contact">联系方式（选填）</string>
-    <string name="xingdun_feedback_content_required">请输入至少 10 个字符。</string>
+    <string name="xingdun_feedback_type_title">反馈类型</string>
+    <string name="xingdun_feedback_description_title">问题描述</string>
+    <string name="xingdun_feedback_description_footer">请说明发生了什么、您期望的结果，以及可以复现问题的操作步骤。</string>
+    <string name="xingdun_feedback_character_count">%1$d/2000</string>
+    <string name="xingdun_feedback_images_count">补充图片（%1$d/5）</string>
+    <string name="xingdun_feedback_add_image">添加图片</string>
+    <string name="xingdun_feedback_remove_image">删除反馈图片</string>
+    <string name="xingdun_feedback_contact_hint">手机号、邮箱或其他联系方式</string>
+    <string name="xingdun_feedback_contact_footer">仅用于就本次反馈与您沟通，不会展示给其他用户。</string>
+    <string name="xingdun_feedback_content_required">反馈内容请输入 10 至 2000 个字符。</string>
+    <string name="xingdun_feedback_contact_too_long">联系方式最多填写 128 个字符。</string>
+    <string name="xingdun_feedback_submit">提交反馈</string>
+    <string name="xingdun_feedback_success_result">感谢您的反馈，编号：%1$s</string>
+    <string name="xingdun_feedback_duplicate_result">该反馈已提交，编号：%1$s</string>
+    <string name="xingdun_complete">完成</string>
     <string name="xingdun_feedback_submitted">反馈已提交。</string>
     <string name="xingdun_version">版本检查</string>
     <string name="xingdun_version_current">当前版本：%1$s（%2$d）</string>
@@ -686,6 +700,6 @@
         <item>请假申请</item><item>出差申请</item><item>外出申请</item><item>加班申请</item><item>报销申请</item><item>采购申请</item><item>人力需求</item><item>转正申请</item><item>离职申请</item>
     </string-array>
     <string-array name="xingdun_feedback_type_labels">
-        <item>故障问题</item><item>功能建议</item><item>体验问题</item><item>账号问题</item><item>其他</item>
+        <item>功能异常</item><item>产品建议</item><item>体验问题</item><item>账号问题</item><item>其他反馈</item>
     </string-array>
 </resources>

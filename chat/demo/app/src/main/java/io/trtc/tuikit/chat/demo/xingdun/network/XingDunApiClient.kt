@@ -167,6 +167,23 @@ class XingDunApiClient(
         fields: Map<String, Any?>,
         files: List<XingDunUploadFile>
     ) {
+        executeAllowEmpty(multipartRequest(session, path, fields, files))
+    }
+
+    suspend fun <T> postMultipart(
+        session: XingDunStoredSession,
+        path: String,
+        fields: Map<String, Any?>,
+        files: List<XingDunUploadFile>,
+        responseType: Type
+    ): T = execute(multipartRequest(session, path, fields, files), responseType)
+
+    private fun multipartRequest(
+        session: XingDunStoredSession,
+        path: String,
+        fields: Map<String, Any?>,
+        files: List<XingDunUploadFile>
+    ): Request {
         val multipart = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .apply {
@@ -185,7 +202,7 @@ class XingDunApiClient(
         val request = requestBuilder(endpointUrl(session.apiBaseUrl, path), session)
             .post(multipart)
             .build()
-        executeAllowEmpty(request)
+        return request
     }
 
     suspend fun deleteEmpty(session: XingDunStoredSession, path: String, body: Any) {

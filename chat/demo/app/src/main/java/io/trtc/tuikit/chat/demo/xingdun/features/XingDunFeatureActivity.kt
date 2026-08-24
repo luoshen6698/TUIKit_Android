@@ -30,6 +30,8 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -44,6 +46,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
@@ -92,6 +95,11 @@ open class XingDunFeatureActivity : BaseActivity() {
         val inviteCode: String,
         val shareUrl: String,
         val qrPayload: String,
+    )
+
+    private data class FeedbackSubmissionResult(
+        val feedbackNo: String,
+        val duplicate: Boolean,
     )
 
     override val requiresLogin: Boolean
@@ -959,53 +967,251 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showFeedbackForm() {
+        applyFeedbackFormChrome()
+        val requestID = UUID.randomUUID().toString().lowercase()
         val types = resources.getStringArray(R.array.xingdun_feedback_type_values)
         val labels = resources.getStringArray(R.array.xingdun_feedback_type_labels)
         val type = Spinner(this).apply {
             adapter = ArrayAdapter(this@XingDunFeatureActivity, android.R.layout.simple_spinner_dropdown_item, labels.toList())
         }
-        val body = input(R.string.xingdun_feedback_content, multiline = true)
-        val contact = input(R.string.xingdun_feedback_contact)
+        val description = input(R.string.xingdun_feedback_content, multiline = true).apply {
+            minHeight = 150.dp()
+            gravity = Gravity.TOP or Gravity.START
+        }
+        val descriptionCount = TextView(this).apply {
+            textSize = 12f
+            setTextColor(0xFF8A8A8F.toInt())
+            gravity = Gravity.END
+        }
+        val contact = input(R.string.xingdun_feedback_contact_hint)
         var attachments = emptyList<XingDunAttachment>()
-        val attachmentSummary = TextView(this).apply { setText(R.string.xingdun_no_attachments) }
-        content.addView(type)
-        content.addView(body)
-        content.addView(contact)
-        content.addView(attachmentSummary)
-        content.addView(actionButton(R.string.xingdun_choose_images) {
-            attachmentSelectionHandler = { selected ->
-                attachments = selected
-                attachmentSummary.text = attachmentSummary(selected)
+        var result: FeedbackSubmissionResult? = null
+        var submitting = false
+        val attachmentTitle = TextView(this)
+        val attachmentRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val attachmentScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(attachmentRow)
+        }
+        lateinit var addImageButton: Button
+        lateinit var submitButton: Button
+        lateinit var updateState: () -> Unit
+        lateinit var renderAttachments: () -> Unit
+        renderAttachments = {
+            attachmentTitle.text = getString(R.string.xingdun_feedback_images_count, attachments.size)
+            attachmentRow.removeAllViews()
+            attachments.forEach { attachment ->
+                attachmentRow.addView(feedbackAttachmentPreview(attachment, result == null) {
+                    if (result == null) {
+                        attachments = attachments.filterNot { it.uri == attachment.uri }
+                        renderAttachments()
+                        updateState()
+                    }
+                })
             }
-            attachmentPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp"))
-        })
-        content.addView(actionButton(R.string.xingdun_clear_attachments) {
-            attachments = emptyList()
-            attachmentSummary.setText(R.string.xingdun_no_attachments)
-        })
-        content.addView(actionButton(R.string.xingdun_submit) {
-            if (body.text.toString().trim().length < 10) {
+            attachmentScroll.visibility = if (attachments.isEmpty()) View.GONE else View.VISIBLE
+        }
+
+        addFeedbackSection(R.string.xingdun_feedback_type_title, type)
+        addFeedbackSection(
+            R.string.xingdun_feedback_description_title,
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(description)
+                addView(LinearLayout(context).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(TextView(context).apply {
+                        setText(R.string.xingdun_feedback_description_footer)
+                        textSize = 12f
+                        setTextColor(0xFF8A8A8F.toInt())
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    addView(descriptionCount)
+                })
+            },
+        )
+
+        addFeedbackSectionHeader(attachmentTitle)
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(14.dp(), 10.dp(), 14.dp(), 12.dp())
+            addView(attachmentScroll)
+            addImageButton = actionButton(R.string.xingdun_feedback_add_image) {
+                attachmentSelectionHandler = { selected ->
+                    val combined = (attachments + selected).distinctBy(XingDunAttachment::uri)
+                    if (combined.size > XingDunAttachmentResolver.MAX_COUNT) {
+                        showAttachmentFailure(XingDunAttachmentException(XingDunAttachmentError.TOO_MANY))
+                    } else {
+                        attachments = combined
+                        renderAttachments()
+                        updateState()
+                    }
+                }
+                attachmentPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp"))
+            }
+            addView(addImageButton)
+        }, feedbackSectionLayoutParams())
+
+        addFeedbackSection(
+            R.string.xingdun_feedback_contact,
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(contact)
+                addView(TextView(context).apply {
+                    setText(R.string.xingdun_feedback_contact_footer)
+                    textSize = 12f
+                    setTextColor(0xFF8A8A8F.toInt())
+                    setPadding(0, 8.dp(), 0, 0)
+                })
+            },
+        )
+
+        submitButton = actionButton(R.string.xingdun_feedback_submit) {
+            result?.let {
+                finish()
+                return@actionButton
+            }
+            val normalizedDescription = description.text.toString().trim()
+            val normalizedContact = contact.text.toString().trim()
+            if (normalizedDescription.length !in 10..2_000) {
                 status.setText(R.string.xingdun_feedback_content_required)
                 return@actionButton
             }
-            submitMultipart(
-                path = "feedback/save",
-                fields = mapOf(
-                    "feedback_type" to types[type.selectedItemPosition],
-                    "content" to body.text.toString().trim(),
-                    "contact" to contact.text.toString().trim(),
-                    "client_request_id" to UUID.randomUUID().toString().lowercase(),
-                    "platform" to "android",
-                    "app_version" to BuildConfig.VERSION_NAME,
-                    "app_build" to BuildConfig.VERSION_CODE,
-                    "os_version" to Build.VERSION.RELEASE,
-                    "device_model" to Build.MODEL
-                ),
-                attachments = attachments,
-                successMessage = R.string.xingdun_feedback_submitted
-            )
-        })
+            if (normalizedContact.length > 128) {
+                status.setText(R.string.xingdun_feedback_contact_too_long)
+                return@actionButton
+            }
+            submitting = true
+            updateState()
+            setBusy(true)
+            lifecycleScope.launch {
+                runCatching {
+                    val files = XingDunAttachmentResolver.uploadFiles(this@XingDunFeatureActivity, attachments)
+                    XingDunSessionManager.apiClient().postMultipart<FeedbackSubmissionResult>(
+                        session = requireSession(),
+                        path = "feedback/save",
+                        fields = mapOf(
+                            "feedback_type" to types[type.selectedItemPosition],
+                            "content" to normalizedDescription,
+                            "contact" to normalizedContact,
+                            "client_request_id" to requestID,
+                            "platform" to "android",
+                            "app_version" to BuildConfig.VERSION_NAME,
+                            "app_build" to BuildConfig.VERSION_CODE,
+                            "os_version" to Build.VERSION.RELEASE,
+                            "device_model" to Build.MODEL,
+                        ),
+                        files = files,
+                        responseType = FeedbackSubmissionResult::class.java,
+                    )
+                }.onSuccess { submission ->
+                    result = submission
+                    submitting = false
+                    setBusy(false)
+                    type.isEnabled = false
+                    description.isEnabled = false
+                    contact.isEnabled = false
+                    val message = getString(
+                        if (submission.duplicate) R.string.xingdun_feedback_duplicate_result
+                        else R.string.xingdun_feedback_success_result,
+                        submission.feedbackNo,
+                    )
+                    status.text = message
+                    Toast.makeText(this@XingDunFeatureActivity, message, Toast.LENGTH_LONG).show()
+                    submitButton.setText(R.string.xingdun_complete)
+                    renderAttachments()
+                    updateState()
+                }.onFailure { error ->
+                    submitting = false
+                    updateState()
+                    if (error is XingDunAttachmentException) showAttachmentFailure(error) else showFailure(error)
+                }
+            }
+        }
+        submitButton.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF18A987.toInt())
+        content.addView(submitButton)
+
+        updateState = {
+            val count = description.text.toString().count()
+            descriptionCount.text = getString(R.string.xingdun_feedback_character_count, count)
+            descriptionCount.setTextColor(if (count > 2_000) 0xFFD93025.toInt() else 0xFF8A8A8F.toInt())
+            addImageButton.isEnabled = result == null && attachments.size < XingDunAttachmentResolver.MAX_COUNT && !submitting
+            submitButton.isEnabled = if (result != null) true else {
+                count in 10..2_000 && contact.text.toString().count() <= 128 && !submitting
+            }
+        }
+        description.doAfterTextChanged { updateState() }
+        contact.doAfterTextChanged { updateState() }
+        renderAttachments()
+        updateState()
     }
+
+    private fun applyFeedbackFormChrome() {
+        val background = 0xFFF5F5F9.toInt()
+        window.statusBarColor = background
+        window.navigationBarColor = background
+        headerBar.setBackgroundColor(background)
+        scrollView.setBackgroundColor(background)
+        content.setBackgroundColor(background)
+        content.setPadding(20.dp(), 8.dp(), 20.dp(), 32.dp())
+        status.setBackgroundColor(background)
+        status.setTextColor(0xFF8A8A8F.toInt())
+    }
+
+    private fun addFeedbackSection(title: Int, child: View) {
+        addFeedbackSectionHeader(TextView(this).apply { setText(title) })
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(14.dp(), 8.dp(), 14.dp(), 12.dp())
+            addView(child)
+        }, feedbackSectionLayoutParams())
+    }
+
+    private fun addFeedbackSectionHeader(header: TextView) {
+        header.textSize = 14f
+        header.setTextColor(0xFF8A8A8F.toInt())
+        header.setPadding(14.dp(), 10.dp(), 8.dp(), 8.dp())
+        content.addView(header)
+    }
+
+    private fun feedbackSectionLayoutParams() = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+    ).apply { bottomMargin = 12.dp() }
+
+    private fun feedbackAttachmentPreview(
+        attachment: XingDunAttachment,
+        canRemove: Boolean,
+        onRemove: () -> Unit,
+    ): View =
+        FrameLayout(this).apply {
+            addView(ImageView(context).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setImageURI(attachment.uri)
+                contentDescription = attachment.displayName
+            }, FrameLayout.LayoutParams(88.dp(), 88.dp()).apply {
+                marginEnd = 12.dp()
+            })
+            addView(Button(context).apply {
+                text = "×"
+                textSize = 18f
+                minWidth = 0
+                minHeight = 0
+                setPadding(0, 0, 0, 2.dp())
+                setTextColor(Color.WHITE)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFD93025.toInt())
+                setOnClickListener { onRemove() }
+                isEnabled = canRemove
+                visibility = if (canRemove) View.VISIBLE else View.GONE
+                contentDescription = getString(R.string.xingdun_feedback_remove_image)
+            }, FrameLayout.LayoutParams(30.dp(), 30.dp(), Gravity.TOP or Gravity.END).apply {
+                marginEnd = 4.dp()
+            })
+        }
 
     private fun showReportForm() {
         if (targetType !in setOf("user", "team", "message") || targetID.isBlank()) {
