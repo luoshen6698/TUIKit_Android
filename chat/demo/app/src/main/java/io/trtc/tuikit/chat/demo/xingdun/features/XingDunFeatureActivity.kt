@@ -1852,23 +1852,224 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showHelpCenter() {
-        listOf(
-            R.string.xingdun_help_login_question to R.string.xingdun_help_login_answer,
-            R.string.xingdun_help_offline_question to R.string.xingdun_help_offline_answer,
-            R.string.xingdun_help_contact_question to R.string.xingdun_help_contact_answer,
-            R.string.xingdun_help_notification_question to R.string.xingdun_help_notification_answer,
-            R.string.xingdun_help_media_question to R.string.xingdun_help_media_answer,
-            R.string.xingdun_help_storage_question to R.string.xingdun_help_storage_answer,
-            R.string.xingdun_help_colleague_question to R.string.xingdun_help_colleague_answer,
-            R.string.xingdun_help_group_question to R.string.xingdun_help_group_answer
-        ).forEach { (question, answer) -> addCard(getString(question), getString(answer)) }
-        if (XingDunSessionManager.currentSession()?.features?.customerService == true) {
-            content.addView(actionButton(R.string.xingdun_customer_service) { start(this, MODE_CUSTOMER_SERVICE) })
+        applyHelpCenterChrome()
+        addHelpFAQSection(
+            R.string.xingdun_help_section_account,
+            listOf(
+                R.string.xingdun_help_login_question to R.string.xingdun_help_login_answer,
+                R.string.xingdun_help_offline_question to R.string.xingdun_help_offline_answer,
+                R.string.xingdun_help_contact_question to R.string.xingdun_help_contact_answer,
+            ),
+        )
+        addHelpFAQSection(
+            R.string.xingdun_help_section_messages,
+            listOf(
+                R.string.xingdun_help_notification_question to R.string.xingdun_help_notification_answer,
+                R.string.xingdun_help_media_question to R.string.xingdun_help_media_answer,
+                R.string.xingdun_help_storage_question to R.string.xingdun_help_storage_answer,
+            ),
+        )
+        addHelpFAQSection(
+            R.string.xingdun_help_section_contacts,
+            listOf(
+                R.string.xingdun_help_colleague_question to R.string.xingdun_help_colleague_answer,
+                R.string.xingdun_help_group_question to R.string.xingdun_help_group_answer,
+            ),
+        )
+        addHelpSupportSection()
+    }
+
+    private fun applyHelpCenterChrome() {
+        val background = 0xFFF5F5F9.toInt()
+        window.statusBarColor = background
+        window.navigationBarColor = background
+        headerBar.setBackgroundColor(background)
+        scrollView.setBackgroundColor(background)
+        content.setBackgroundColor(background)
+        content.setPadding(20.dp(), 8.dp(), 20.dp(), 32.dp())
+        status.setBackgroundColor(background)
+        status.setTextColor(0xFF8A8A8F.toInt())
+        (headerBar.getChildAt(0) as? Button)?.apply {
+            setTextColor(Color.BLACK)
+            backgroundTintList = android.content.res.ColorStateList.valueOf(background)
         }
-        content.addView(actionButton(R.string.xingdun_feedback) { start(this, MODE_FEEDBACK) })
-        content.addView(actionButton(R.string.xingdun_report) {
-            status.setText(R.string.xingdun_report_from_target_hint)
+        (headerBar.getChildAt(1) as? TextView)?.apply {
+            setTextColor(Color.BLACK)
+            gravity = Gravity.CENTER
+        }
+    }
+
+    private fun addHelpFAQSection(title: Int, entries: List<Pair<Int, Int>>) {
+        addHelpSectionHeader(title)
+        val group = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+        }
+        entries.forEachIndexed { index, (question, answer) ->
+            group.addView(helpDisclosureRow(question, answer))
+            if (index != entries.lastIndex) group.addView(helpDivider())
+        }
+        content.addView(group, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = 12.dp()
         })
+    }
+
+    private fun addHelpSectionHeader(title: Int) {
+        content.addView(TextView(this).apply {
+            setText(title)
+            textSize = 14f
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(14.dp(), 12.dp(), 8.dp(), 8.dp())
+        })
+    }
+
+    private fun helpDisclosureRow(question: Int, answer: Int): View {
+        val detail = TextView(this).apply {
+            setText(answer)
+            textSize = 14f
+            setTextColor(0xFF6D6D72.toInt())
+            setPadding(0, 0, 32.dp(), 13.dp())
+            visibility = View.GONE
+        }
+        val arrow = TextView(this).apply {
+            text = "›"
+            textSize = 28f
+            gravity = Gravity.CENTER
+            setTextColor(Color.BLACK)
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16.dp(), 0, 10.dp(), 0)
+            addView(LinearLayout(context).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                addView(TextView(context).apply {
+                    setText(question)
+                    textSize = 16f
+                    setTextColor(Color.BLACK)
+                }, LinearLayout.LayoutParams(0, 56.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
+                addView(arrow, LinearLayout.LayoutParams(28.dp(), 56.dp()))
+            })
+            addView(detail)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                val expanding = detail.visibility != View.VISIBLE
+                detail.visibility = if (expanding) View.VISIBLE else View.GONE
+                arrow.text = if (expanding) "⌄" else "›"
+            }
+        }
+    }
+
+    private fun addHelpSupportSection() {
+        addHelpSectionHeader(R.string.xingdun_help_section_support)
+        val group = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+        }
+        if (XingDunSessionManager.currentSession()?.features?.customerService == true) {
+            val contactRow = LinearLayout(this)
+            group.addView(contactRow)
+            group.addView(helpDivider())
+            loadHelpCustomerService(contactRow)
+        }
+        group.addView(helpNavigationRow(R.string.xingdun_feedback) { startChildMode(MODE_FEEDBACK) })
+        group.addView(helpDivider())
+        group.addView(helpNavigationRow(R.string.xingdun_report_violation) { startChildMode(MODE_REPORT_CREATE) })
+        content.addView(group, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        content.addView(TextView(this).apply {
+            setText(R.string.xingdun_help_support_footer)
+            textSize = 13f
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(14.dp(), 10.dp(), 14.dp(), 16.dp())
+        })
+    }
+
+    private fun helpNavigationRow(title: Int, detail: Int? = null, action: () -> Unit): LinearLayout =
+        LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(16.dp(), 0, 10.dp(), 0)
+            addView(TextView(context).apply {
+                setText(title)
+                textSize = 16f
+                setTextColor(Color.BLACK)
+            }, LinearLayout.LayoutParams(0, 56.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
+            detail?.let {
+                addView(TextView(context).apply {
+                    setText(it)
+                    textSize = 13f
+                    setTextColor(0xFF8A8A8F.toInt())
+                    gravity = Gravity.CENTER_VERTICAL
+                })
+            }
+            addView(TextView(context).apply {
+                text = "›"
+                textSize = 28f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF8A8A8F.toInt())
+            }, LinearLayout.LayoutParams(28.dp(), 56.dp()))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { action() }
+        }
+
+    private fun startChildMode(childMode: String) {
+        startActivity(Intent(this, XingDunFeatureActivity::class.java).apply {
+            putExtra(EXTRA_MODE, childMode)
+            if (BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false)) {
+                putExtra(EXTRA_DEBUG_BYPASS_LOGIN, true)
+            }
+        })
+    }
+
+    private fun helpDivider(): View = View(this).apply {
+        setBackgroundColor(0xFFE7E7EA.toInt())
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1.dp()).apply {
+            marginStart = 16.dp()
+        }
+    }
+
+    private fun loadHelpCustomerService(row: LinearLayout) {
+        configureHelpCustomerServiceRow(row, R.string.xingdun_contact_enterprise_support, R.string.xingdun_loading) {}
+        lifecycleScope.launch {
+            runCatching {
+                XingDunSessionManager.apiClient().get<JsonObject>(
+                    requireSession(), "cs/identity", emptyMap(), JsonObject::class.java
+                )
+            }.onSuccess { identity ->
+                val official = identity.string("official_cs_tim_user_id")
+                val assigned = identity.array("customer_services").firstOrNull()?.asJsonObject?.string("tim_user_id")
+                val target = official?.takeIf(String::isNotBlank) ?: assigned?.takeIf(String::isNotBlank)
+                if (target == null) {
+                    configureHelpCustomerServiceRow(
+                        row,
+                        R.string.xingdun_contact_enterprise_support,
+                        R.string.xingdun_customer_service_not_configured,
+                    ) {}
+                } else {
+                    configureHelpCustomerServiceRow(row, R.string.xingdun_contact_enterprise_support, null) {
+                        ChatActivity.start(this@XingDunFeatureActivity, "c2c_$target")
+                    }
+                }
+            }.onFailure {
+                configureHelpCustomerServiceRow(
+                    row,
+                    R.string.xingdun_contact_enterprise_support,
+                    R.string.xingdun_customer_service_load_retry,
+                ) { loadHelpCustomerService(row) }
+            }
+        }
+    }
+
+    private fun configureHelpCustomerServiceRow(row: LinearLayout, title: Int, detail: Int?, action: () -> Unit) {
+        row.removeAllViews()
+        val configured = helpNavigationRow(title, detail, action)
+        while (configured.childCount > 0) row.addView(configured.getChildAt(0).also { configured.removeView(it) })
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(16.dp(), 0, 10.dp(), 0)
+        row.isClickable = true
+        row.isFocusable = true
+        row.setOnClickListener { action() }
     }
 
     private fun showPermissionManagement() {
@@ -2464,7 +2665,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_DEACTIVATE -> R.string.xingdun_deactivate_account
         MODE_NOTIFICATIONS -> R.string.xingdun_notification_settings
         MODE_STORAGE -> R.string.xingdun_storage_management
-        MODE_HELP -> R.string.xingdun_help_center
+        MODE_HELP -> R.string.xingdun_help_feedback_title
         MODE_PERMISSIONS -> R.string.xingdun_permission_management
         MODE_ABOUT -> R.string.xingdun_about
         MODE_USER_AGREEMENT -> R.string.xingdun_user_agreement
