@@ -36,6 +36,7 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.NotificationManagerCompat
@@ -86,6 +87,12 @@ import java.util.UUID
 
 /** Thin, product-owned screens for XingDun services that are not provided by TUIKit. */
 open class XingDunFeatureActivity : BaseActivity() {
+
+    private data class InviteInformation(
+        val inviteCode: String,
+        val shareUrl: String,
+        val qrPayload: String,
+    )
 
     override val requiresLogin: Boolean
         get() = !(BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false))
@@ -143,7 +150,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         val poster = pendingInvitePoster
         pendingInvitePoster = null
         if (granted && poster != null) saveInvitePoster(poster)
-        else status.setText(R.string.xingdun_invite_poster_permission_denied)
+        else showInvitePosterSettingsPrompt()
     }
 
     private val personalQRCodeStoragePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -712,64 +719,127 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showInvite() {
+        applyPersonalQRCodeChrome()
+        showInvitePosterLoading()
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
-                XingDunSessionManager.apiClient().get<JsonObject>(
-                    requireSession(), "share/inviteInfo", emptyMap(), JsonObject::class.java
+                val session = requireSession()
+                val response = XingDunSessionManager.apiClient().get<JsonObject>(
+                    session, "share/inviteInfo", emptyMap(), JsonObject::class.java
                 )
+                validateInviteInformation(response, session.companyCode)
             }.onSuccess { invitation ->
                 setBusy(false)
-                val shareUrl = invitation.string("share_url").orEmpty()
-                val qrPayload = invitation.string("qr_payload").orEmpty()
-                val inviteCode = invitation.string("invite_code").orEmpty()
-                addCard(
-                    getString(R.string.xingdun_invite_title),
-                    listOfNotNull(
-                        inviteCode,
-                        getString(R.string.xingdun_invited_count, invitation.int("invited_count") ?: 0),
-                        shareUrl.takeIf(String::isNotBlank)
-                    ).joinToString("\n")
+                val qrBitmap = BarcodeEncoder().encodeBitmap(
+                    invitation.qrPayload,
+                    BarcodeFormat.QR_CODE,
+                    720,
+                    720,
                 )
-                val qrBitmap = qrPayload.takeIf(String::isNotBlank)?.let { payload ->
-                    runCatching { BarcodeEncoder().encodeBitmap(payload, BarcodeFormat.QR_CODE, 720, 720) }
-                        .getOrNull()
-                }
-                if (qrBitmap != null) {
-                    createInvitePoster(qrBitmap, inviteCode, requireSession().nickname).let { poster ->
-                        content.addView(ImageView(this@XingDunFeatureActivity).apply {
-                            setImageBitmap(poster)
-                            contentDescription = getString(R.string.xingdun_invite_poster_description)
-                            adjustViewBounds = true
-                        })
-                        content.addView(actionButton(R.string.xingdun_save_invite_poster) {
-                            saveInvitePoster(poster)
-                        })
-                    }
-                }
-                if (shareUrl.isNotBlank()) {
-                    content.addView(actionButton(R.string.xingdun_copy_share_link) {
-                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.xingdun_copy_share_link), shareUrl))
-                        status.setText(R.string.xingdun_share_link_copied)
-                    })
-                    content.addView(actionButton(R.string.xingdun_share) {
-                        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(
-                                Intent.EXTRA_TEXT,
-                                getString(
-                                    R.string.xingdun_invite_share_text,
-                                    requireSession().nickname,
-                                    invitation.string("invite_code").orEmpty(),
-                                    shareUrl
-                                )
-                            )
-                        }, getString(R.string.xingdun_share)))
-                    })
-                }
-            }.onFailure(::showFailure)
+                val poster = createInvitePoster(qrBitmap, invitation.inviteCode, requireSession().nickname)
+                renderInvitePoster(poster, invitation.shareUrl)
+            }.onFailure {
+                setBusy(false)
+                showInvitePosterUnavailable()
+            }
         }
+    }
+
+    private fun validateInviteInformation(response: JsonObject, currentCompanyCode: String): InviteInformation {
+        val inviteCode = response.string("invite_code")?.lowercase().orEmpty()
+        val shareUrl = response.string("share_url").orEmpty()
+        val deepLink = response.string("deep_link").orEmpty()
+        val qrPayload = response.string("qr_payload").orEmpty()
+        val invitedCount = response.int("invited_count") ?: -1
+        require(inviteCode.matches(Regex("^[23456789abcdefghjkmnpqrstuvwxyz]{6,20}$")))
+        require(invitedCount >= 0)
+        val shareUri = Uri.parse(shareUrl)
+        require(shareUri.scheme.equals("https", ignoreCase = true) && shareUri.host != null)
+        require(shareUri.path?.endsWith("/xingdun/share.html") == true)
+
+        val payloadRoute = XingDunQRCodeParser.parse(qrPayload) as? XingDunQRCodeRoute.Invitation
+            ?: error("Invalid invitation QR payload")
+        val shareRoute = XingDunQRCodeParser.parse(shareUrl) as? XingDunQRCodeRoute.Invitation
+            ?: error("Invalid invitation share URL")
+        val deepLinkRoute = XingDunQRCodeParser.parse(deepLink) as? XingDunQRCodeRoute.Invitation
+            ?: error("Invalid invitation deep link")
+        val companyCode = requireNotNull(payloadRoute.companyCode)
+        require(payloadRoute.code == inviteCode && shareRoute.code == inviteCode && deepLinkRoute.code == inviteCode)
+        require(shareRoute.companyCode.equals(companyCode, ignoreCase = true))
+        require(deepLinkRoute.companyCode.equals(companyCode, ignoreCase = true))
+        require(companyCode.equals(currentCompanyCode, ignoreCase = true))
+        response.string("company_code")?.let { require(it.equals(companyCode, ignoreCase = true)) }
+        return InviteInformation(inviteCode, shareUrl, qrPayload)
+    }
+
+    private fun showInvitePosterLoading() {
+        content.removeAllViews()
+        content.gravity = Gravity.CENTER
+        content.addView(TextView(this).apply {
+            setText(R.string.xingdun_invite_poster_preparing)
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setTextColor(Color.LTGRAY)
+            setPadding(0, 180.dp(), 0, 0)
+        })
+    }
+
+    private fun renderInvitePoster(poster: Bitmap, shareUrl: String) {
+        content.removeAllViews()
+        content.gravity = Gravity.CENTER_HORIZONTAL
+        content.addView(ImageView(this).apply {
+            setImageBitmap(poster)
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = getString(R.string.xingdun_invite_poster_description)
+            background = roundedDrawable(Color.WHITE, 16f)
+            clipToOutline = true
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = 4.dp()
+            marginStart = 30.dp()
+            marginEnd = 30.dp()
+        })
+        content.addView(invitePosterButton(R.string.xingdun_save_invite_poster, primary = true) {
+            saveInvitePoster(poster)
+        })
+        content.addView(invitePosterButton(R.string.xingdun_copy_share_link, primary = false) {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.xingdun_copy_share_link), shareUrl))
+            showInvitePosterFeedback(R.string.xingdun_share_link_copied)
+        })
+    }
+
+    private fun invitePosterButton(label: Int, primary: Boolean, action: () -> Unit): Button =
+        actionButton(label, action).apply {
+            setTextColor(if (primary) Color.WHITE else 0xFF28B7A2.toInt())
+            background = roundedDrawable(if (primary) 0xFF28B7A2.toInt() else 0xFF063B36.toInt(), 10f)
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()).apply {
+                topMargin = 12.dp()
+                marginStart = 30.dp()
+                marginEnd = 30.dp()
+            }
+        }
+
+    private fun showInvitePosterUnavailable() {
+        content.removeAllViews()
+        content.gravity = Gravity.CENTER
+        content.addView(TextView(this).apply {
+            setText(R.string.xingdun_invite_poster_unavailable)
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+        })
+        content.addView(TextView(this).apply {
+            setText(R.string.xingdun_invite_poster_unavailable_detail)
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(Color.LTGRAY)
+            setPadding(0, 10.dp(), 0, 12.dp())
+        })
+        content.addView(invitePosterButton(R.string.xingdun_retry, primary = true) {
+            showInvite()
+        })
     }
 
     private fun createInvitePoster(qrBitmap: Bitmap, inviteCode: String, nickname: String): Bitmap {
@@ -781,12 +851,12 @@ open class XingDunFeatureActivity : BaseActivity() {
         canvas.drawRect(0f, 0f, 1_080f, 430f, paint)
         paint.color = Color.rgb(31, 140, 89)
         canvas.drawRect(0f, 414f, 1_080f, 430f, paint)
-        drawPosterText(canvas, paint, getString(R.string.demo_app_name), 120f, 62f, Color.WHITE, true)
+        drawPosterText(canvas, paint, getString(R.string.xingdun_platform_brand_name), 120f, 62f, Color.WHITE, true)
         drawPosterText(canvas, paint, getString(R.string.xingdun_invite_poster_tagline), 210f, 32f, Color.WHITE)
         drawPosterText(
             canvas,
             paint,
-            getString(R.string.xingdun_invite_poster_invitation, nickname.ifBlank { getString(R.string.demo_app_name) }),
+            getString(R.string.xingdun_invite_poster_invitation, nickname.ifBlank { getString(R.string.xingdun_platform_brand_name) }),
             326f,
             32f,
             Color.rgb(220, 229, 238)
@@ -865,12 +935,27 @@ open class XingDunFeatureActivity : BaseActivity() {
                 }
             }.onSuccess {
                 setBusy(false)
-                status.setText(R.string.xingdun_invite_poster_saved)
+                showInvitePosterFeedback(R.string.xingdun_invite_poster_saved)
             }.onFailure {
                 setBusy(false)
-                status.setText(R.string.xingdun_invite_poster_save_failed)
+                showInvitePosterFeedback(R.string.xingdun_invite_poster_save_failed)
             }
         }
+    }
+
+    private fun showInvitePosterFeedback(message: Int) {
+        status.setText(message)
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showInvitePosterSettingsPrompt() {
+        AlertDialog.Builder(this)
+            .setMessage(R.string.xingdun_invite_poster_permission_denied)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.xingdun_open_settings) { _, _ ->
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            }
+            .show()
     }
 
     private fun showFeedbackForm() {
@@ -2366,7 +2451,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_WORKSPACE_CREATE -> R.string.xingdun_workspace_create
         MODE_CUSTOMER_SERVICE -> R.string.xingdun_customer_service
         MODE_CUSTOMER_SERVICE_GROUP -> R.string.xingdun_customer_service_group_management
-        MODE_INVITE -> R.string.xingdun_invite_title
+        MODE_INVITE -> R.string.xingdun_share_poster
         MODE_FEEDBACK -> R.string.xingdun_feedback
         MODE_VERSION -> R.string.xingdun_version
         MODE_REPORTS -> R.string.xingdun_reports
