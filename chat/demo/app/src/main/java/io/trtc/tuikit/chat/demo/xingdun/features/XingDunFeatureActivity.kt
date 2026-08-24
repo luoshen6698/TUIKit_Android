@@ -13,6 +13,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -22,8 +23,10 @@ import android.provider.Settings
 import android.text.InputType
 import android.text.format.Formatter
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -52,6 +55,7 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.google.zxing.common.HybridBinarizer
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
+import io.trtc.tuikit.atomicx.common.imageloader.ImageLoader
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.atomicxcore.api.contact.GetContactInfoCompletionHandler
 import io.trtc.tuikit.atomicxcore.api.group.GetGroupInfoCompletionHandler
@@ -87,12 +91,23 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private lateinit var content: LinearLayout
     private lateinit var status: TextView
+    private lateinit var scrollView: ScrollView
     private val mode: String by lazy { intent.getStringExtra(EXTRA_MODE).orEmpty() }
     private val itemId: Int by lazy { intent.getIntExtra(EXTRA_ITEM_ID, 0) }
     private val targetID: String by lazy { intent.getStringExtra(EXTRA_TARGET_ID).orEmpty() }
     private val targetType: String by lazy { intent.getStringExtra(EXTRA_TARGET_TYPE).orEmpty() }
     private var attachmentSelectionHandler: ((List<XingDunAttachment>) -> Unit)? = null
     private var pendingInvitePoster: Bitmap? = null
+    private var reportTargetFilter: String? = null
+    private var reportStatusFilter: Int? = null
+    private var reportPage = 1
+    private var reportTotal = 0
+    private var reportLoading = false
+    private var reportTouchStartY = 0f
+    private val reportRecords = mutableListOf<JsonObject>()
+    private var reportListContainer: LinearLayout? = null
+    private val debugReportFixtureEnabled: Boolean
+        get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_REPORT_FIXTURE, false)
 
     private val attachmentPicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isEmpty()) return@registerForActivityResult
@@ -143,6 +158,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             MODE_FEEDBACK -> showFeedbackForm()
             MODE_VERSION -> showVersion()
             MODE_REPORTS -> showReports()
+            MODE_REPORT_DETAIL -> showReportDetail()
             MODE_REPORT_CREATE -> showReportForm()
             MODE_PERSONAL_QR -> showPersonalQRCode()
             MODE_QR_SCANNER -> showQRCodeScanner()
@@ -181,14 +197,15 @@ open class XingDunFeatureActivity : BaseActivity() {
                 setPadding(12.dp(), 0, 0, 0)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         })
-        root.addView(ScrollView(this).apply {
+        scrollView = ScrollView(this).apply {
             isFillViewport = true
             content = LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(18.dp(), 14.dp(), 18.dp(), 30.dp())
             }
             addView(content)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+        root.addView(scrollView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         status = TextView(this).apply {
             setPadding(18.dp(), 10.dp(), 18.dp(), 10.dp())
             textSize = 14f
@@ -960,26 +977,416 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showReports() {
+        buildReportFilters()
+        reportListContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(reportListContainer)
+        scrollView.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> reportTouchStartY = event.y
+                MotionEvent.ACTION_UP -> {
+                    if (scrollView.scrollY == 0 && event.y - reportTouchStartY > 120.dp()) {
+                        loadReports(reset = true)
+                    }
+                }
+            }
+            false
+        }
+        if (BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false)) {
+            if (debugReportFixtureEnabled) reportRecords += debugReportFixture()
+            renderReportList()
+        } else {
+            loadReports(reset = true)
+        }
+    }
+
+    private fun buildReportFilters() {
+        val targetValues = listOf<String?>(null, "user", "team", "message")
+        val targetLabels = listOf(
+            getString(R.string.xingdun_all),
+            getString(R.string.xingdun_report_target_user),
+            getString(R.string.xingdun_report_target_team),
+            getString(R.string.xingdun_report_target_message),
+        )
+        val statusValues = listOf<Int?>(null, 1, 2, 3, 4, 5)
+        val statusLabels = listOf(
+            getString(R.string.xingdun_all),
+            getString(R.string.xingdun_report_status_pending),
+            getString(R.string.xingdun_report_status_processing),
+            getString(R.string.xingdun_report_status_confirmed),
+            getString(R.string.xingdun_report_status_clean),
+            getString(R.string.xingdun_report_status_rejected),
+        )
+        var initializedSelections = 0
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(14.dp(), 10.dp(), 14.dp(), 10.dp())
+            background = roundedDrawable(Color.WHITE, 18f)
+        }
+        card.addView(TextView(this).apply {
+            setText(R.string.xingdun_filter)
+            textSize = 14f
+            setTextColor(Color.DKGRAY)
+            setPadding(2.dp(), 0, 2.dp(), 8.dp())
+        })
+        card.addView(reportFilterRow(R.string.xingdun_report_target_type, targetLabels) { position ->
+            reportTargetFilter = targetValues[position]
+            initializedSelections += 1
+            if (initializedSelections > 2) loadReports(reset = true)
+        })
+        card.addView(reportFilterRow(R.string.xingdun_report_processing_status, statusLabels) { position ->
+            reportStatusFilter = statusValues[position]
+            initializedSelections += 1
+            if (initializedSelections > 2) loadReports(reset = true)
+        })
+        content.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = 18.dp()
+        })
+    }
+
+    private fun reportFilterRow(label: Int, values: List<String>, onSelected: (Int) -> Unit): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = 52.dp()
+            addView(TextView(context).apply {
+                setText(label)
+                textSize = 16f
+                setTextColor(Color.BLACK)
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(Spinner(context).apply {
+                adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, values)
+                onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) = onSelected(position)
+                    override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+                }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+
+    private fun loadReports(reset: Boolean) {
+        if (reportLoading) return
+        reportLoading = true
+        val requestedPage = if (reset) 1 else reportPage + 1
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
                 XingDunSessionManager.apiClient().get<JsonObject>(
-                    requireSession(), "report/list", mapOf("page" to "1", "page_size" to "50"), JsonObject::class.java
+                    requireSession(),
+                    "report/list",
+                    mapOf(
+                        "target_type" to reportTargetFilter,
+                        "status" to reportStatusFilter?.toString(),
+                        "page" to requestedPage.toString(),
+                        "page_size" to REPORT_PAGE_SIZE.toString(),
+                    ),
+                    JsonObject::class.java,
                 )
             }.onSuccess { page ->
+                reportLoading = false
                 setBusy(false)
-                val list = page.array("list")
-                if (list.isEmpty) addMessage(R.string.xingdun_reports_empty)
-                list.forEach { element ->
-                    val item = element.asJsonObject
-                    addCard(
-                        item.string("reason_text") ?: item.string("reason") ?: getString(R.string.xingdun_report),
-                        listOfNotNull(item.string("target_type"), item.string("status_text"), item.string("create_time"))
-                            .joinToString(" · ")
-                    )
+                if (reset) reportRecords.clear()
+                page.array("list").forEach { element ->
+                    val item = element.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@forEach
+                    val id = item.int("id") ?: return@forEach
+                    if (reportRecords.none { it.int("id") == id }) reportRecords += item
                 }
-            }.onFailure(::showFailure)
+                reportPage = requestedPage
+                reportTotal = page.int("total") ?: reportRecords.size
+                renderReportList()
+            }.onFailure { error ->
+                reportLoading = false
+                showFailure(error)
+                if (reportRecords.isEmpty()) renderReportList(error.localizedMessage)
+            }
         }
+    }
+
+    private fun renderReportList(errorMessage: String? = null) {
+        val container = reportListContainer ?: return
+        container.removeAllViews()
+        if (reportRecords.isEmpty()) {
+            container.addView(reportEmptyState(errorMessage))
+            return
+        }
+        reportRecords.forEach { record -> container.addView(reportHistoryRow(record)) }
+        if (reportRecords.size < reportTotal) {
+            container.addView(actionButton(R.string.xingdun_load_more) { loadReports(reset = false) })
+        }
+    }
+
+    private fun reportEmptyState(errorMessage: String?): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(20.dp(), 42.dp(), 20.dp(), 42.dp())
+        addView(ImageView(context).apply {
+            setImageResource(R.drawable.xingdun_ic_mine_report)
+            imageTintList = android.content.res.ColorStateList.valueOf(0xFF23B39C.toInt())
+        }, LinearLayout.LayoutParams(64.dp(), 64.dp()))
+        addView(TextView(context).apply {
+            text = errorMessage ?: getString(R.string.xingdun_reports_empty)
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setTextColor(Color.DKGRAY)
+            setPadding(0, 14.dp(), 0, 4.dp())
+        })
+        addView(TextView(context).apply {
+            setText(if (errorMessage == null) R.string.xingdun_reports_empty_detail else R.string.xingdun_pull_to_refresh)
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(Color.GRAY)
+        })
+    }
+
+    private fun reportHistoryRow(record: JsonObject): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(14.dp(), 12.dp(), 14.dp(), 12.dp())
+        background = roundedDrawable(Color.WHITE, 16f)
+        isClickable = true
+        isFocusable = true
+        setOnClickListener {
+            record.int("id")?.takeIf { it > 0 }?.let { reportID ->
+                if (debugReportFixtureEnabled) {
+                    startActivity(Intent(this@XingDunFeatureActivity, XingDunFeatureActivity::class.java).apply {
+                        putExtra(EXTRA_MODE, MODE_REPORT_DETAIL)
+                        putExtra(EXTRA_ITEM_ID, reportID)
+                        putExtra(EXTRA_DEBUG_BYPASS_LOGIN, true)
+                        putExtra(EXTRA_DEBUG_REPORT_FIXTURE, true)
+                    })
+                } else {
+                    start(this@XingDunFeatureActivity, MODE_REPORT_DETAIL, reportID)
+                }
+            }
+        }
+        addView(ImageView(context).apply {
+            setImageResource(reportTargetIcon(record.string("target_type")))
+            imageTintList = android.content.res.ColorStateList.valueOf(0xFFF0A526.toInt())
+        }, LinearLayout.LayoutParams(32.dp(), 32.dp()).apply { marginEnd = 12.dp() })
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(context).apply {
+                text = record.string("target_name") ?: reportTargetText(record.string("target_type"))
+                textSize = 16f
+                setTextColor(Color.BLACK)
+                maxLines = 1
+            })
+            addView(TextView(context).apply {
+                text = listOfNotNull(
+                    reportReasonText(record.string("reason"), record.string("reason_text")),
+                    record.string("report_no"),
+                ).joinToString(" · ")
+                textSize = 13f
+                setTextColor(Color.DKGRAY)
+                maxLines = 1
+            })
+            record.string("create_time")?.let { value ->
+                addView(TextView(context).apply { text = value; textSize = 12f; setTextColor(Color.GRAY) })
+            }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        addView(reportStatusBadge(record.int("status"), record.string("status_text")))
+    }.also { row ->
+        row.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = 10.dp()
+        }
+    }
+
+    private fun showReportDetail() {
+        if (itemId <= 0) {
+            showFailure(IllegalArgumentException(getString(R.string.xingdun_report_invalid_target)))
+            return
+        }
+        if (BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false)) {
+            renderReportDetail(debugReportFixture())
+            return
+        }
+        setBusy(true)
+        lifecycleScope.launch {
+            runCatching {
+                XingDunSessionManager.apiClient().get<JsonObject>(
+                    requireSession(), "report/read", mapOf("id" to itemId.toString()), JsonObject::class.java
+                )
+            }.onSuccess {
+                setBusy(false)
+                renderReportDetail(it)
+            }.onFailure { error ->
+                showFailure(error)
+                content.addView(actionButton(R.string.xingdun_retry) { content.removeAllViews(); showReportDetail() })
+            }
+        }
+    }
+
+    private fun renderReportDetail(report: JsonObject) {
+        content.removeAllViews()
+        addDetailSection(null, listOf(
+            getString(R.string.xingdun_report_processing_status) to reportStatusText(report.int("status"), report.string("status_text")),
+            getString(R.string.xingdun_report_number) to report.string("report_no").orEmpty(),
+            getString(R.string.xingdun_report_target) to (report.string("target_name") ?: reportTargetText(report.string("target_type"))),
+            getString(R.string.xingdun_report_target_id) to report.string("target_id").orEmpty(),
+            getString(R.string.xingdun_report_reason) to reportReasonText(report.string("reason"), report.string("reason_text")),
+            getString(R.string.xingdun_report_submitted_at) to report.string("create_time").orEmpty(),
+        ))
+        report.string("description")?.let { addDetailTextSection(R.string.xingdun_report_description_section, it) }
+        val screenshots = report.array("screenshot").mapNotNull { element ->
+            element.takeUnless(JsonElement::isJsonNull)?.let { runCatching { it.asString }.getOrNull() }
+        }
+        if (screenshots.isNotEmpty()) {
+            addSectionTitle(R.string.xingdun_report_screenshot_evidence)
+            screenshots.forEach { url ->
+                content.addView(ImageView(this).apply {
+                    adjustViewBounds = true
+                    scaleType = ImageView.ScaleType.CENTER_INSIDE
+                    background = roundedDrawable(Color.WHITE, 14f)
+                    ImageLoader.load(this@XingDunFeatureActivity, this, url, R.drawable.xingdun_ic_mine_report)
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = 10.dp()
+                })
+            }
+        }
+        val handleResult = report.string("handle_result")
+        if ((report.int("status") ?: 0) >= 3 || handleResult != null) {
+            addDetailSection(R.string.xingdun_report_processing_result, listOfNotNull(
+                getString(R.string.xingdun_report_result) to (handleResult ?: reportStatusText(report.int("status"), report.string("status_text"))),
+                report.string("resolution_action")?.takeUnless { it == "none" }?.let {
+                    getString(R.string.xingdun_report_resolution_action) to reportResolutionText(it)
+                },
+                report.string("handle_time")?.let { getString(R.string.xingdun_report_handled_at) to it },
+            ))
+        }
+    }
+
+    private fun addSectionTitle(label: Int) {
+        content.addView(TextView(this).apply {
+            setText(label)
+            textSize = 14f
+            setTextColor(Color.DKGRAY)
+            setPadding(4.dp(), 12.dp(), 4.dp(), 8.dp())
+        })
+    }
+
+    private fun addDetailSection(title: Int?, rows: List<Pair<String, String>>) {
+        val visibleRows = rows.filter { it.second.isNotBlank() }
+        if (visibleRows.isEmpty()) return
+        title?.let(::addSectionTitle)
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(14.dp(), 4.dp(), 14.dp(), 4.dp())
+            background = roundedDrawable(Color.WHITE, 16f)
+            visibleRows.forEachIndexed { index, (label, value) ->
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    minimumHeight = 48.dp()
+                    addView(TextView(context).apply {
+                        text = label
+                        textSize = 15f
+                        setTextColor(Color.BLACK)
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    if (label == getString(R.string.xingdun_report_processing_status)) {
+                        addView(reportStatusBadge(null, value))
+                    } else {
+                        addView(TextView(context).apply {
+                            text = value
+                            textSize = 14f
+                            gravity = Gravity.END
+                            setTextColor(Color.DKGRAY)
+                            setTextIsSelectable(true)
+                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.25f))
+                    }
+                    if (index < visibleRows.lastIndex) {
+                        setBackgroundColor(Color.TRANSPARENT)
+                    }
+                })
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = 12.dp()
+        })
+    }
+
+    private fun addDetailTextSection(title: Int, value: String) {
+        addSectionTitle(title)
+        content.addView(TextView(this).apply {
+            text = value
+            textSize = 15f
+            setTextColor(Color.DKGRAY)
+            setTextIsSelectable(true)
+            setPadding(14.dp(), 14.dp(), 14.dp(), 14.dp())
+            background = roundedDrawable(Color.WHITE, 16f)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = 12.dp()
+        })
+    }
+
+    private fun reportStatusBadge(statusValue: Int?, fallback: String?): TextView = TextView(this).apply {
+        text = reportStatusText(statusValue, fallback)
+        textSize = 12f
+        gravity = Gravity.CENTER
+        setPadding(9.dp(), 4.dp(), 9.dp(), 4.dp())
+        val colors = when (statusValue) {
+            1 -> 0xFFFFF0D6.toInt() to 0xFFB36B00.toInt()
+            2 -> 0xFFE1F0FF.toInt() to 0xFF2374B8.toInt()
+            3 -> 0xFFDDF6EB.toInt() to 0xFF18795F.toInt()
+            else -> 0xFFECEFF2.toInt() to 0xFF5D646B.toInt()
+        }
+        background = roundedDrawable(colors.first, 20f)
+        setTextColor(colors.second)
+    }
+
+    private fun reportStatusText(statusValue: Int?, fallback: String?): String = when (statusValue) {
+        1 -> getString(R.string.xingdun_report_status_pending)
+        2 -> getString(R.string.xingdun_report_status_processing)
+        3 -> getString(R.string.xingdun_report_status_confirmed)
+        4 -> getString(R.string.xingdun_report_status_clean)
+        5 -> getString(R.string.xingdun_report_status_rejected)
+        else -> fallback?.trim().takeUnless { it.isNullOrEmpty() } ?: getString(R.string.xingdun_unknown)
+    }
+
+    private fun reportTargetText(value: String?): String = when (value) {
+        "user" -> getString(R.string.xingdun_report_target_user)
+        "team" -> getString(R.string.xingdun_report_target_team)
+        "message" -> getString(R.string.xingdun_report_target_message)
+        else -> getString(R.string.xingdun_report_target)
+    }
+
+    private fun reportTargetIcon(value: String?): Int = when (value) {
+        "user", "team", "message" -> R.drawable.xingdun_ic_mine_report
+        else -> R.drawable.xingdun_ic_mine_report
+    }
+
+    private fun reportReasonText(value: String?, fallback: String?): String {
+        val values = resources.getStringArray(R.array.xingdun_report_reason_values)
+        val labels = resources.getStringArray(R.array.xingdun_report_reason_labels)
+        val index = values.indexOf(value)
+        return labels.getOrNull(index)
+            ?: fallback?.trim().takeUnless { it.isNullOrEmpty() }
+            ?: getString(R.string.xingdun_unknown)
+    }
+
+    private fun reportResolutionText(value: String): String = when (value) {
+        "warn" -> getString(R.string.xingdun_report_resolution_warn)
+        "content_removed" -> getString(R.string.xingdun_report_resolution_content_removed)
+        "account_restricted" -> getString(R.string.xingdun_report_resolution_account_restricted)
+        "group_restricted" -> getString(R.string.xingdun_report_resolution_group_restricted)
+        else -> value
+    }
+
+    private fun roundedDrawable(color: Int, cornerRadiusDp: Float): GradientDrawable = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(color)
+        cornerRadius = cornerRadiusDp * resources.displayMetrics.density
+    }
+
+    private fun debugReportFixture(): JsonObject = JsonObject().apply {
+        addProperty("id", itemId.takeIf { it > 0 } ?: 1)
+        addProperty("report_no", "XD202608230001")
+        addProperty("target_type", "user")
+        addProperty("target_id", "xd_demo_user")
+        addProperty("target_name", "Demo User")
+        addProperty("reason", "harassment")
+        addProperty("reason_text", getString(R.string.xingdun_report_reason))
+        addProperty("description", getString(R.string.xingdun_report_debug_description))
+        addProperty("status", 2)
+        addProperty("status_text", getString(R.string.xingdun_report_status_processing))
+        addProperty("create_time", "2026-08-23 20:24")
+        add("screenshot", JsonArray())
     }
 
     private fun showAccountSecurity() {
@@ -1808,6 +2215,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_FEEDBACK -> R.string.xingdun_feedback
         MODE_VERSION -> R.string.xingdun_version
         MODE_REPORTS -> R.string.xingdun_reports
+        MODE_REPORT_DETAIL -> R.string.xingdun_report_detail
         MODE_REPORT_CREATE -> R.string.xingdun_report
         MODE_PERSONAL_QR -> R.string.xingdun_personal_qr
         MODE_QR_SCANNER -> R.string.xingdun_scan_qr
@@ -1844,6 +2252,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     companion object {
         private const val EXTRA_MODE = "mode"
         private const val EXTRA_DEBUG_BYPASS_LOGIN = "debug_bypass_login"
+        private const val EXTRA_DEBUG_REPORT_FIXTURE = "debug_report_fixture"
         private const val EXTRA_ITEM_ID = "item_id"
         private const val EXTRA_TARGET_ID = "target_id"
         private const val EXTRA_TARGET_TYPE = "target_type"
@@ -1857,6 +2266,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_FEEDBACK = "feedback"
         const val MODE_VERSION = "version"
         const val MODE_REPORTS = "reports"
+        const val MODE_REPORT_DETAIL = "report_detail"
         const val MODE_REPORT_CREATE = "report_create"
         const val MODE_PERSONAL_QR = "personal_qr"
         const val MODE_QR_SCANNER = "qr_scanner"
@@ -1873,6 +2283,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_FAVORITES = "favorites"
         const val MODE_REDPACKET_ACCOUNT = "redpacket_account"
         const val MODE_REDPACKET_DETAIL = "redpacket_detail"
+        private const val REPORT_PAGE_SIZE = 20
 
         fun start(context: Context, mode: String, itemId: Int = 0) {
             context.startActivity(Intent(context, XingDunFeatureActivity::class.java).apply {
