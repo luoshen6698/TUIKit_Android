@@ -9,6 +9,19 @@
             android:exported="true"
             tools:replace="android:exported" />
         <activity
+            android:name="io.trtc.tuikit.chat.demo.settings.SelfDetailActivity"
+            android:exported="true"
+            tools:replace="android:exported" />
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.settings.XingDunProfileEditorActivity"
+            android:exported="true"
+            tools:replace="android:exported" />
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.settings.XingDunProfilePreviewActivity"
+            android:exported="true"
+            android:theme="@style/Chat_UIKit_Theme"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunEnglishFeatureActivity"
             android:exported="true"
             android:theme="@style/Chat_UIKit_Theme"

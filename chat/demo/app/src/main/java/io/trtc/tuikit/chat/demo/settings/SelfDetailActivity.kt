@@ -2,12 +2,16 @@ package io.trtc.tuikit.chat.demo.settings
 
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 
-import android.app.DatePickerDialog
+import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.text.TextUtils
 import android.util.TypedValue
@@ -25,17 +29,15 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.google.gson.JsonObject
-import io.trtc.tuikit.chat.uikit.components.chatsetting.ui.TextInputDialog
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
-import io.trtc.tuikit.chat.uikit.components.widgets.ActionItem
-import io.trtc.tuikit.chat.uikit.components.widgets.ActionSheet
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.login.Gender
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.login.UserProfile
 import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunUploadFile
 import kotlinx.coroutines.CoroutineScope
@@ -46,12 +48,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 
-class SelfDetailActivity : BaseActivity() {
+open class SelfDetailActivity : BaseActivity() {
 
     private val themeStore by lazy { ThemeStore.shared(this) }
     private var activityScope: CoroutineScope? = null
@@ -68,11 +66,14 @@ class SelfDetailActivity : BaseActivity() {
     private lateinit var contentColumn: LinearLayout
 
     private lateinit var avatar: Avatar
-    private lateinit var tvDisplayName: TextView
-    private lateinit var entryContainer: LinearLayout
+    private lateinit var avatarRow: LinearLayout
+    private lateinit var avatarArrow: ImageView
+    private lateinit var avatarDivider: View
+    private lateinit var identityContainer: LinearLayout
+    private lateinit var detailContainer: LinearLayout
+    private lateinit var detailsTitle: TextView
 
     private lateinit var accountItem: SettingsEntry
-    private lateinit var customIDItem: SettingsEntry
     private lateinit var nicknameItem: SettingsEntry
     private lateinit var statusItem: SettingsEntry
     private lateinit var genderItem: SettingsEntry
@@ -87,18 +88,47 @@ class SelfDetailActivity : BaseActivity() {
     private var cachedBirthday: Long? = null
     private var cachedAvatarUrl: String? = null
     private var cachedCustomID: String = ""
+    private val isDebugPreview: Boolean
+        get() = !requiresLogin && intent.getBooleanExtra(EXTRA_DEBUG_PREVIEW, false)
 
     private val avatarPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@registerForActivityResult
-        activityScope?.launch { uploadAvatar(uri) }
+        showAvatarPreview(uri)
+    }
+
+    private val profileEditor = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+        val mode = result.data?.getStringExtra(XingDunProfileEditorActivity.EXTRA_MODE).orEmpty()
+        val value = result.data?.getStringExtra(XingDunProfileEditorActivity.EXTRA_VALUE).orEmpty()
+        when (mode) {
+            XingDunProfileEditorActivity.MODE_ACCOUNT -> saveCustomID(value)
+            XingDunProfileEditorActivity.MODE_NICKNAME ->
+                updateProfileOnServer(mapOf("nickname" to value), UserProfile(nickname = value))
+            XingDunProfileEditorActivity.MODE_SIGNATURE ->
+                updateProfileOnServer(mapOf("signature" to value), UserProfile(selfSignature = value))
+            XingDunProfileEditorActivity.MODE_GENDER -> {
+                val gender = when (value) {
+                    "1" -> Gender.MALE
+                    "2" -> Gender.FEMALE
+                    else -> Gender.UNKNOWN
+                }
+                updateProfileOnServer(mapOf("gender" to value.toIntOrNull().orZero()), UserProfile(gender = gender))
+            }
+            XingDunProfileEditorActivity.MODE_BIRTHDAY -> {
+                val birthday = value.replace("-", "").toLongOrNull() ?: 0L
+                updateProfileOnServer(mapOf("birthday" to value), UserProfile(birthday = birthday))
+            }
+        }
     }
 
     companion object {
+        const val EXTRA_DEBUG_PREVIEW = "xingdun_debug_profile_preview"
+
         fun start(context: Context) {
             context.startActivity(Intent(context, SelfDetailActivity::class.java))
         }
 
-        private const val DEFAULT_BIRTHDAY_TEXT = "1970-01-01"
+        private const val BRAND = 0xFF23B39C.toInt()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -130,9 +160,12 @@ class SelfDetailActivity : BaseActivity() {
         leftContainer.setOnClickListener { finish() }
         btnMore.visibility = View.GONE
         badgeContainer.visibility = View.GONE
-        tvTitle.text = getString(R.string.demo_settings_self_detail_title)
+        tvTitle.setText(R.string.xingdun_profile_title)
 
         buildBody()
+        if (isDebugPreview) {
+            applyDebugPreviewState()
+        }
         applyColors(themeStore.themeState.value.currentTheme.tokens.color)
 
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -141,12 +174,19 @@ class SelfDetailActivity : BaseActivity() {
                 applyColors(state.currentTheme.tokens.color)
             }
         }
-        activityScope?.launch {
-            LoginStore.shared.loginState.loginUserInfo.collectLatest { profile ->
-                updateUserProfile(profile)
+        if (!isDebugPreview) {
+            activityScope?.launch {
+                LoginStore.shared.loginState.loginUserInfo.collectLatest { profile ->
+                    updateUserProfile(profile)
+                }
             }
+            activityScope?.launch { loadServerProfile() }
         }
-        activityScope?.launch { loadServerProfile() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!isDebugPreview && ::phoneItem.isInitialized) activityScope?.launch { loadServerProfile() }
     }
 
     override fun onDestroy() {
@@ -156,115 +196,120 @@ class SelfDetailActivity : BaseActivity() {
     }
 
     private fun buildBody() {
-        val density = resources.displayMetrics.density
-        val dp16 = (16f * density).toInt()
-        val dp36 = (36f * density).toInt()
-
-        avatar = Avatar(this).apply {
-            setSize(Avatar.AvatarSize.XXL)
-            setOnAvatarClickListener { avatarPicker.launch("image/*") }
-        }
-        contentColumn.addView(
-            avatar,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-                topMargin = dp16
-            }
-        )
-
-        tvDisplayName = TextView(this).apply {
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            gravity = Gravity.CENTER
-            maxLines = 3
-            setPadding(dp16, dp16, dp16, 0)
-        }
-        contentColumn.addView(
-            tvDisplayName,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-
-        entryContainer = LinearLayout(this).apply {
+        contentColumn.setPadding(16.dp(), 16.dp(), 16.dp(), 24.dp())
+        identityContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_LOCALE
         }
         contentColumn.addView(
-            entryContainer,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = dp36
-            }
+            identityContainer,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )
 
-        accountItem = SettingsEntry(
-            context = this,
-            title = getString(R.string.demo_settings_self_detail_account),
-            showArrow = false,
-            showDivider = true
-        )
-        customIDItem = SettingsEntry(
-            context = this,
-            title = getString(R.string.xingdun_custom_id),
-            showArrow = true,
-            showDivider = true,
-            onClick = { showCustomIDEditor() }
-        )
+        buildAvatarRow()
         nicknameItem = SettingsEntry(
             context = this,
             title = getString(R.string.demo_settings_self_detail_nickname),
             showArrow = true,
             showDivider = true,
-            onClick = { showNicknameEditor() }
+            onClick = { openEditor(XingDunProfileEditorActivity.MODE_NICKNAME, cachedNickname) },
+        )
+        accountItem = SettingsEntry(
+            context = this,
+            title = getString(R.string.demo_settings_self_detail_account),
+            showArrow = true,
+            showDivider = true,
+            onClick = { openEditor(XingDunProfileEditorActivity.MODE_ACCOUNT, cachedCustomID) },
         )
         statusItem = SettingsEntry(
             context = this,
             title = getString(R.string.demo_settings_self_detail_status),
             showArrow = true,
-            showDivider = true,
-            onClick = { showStatusEditor() }
+            showDivider = false,
+            onClick = { openEditor(XingDunProfileEditorActivity.MODE_SIGNATURE, cachedSignature) },
         )
+
+        identityContainer.addView(nicknameItem.view, entryLayoutParams())
+        identityContainer.addView(accountItem.view, entryLayoutParams())
+        identityContainer.addView(statusItem.view, entryLayoutParams())
+
+        detailsTitle = TextView(this).apply {
+            setText(R.string.xingdun_profile_details_section)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(12.dp(), 22.dp(), 12.dp(), 10.dp())
+        }
+        contentColumn.addView(detailsTitle)
+        detailContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_LOCALE
+        }
+        contentColumn.addView(
+            detailContainer,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
+
         genderItem = SettingsEntry(
             context = this,
             title = getString(R.string.demo_settings_self_detail_gender),
             showArrow = true,
             showDivider = true,
-            onClick = { showGenderSelector() }
+            onClick = { openEditor(XingDunProfileEditorActivity.MODE_GENDER, genderServerValue()) },
         )
         birthdayItem = SettingsEntry(
             context = this,
             title = getString(R.string.demo_settings_self_detail_birthday),
             showArrow = true,
             showDivider = true,
-            onClick = { showBirthdayPicker() }
+            onClick = { openEditor(XingDunProfileEditorActivity.MODE_BIRTHDAY, birthdayDisplayText(cachedBirthday).takeUnless { it == getString(R.string.xingdun_not_set) }.orEmpty()) },
         )
         phoneItem = SettingsEntry(
             context = this,
             title = getString(R.string.xingdun_phone),
-            showArrow = false,
-            showDivider = true
+            showArrow = true,
+            showDivider = true,
+            onClick = { XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_ACCOUNT_SECURITY) },
         )
         emailItem = SettingsEntry(
             context = this,
             title = getString(R.string.xingdun_email),
-            showArrow = false,
-            showDivider = false
+            showArrow = true,
+            showDivider = false,
+            onClick = { XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_ACCOUNT_SECURITY) },
         )
 
-        entryContainer.addView(accountItem.view, entryLayoutParams())
-        entryContainer.addView(customIDItem.view, entryLayoutParams())
-        entryContainer.addView(nicknameItem.view, entryLayoutParams())
-        entryContainer.addView(statusItem.view, entryLayoutParams())
-        entryContainer.addView(genderItem.view, entryLayoutParams())
-        entryContainer.addView(birthdayItem.view, entryLayoutParams())
-        entryContainer.addView(phoneItem.view, entryLayoutParams())
-        entryContainer.addView(emailItem.view, entryLayoutParams())
+        detailContainer.addView(genderItem.view, entryLayoutParams())
+        detailContainer.addView(birthdayItem.view, entryLayoutParams())
+        detailContainer.addView(phoneItem.view, entryLayoutParams())
+        detailContainer.addView(emailItem.view, entryLayoutParams())
+    }
+
+    private fun buildAvatarRow() {
+        avatarRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(16.dp(), 10.dp(), 16.dp(), 10.dp())
+            minimumHeight = 76.dp()
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showAvatarActions() }
+        }
+        avatarRow.addView(TextView(this).apply {
+            setText(R.string.xingdun_profile_avatar)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        avatar = Avatar(this).apply {
+            setSize(Avatar.AvatarSize.L)
+            setOnAvatarClickListener { showAvatarActions() }
+        }
+        avatarRow.addView(avatar)
+        avatarArrow = ImageView(this).apply { setImageResource(R.drawable.demo_ic_arrow_right) }
+        avatarRow.addView(avatarArrow, LinearLayout.LayoutParams(7.dp(), 12.dp()).apply { marginStart = 10.dp() })
+        identityContainer.addView(avatarRow, entryLayoutParams())
+        avatarDivider = View(this)
+        identityContainer.addView(avatarDivider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1.dp()).apply {
+            marginStart = 16.dp()
+        })
     }
 
     private fun entryLayoutParams(): LinearLayout.LayoutParams =
@@ -280,11 +325,14 @@ class SelfDetailActivity : BaseActivity() {
         btnBack.imageTintList = ColorStateList.valueOf(colors.textColorSecondary)
         headerDivider.setBackgroundColor(colors.strokeColorPrimary)
 
-        entryContainer.setBackgroundColor(colors.bgColorOperate)
-        tvDisplayName.setTextColor(colors.textColorPrimary)
+        identityContainer.background = roundedBackground(colors.bgColorOperate, 18f)
+        detailContainer.background = roundedBackground(colors.bgColorOperate, 18f)
+        detailsTitle.setTextColor(colors.textColorSecondary)
+        (avatarRow.getChildAt(0) as? TextView)?.setTextColor(colors.textColorPrimary)
+        avatarArrow.setColorFilter(colors.textColorTertiary)
+        avatarDivider.setBackgroundColor(colors.strokeColorPrimary)
 
         accountItem.applyColors(colors)
-        customIDItem.applyColors(colors)
         nicknameItem.applyColors(colors)
         statusItem.applyColors(colors)
         genderItem.applyColors(colors)
@@ -302,14 +350,12 @@ class SelfDetailActivity : BaseActivity() {
         cachedAvatarUrl = profile?.avatarURL
 
         val displayName = if (cachedNickname.isNotEmpty()) cachedNickname else cachedUserID
-        tvDisplayName.text = displayName
         avatar.setContent(
             Avatar.AvatarContent.Image(url = cachedAvatarUrl, fallbackName = displayName)
         )
-        accountItem.setValue(cachedUserID)
-        customIDItem.setValue(cachedCustomID)
+        accountItem.setValue(cachedCustomID.ifBlank { getString(R.string.xingdun_not_set) })
         nicknameItem.setValue(cachedNickname)
-        statusItem.setValue(cachedSignature)
+        statusItem.setValue(cachedSignature.ifBlank { getString(R.string.xingdun_not_set) })
         genderItem.setValue(genderDisplayText(cachedGender))
         birthdayItem.setValue(birthdayDisplayText(cachedBirthday))
     }
@@ -322,42 +368,126 @@ class SelfDetailActivity : BaseActivity() {
             )
         }.onSuccess { profile ->
             cachedCustomID = profile.string("custom_id").orEmpty()
-            customIDItem.setValue(cachedCustomID.ifBlank { getString(R.string.xingdun_not_set) })
+            cachedNickname = profile.string("nickname") ?: cachedNickname
+            cachedSignature = profile.string("signature").orEmpty()
+            cachedGender = when (profile.get("gender")?.asInt) {
+                1 -> Gender.MALE
+                2 -> Gender.FEMALE
+                else -> Gender.UNKNOWN
+            }
+            cachedBirthday = profile.string("birthday")?.replace("-", "")?.toLongOrNull()
+            cachedAvatarUrl = profile.get("avatar")?.takeUnless { it.isJsonNull }?.asString?.trim()?.takeIf(String::isNotEmpty)
             phoneItem.setValue(profile.string("phone")?.let(::maskPhone) ?: getString(R.string.xingdun_not_bound))
             emailItem.setValue(profile.string("email")?.let(::maskEmail) ?: getString(R.string.xingdun_not_bound))
-            profile.string("avatar")?.let { url ->
-                cachedAvatarUrl = url
-                avatar.setContent(Avatar.AvatarContent.Image(url = url, fallbackName = cachedNickname.ifBlank { cachedUserID }))
-            }
+            renderCachedProfile()
         }
     }
 
-    private fun showCustomIDEditor() {
-        TextInputDialog(
-            context = this,
-            title = getString(R.string.xingdun_edit_custom_id),
-            initialText = cachedCustomID,
-            onConfirm = { value ->
-                val normalized = value.trim()
-                if (!normalized.matches(Regex("^[A-Za-z0-9_]{3,32}$"))) {
-                    Toast.makeText(this, R.string.xingdun_custom_id_invalid, Toast.LENGTH_LONG).show()
-                    return@TextInputDialog
+    private fun renderCachedProfile() {
+        val displayName = cachedNickname.ifBlank { cachedUserID }
+        avatar.setContent(Avatar.AvatarContent.Image(url = cachedAvatarUrl, fallbackName = displayName))
+        nicknameItem.setValue(displayName)
+        accountItem.setValue(cachedCustomID.ifBlank { getString(R.string.xingdun_not_set) })
+        statusItem.setValue(cachedSignature.ifBlank { getString(R.string.xingdun_not_set) })
+        genderItem.setValue(genderDisplayText(cachedGender))
+        birthdayItem.setValue(birthdayDisplayText(cachedBirthday))
+    }
+
+    /** Debug preview data is reachable only from a debug-only subclass that disables the login guard. */
+    private fun applyDebugPreviewState() {
+        cachedUserID = "preview_user_b"
+        cachedNickname = "b002"
+        cachedCustomID = "xd_xc2026_preview"
+        cachedSignature = ""
+        cachedGender = Gender.UNKNOWN
+        cachedBirthday = null
+        cachedAvatarUrl = null
+        phoneItem.setValue(getString(R.string.xingdun_not_bound))
+        emailItem.setValue(getString(R.string.xingdun_not_bound))
+        renderCachedProfile()
+    }
+
+    private fun openEditor(mode: String, value: String) {
+        profileEditor.launch(
+            XingDunProfileEditorActivity.intent(this, mode, value).apply {
+                if (isDebugPreview) {
+                    putExtra(XingDunProfileEditorActivity.EXTRA_DEBUG_PREVIEW, true)
                 }
-                activityScope?.launch {
-                    runCatching {
-                        XingDunSessionManager.apiClient().postEmpty(
-                            XingDunSessionManager.currentSession() ?: error(getString(R.string.xingdun_session_expired)),
-                            "user/updateCustomId",
-                            mapOf("custom_id" to normalized)
-                        )
-                    }.onSuccess {
-                        cachedCustomID = normalized
-                        customIDItem.setValue(normalized)
-                        Toast.makeText(this@SelfDetailActivity, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
-                    }.onFailure { showProfileError(it) }
-                }
+            },
+        )
+    }
+
+    private fun saveCustomID(value: String) {
+        activityScope?.launch {
+            runCatching {
+                XingDunSessionManager.apiClient().postEmpty(
+                    XingDunSessionManager.currentSession() ?: error(getString(R.string.xingdun_session_expired)),
+                    "user/updateCustomId",
+                    mapOf("custom_id" to value),
+                )
+            }.onSuccess {
+                cachedCustomID = value
+                accountItem.setValue(value)
+                Toast.makeText(this@SelfDetailActivity, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
+            }.onFailure(::showProfileError)
+        }
+    }
+
+    private fun showAvatarActions() {
+        val actions = mutableListOf(getString(R.string.xingdun_profile_choose_avatar))
+        if (!cachedAvatarUrl.isNullOrBlank()) actions += getString(R.string.xingdun_profile_remove_avatar)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.xingdun_profile_avatar)
+            .setItems(actions.toTypedArray()) { _, which ->
+                if (which == 0) avatarPicker.launch("image/*") else confirmRemoveAvatar()
             }
-        ).show()
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showAvatarPreview(uri: Uri) {
+        val preview = ImageView(this).apply {
+            setImageURI(uri)
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setPadding(20.dp(), 12.dp(), 20.dp(), 12.dp())
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.xingdun_profile_avatar_preview)
+            .setView(preview)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                activityScope?.launch { uploadAvatar(uri) }
+            }
+            .show()
+    }
+
+    private fun confirmRemoveAvatar() {
+        AlertDialog.Builder(this)
+            .setMessage(R.string.xingdun_profile_remove_avatar_confirm)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.xingdun_profile_remove_avatar) { _, _ ->
+                activityScope?.launch { removeAvatar() }
+            }
+            .show()
+    }
+
+    private suspend fun removeAvatar() {
+        val session = XingDunSessionManager.currentSession()
+            ?: return showProfileError(IllegalStateException(getString(R.string.xingdun_session_expired)))
+        runCatching {
+            XingDunSessionManager.apiClient().postMultipartEmpty(
+                session,
+                "user/updateProfile",
+                mapOf("remove_avatar" to "1"),
+                emptyList(),
+            )
+        }.onSuccess {
+            cachedAvatarUrl = null
+            renderCachedProfile()
+            LoginStore.shared.setSelfInfo(UserProfile(avatarURL = ""), noopCompletion())
+            Toast.makeText(this, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
+        }.onFailure(::showProfileError)
     }
 
     private suspend fun uploadAvatar(uri: android.net.Uri) {
@@ -393,6 +523,7 @@ class SelfDetailActivity : BaseActivity() {
             )
         }.onSuccess {
             loadServerProfile()
+            LoginStore.shared.setSelfInfo(UserProfile(avatarURL = cachedAvatarUrl), noopCompletion())
             Toast.makeText(this, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
         }.onFailure(::showProfileError)
     }
@@ -413,104 +544,19 @@ class SelfDetailActivity : BaseActivity() {
     private fun genderDisplayText(gender: Gender?): String = when (gender) {
         Gender.MALE -> getString(R.string.demo_settings_self_detail_gender_male)
         Gender.FEMALE -> getString(R.string.demo_settings_self_detail_gender_female)
-        else -> getString(R.string.demo_settings_self_detail_gender_secret)
+        else -> getString(R.string.xingdun_not_set)
     }
 
     private fun birthdayDisplayText(birthday: Long?): String {
         if (birthday == null || birthday <= 0L) {
-            return DEFAULT_BIRTHDAY_TEXT
+            return getString(R.string.xingdun_not_set)
         }
         val raw = birthday.toString()
         return try {
             "${raw.substring(0, 4)}-${raw.substring(4, 6)}-${raw.substring(6, 8)}"
         } catch (_: Exception) {
-            DEFAULT_BIRTHDAY_TEXT
+            getString(R.string.xingdun_not_set)
         }
-    }
-
-    private fun showNicknameEditor() {
-        TextInputDialog(
-            context = this,
-            title = getString(R.string.demo_settings_self_detail_edit_nickname_title),
-            initialText = cachedNickname,
-            onConfirm = { text ->
-                if (text.isNotBlank()) {
-                    val profile = UserProfile(nickname = text)
-                    updateProfileOnServer(mapOf("nickname" to text), profile)
-                }
-            }
-        ).show()
-    }
-
-    private fun showStatusEditor() {
-        TextInputDialog(
-            context = this,
-            title = getString(R.string.demo_settings_self_detail_edit_status_title),
-            initialText = cachedSignature,
-            onConfirm = { text ->
-                val profile = UserProfile(selfSignature = text)
-                updateProfileOnServer(mapOf("signature" to text), profile)
-            }
-        ).show()
-    }
-
-    private fun showGenderSelector() {
-        val options = listOf(
-            ActionItem(
-                text = getString(R.string.demo_settings_self_detail_gender_male),
-                value = Gender.MALE
-            ),
-            ActionItem(
-                text = getString(R.string.demo_settings_self_detail_gender_female),
-                value = Gender.FEMALE
-            ),
-            ActionItem(
-                text = getString(R.string.demo_settings_self_detail_gender_secret),
-                value = Gender.UNKNOWN
-            )
-        )
-        ActionSheet.show(this, options) { selected ->
-            val gender = selected.value as? Gender ?: Gender.UNKNOWN
-            val profile = UserProfile(gender = gender)
-            val serverGender = when (gender) {
-                Gender.MALE -> 1
-                Gender.FEMALE -> 2
-                else -> 0
-            }
-            updateProfileOnServer(mapOf("gender" to serverGender), profile)
-        }
-    }
-
-    private fun showBirthdayPicker() {
-        val calendar = Calendar.getInstance()
-        val existing = cachedBirthday
-        if (existing != null && existing > 0L) {
-            val raw = existing.toString()
-            try {
-                val year = raw.substring(0, 4).toInt()
-                val month = raw.substring(4, 6).toInt() - 1
-                val day = raw.substring(6, 8).toInt()
-                calendar.set(year, month, day)
-            } catch (_: Exception) {
-            }
-        }
-
-        val picker = DatePickerDialog(
-            this,
-            { _, year, month, dayOfMonth ->
-                val cal = Calendar.getInstance()
-                cal.set(year, month, dayOfMonth)
-                val birthdayStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
-                    .format(Date(cal.timeInMillis))
-                val profile = UserProfile(birthday = birthdayStr.toLong())
-                val serverBirthday = "%04d-%02d-%02d".format(year, month + 1, dayOfMonth)
-                updateProfileOnServer(mapOf("birthday" to serverBirthday), profile)
-            },
-            calendar.get(Calendar.YEAR),
-            calendar.get(Calendar.MONTH),
-            calendar.get(Calendar.DAY_OF_MONTH)
-        )
-        picker.show()
     }
 
     private fun updateProfileOnServer(fields: Map<String, Any>, profile: UserProfile) {
@@ -526,6 +572,7 @@ class SelfDetailActivity : BaseActivity() {
                 // Server REST already synchronizes Tencent IM. This call refreshes the local Store;
                 // it is intentionally issued only after the authoritative business write succeeds.
                 LoginStore.shared.setSelfInfo(profile, noopCompletion())
+                loadServerProfile()
                 Toast.makeText(this@SelfDetailActivity, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
             }.onFailure { error ->
                 Toast.makeText(
@@ -541,6 +588,22 @@ class SelfDetailActivity : BaseActivity() {
         override fun onSuccess() {}
         override fun onFailure(code: Int, desc: String) {}
     }
+
+    private fun genderServerValue(): String = when (cachedGender) {
+        Gender.MALE -> "1"
+        Gender.FEMALE -> "2"
+        else -> "0"
+    }
+
+    private fun Int?.orZero(): Int = this ?: 0
+
+    private fun roundedBackground(color: Int, radiusDp: Float) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(color)
+        cornerRadius = radiusDp * resources.displayMetrics.density
+    }
+
+    private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
 
     private class SettingsEntry(
         context: Context,
@@ -646,11 +709,11 @@ class SelfDetailActivity : BaseActivity() {
         }
 
         fun applyColors(colors: ColorTokens) {
-            tvTitle.setTextColor(colors.textColorSecondary)
-            tvValue.setTextColor(colors.textColorPrimary)
+            tvTitle.setTextColor(colors.textColorPrimary)
+            tvValue.setTextColor(colors.textColorSecondary)
             arrowView?.setColorFilter(colors.textColorTertiary)
             divider?.setBackgroundColor(colors.strokeColorPrimary)
-            view.setBackgroundColor(colors.bgColorOperate)
+            view.setBackgroundColor(Color.TRANSPARENT)
         }
     }
 }

@@ -88,6 +88,12 @@
             android:theme="@style/Chat_UIKit_Theme" />
 
         <activity
+            android:name="io.trtc.tuikit.chat.demo.settings.XingDunProfileEditorActivity"
+            android:exported="false"
+            android:theme="@style/Chat_UIKit_Theme"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name="io.trtc.tuikit.chat.demo.settings.XingDunSystemSettingsActivity"
             android:exported="false"
             android:theme="@style/Chat_UIKit_Theme" />
