@@ -100,6 +100,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Locale
 import java.util.UUID
 
 /** Thin, product-owned screens for XingDun services that are not provided by TUIKit. */
@@ -230,7 +231,8 @@ open class XingDunFeatureActivity : BaseActivity() {
             MODE_PERSONAL_QR -> showPersonalQRCode()
             MODE_QR_SCANNER -> showQRCodeScanner()
             MODE_ACCOUNT_SECURITY -> showAccountSecurity()
-            MODE_BIND_PHONE -> showPhoneBinding()
+            MODE_BIND_PHONE -> showContactBinding("phone")
+            MODE_BIND_EMAIL -> showContactBinding("email")
             MODE_DEVICES -> showDevices()
             MODE_DEACTIVATE -> showDeactivation()
             MODE_NOTIFICATIONS -> showNotificationSettings()
@@ -1824,7 +1826,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 "✉",
                 R.string.xingdun_email,
                 maskEmail(profile.string("email")),
-                action = ::showEmailBindingDialog,
+                action = { openAccountBinding(MODE_BIND_EMAIL) },
             ),
         ), notificationSectionLayoutParams())
 
@@ -1859,11 +1861,16 @@ open class XingDunFeatureActivity : BaseActivity() {
         })
     }
 
-    private fun showPhoneBinding() {
+    private fun showContactBinding(kind: String) {
         applyNotificationSettingsChrome()
+        val isPhone = kind == "phone"
         val field = EditText(this).apply {
-            setHint(R.string.xingdun_phone_placeholder)
-            inputType = InputType.TYPE_CLASS_PHONE
+            setHint(if (isPhone) R.string.xingdun_phone_placeholder else R.string.xingdun_email_placeholder)
+            inputType = if (isPhone) {
+                InputType.TYPE_CLASS_PHONE
+            } else {
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            }
             setSingleLine(true)
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
             textSize = 16f
@@ -1889,9 +1896,16 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
         field.doAfterTextChanged { errorView.visibility = View.GONE }
         confirm.setOnClickListener {
-            val phone = field.text.toString().trim()
-            if (XingDunAccountInputValidator.phone(phone) != null) {
-                errorView.setText(R.string.xingdun_phone_format_incorrect)
+            val target = field.text.toString().trim().let { value ->
+                if (isPhone) value else value.lowercase(Locale.ROOT)
+            }
+            val validation = if (isPhone) {
+                XingDunAccountInputValidator.phone(target)
+            } else {
+                XingDunAccountInputValidator.email(target)
+            }
+            if (validation != null) {
+                errorView.setText(if (isPhone) R.string.xingdun_phone_format_incorrect else R.string.xingdun_email_format_incorrect)
                 errorView.visibility = View.VISIBLE
                 return@setOnClickListener
             }
@@ -1903,8 +1917,8 @@ open class XingDunFeatureActivity : BaseActivity() {
                 runCatching {
                     XingDunSessionManager.apiClient().postEmpty(
                         requireSession(),
-                        "auth/bindPhone",
-                        mapOf("phone" to phone),
+                        if (isPhone) "auth/bindPhone" else "auth/bindEmail",
+                        mapOf(kind to target),
                     )
                 }.onSuccess {
                     setResult(RESULT_OK)
@@ -1981,27 +1995,6 @@ open class XingDunFeatureActivity : BaseActivity() {
             isFocusable = true
             setOnClickListener { action() }
         }
-    }
-
-    private fun showEmailBindingDialog() {
-        val field = input(R.string.xingdun_email).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-        }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_bind_email)
-            .setView(field)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.xingdun_submit) { _, _ ->
-                val value = field.text.toString().trim()
-                val validation = XingDunAccountInputValidator.email(value)
-                if (validation != null) status.setText(accountInputError(validation))
-                else submitAccountAction(
-                    path = "auth/bindEmail",
-                    body = mapOf("email" to value),
-                    refresh = true
-                )
-            }
-            .show()
     }
 
     private fun showUpgradeAccountDialog() {
@@ -3853,6 +3846,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_QR_SCANNER -> R.string.xingdun_scan_qr
         MODE_ACCOUNT_SECURITY -> R.string.xingdun_account_security
         MODE_BIND_PHONE -> R.string.xingdun_bind_phone
+        MODE_BIND_EMAIL -> R.string.xingdun_bind_email
         MODE_DEVICES -> R.string.xingdun_devices
         MODE_DEACTIVATE -> R.string.xingdun_deactivate_account
         MODE_NOTIFICATIONS -> R.string.xingdun_notification_settings
@@ -3907,6 +3901,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_QR_SCANNER = "qr_scanner"
         const val MODE_ACCOUNT_SECURITY = "account_security"
         const val MODE_BIND_PHONE = "bind_phone"
+        const val MODE_BIND_EMAIL = "bind_email"
         const val MODE_DEVICES = "devices"
         const val MODE_DEACTIVATE = "deactivate"
         const val MODE_NOTIFICATIONS = "notifications"
