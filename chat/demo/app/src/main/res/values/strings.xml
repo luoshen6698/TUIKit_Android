@@ -709,6 +709,13 @@
     <string name="xingdun_open_system_settings">Open system settings</string>
     <string name="xingdun_about_description">XingDun is an enterprise messaging and collaboration client. Available features depend on enterprise configuration and account permissions.</string>
     <string name="xingdun_check_updates">Check for updates</string>
+    <string name="xingdun_about_title_format">About %1$s</string>
+    <string name="xingdun_about_version">Version %1$s</string>
+    <string name="xingdun_about_product_information">Product information</string>
+    <string name="xingdun_about_official_website">Official website</string>
+    <string name="xingdun_not_configured">Not configured</string>
+    <string name="xingdun_about_site_record_number">Website filing number</string>
+    <string name="xingdun_about_update_failed">Unable to check for updates. Try again later.</string>
     <string name="xingdun_legal_unavailable">This enterprise has not configured this legal document.</string>
     <string name="xingdun_legal_load_failed">The legal document could not be loaded. Check your connection and try again.</string>
     <string name="xingdun_open_document">Open document</string>

@@ -81,6 +81,8 @@ import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
+import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunAuthUiSupport
+import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseLogoView
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspaceContracts
 import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspaceSubmissionError
@@ -2848,17 +2850,149 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun showAbout() {
         val session = XingDunSessionManager.currentSession()
-        addCard(
-            session?.companyName?.ifBlank { getString(R.string.demo_app_name) } ?: getString(R.string.demo_app_name),
-            getString(R.string.xingdun_version_current, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
-        )
-        session?.companyCode?.takeIf(String::isNotBlank)?.let {
-            addCard(getString(R.string.xingdun_company_code), it)
+        val enterprise = XingDunSessionManager.currentEnterprise()
+        val brandName = enterprise?.let { XingDunAuthUiSupport.displayName(this, it) }
+            ?: session?.companyName?.takeIf(String::isNotBlank)
+            ?: getString(R.string.demo_app_name)
+        (headerBar.getChildAt(1) as? TextView)?.text = getString(R.string.xingdun_about_title_format, brandName)
+        applyNotificationSettingsChrome()
+
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(16.dp(), 22.dp(), 16.dp(), 22.dp())
+            addView(XingDunEnterpriseLogoView(context).apply {
+                contentDescription = brandName
+                loadLogo(lifecycleScope, enterprise?.let(XingDunAuthUiSupport::logoUrl))
+            }, LinearLayout.LayoutParams(100.dp(), 100.dp()))
+            addView(TextView(context).apply {
+                text = brandName
+                textSize = 20f
+                gravity = Gravity.CENTER
+                setTextColor(Color.BLACK)
+                setPadding(0, 10.dp(), 0, 0)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(TextView(context).apply {
+                text = getString(R.string.xingdun_about_version, BuildConfig.VERSION_NAME)
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF8A8A8F.toInt())
+                setPadding(0, 5.dp(), 0, 0)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }, notificationSectionLayoutParams())
+
+        addNotificationSectionHeader(R.string.xingdun_about_product_information)
+        val aboutUri = publicWebUri(enterprise?.platform?.aboutUrl)
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            addView(aboutValueRow(
+                R.string.xingdun_about_official_website,
+                if (aboutUri == null) getString(R.string.xingdun_not_configured) else null,
+            ) {
+                aboutUri?.let { startActivity(Intent(Intent.ACTION_VIEW, it)) }
+            })
+            addView(notificationDivider())
+            addView(aboutValueRow(R.string.xingdun_check_updates, null) { checkAboutUpdates() })
+            enterprise?.platform?.siteRecordNumber?.trim()?.takeIf(String::isNotEmpty)?.let { record ->
+                addView(notificationDivider())
+                addView(aboutValueRow(R.string.xingdun_about_site_record_number, record, null))
+            }
+        }, notificationSectionLayoutParams())
+
+        enterprise?.platform?.siteCopyright?.trim()?.takeIf(String::isNotEmpty)?.let { copyright ->
+            content.addView(TextView(this).apply {
+                text = copyright
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setTextColor(0xFFAEAEB2.toInt())
+                setPadding(14.dp(), 18.dp(), 14.dp(), 4.dp())
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-        addMessage(R.string.xingdun_about_description)
-        content.addView(actionButton(R.string.xingdun_check_updates) { start(this, MODE_VERSION) })
-        content.addView(actionButton(R.string.xingdun_user_agreement) { start(this, MODE_USER_AGREEMENT) })
-        content.addView(actionButton(R.string.xingdun_privacy_policy) { start(this, MODE_PRIVACY_POLICY) })
+    }
+
+    private fun aboutValueRow(label: Int, value: String?, action: (() -> Unit)?): View =
+        LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(16.dp(), 0, 10.dp(), 0)
+            addView(TextView(context).apply {
+                setText(label)
+                textSize = 16f
+                setTextColor(Color.BLACK)
+                gravity = Gravity.CENTER_VERTICAL
+            }, LinearLayout.LayoutParams(0, 56.dp(), 1f))
+            if (!value.isNullOrBlank()) {
+                addView(TextView(context).apply {
+                    text = value
+                    textSize = 14f
+                    gravity = Gravity.CENTER_VERTICAL or Gravity.END
+                    setTextColor(0xFF8A8A8F.toInt())
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 56.dp()))
+            }
+            if (action != null && value.isNullOrBlank()) {
+                addView(TextView(context).apply {
+                    text = "›"
+                    textSize = 28f
+                    gravity = Gravity.CENTER
+                    setTextColor(0xFF8A8A8F.toInt())
+                }, LinearLayout.LayoutParams(28.dp(), 56.dp()))
+            }
+            if (action != null) {
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { action() }
+            }
+        }
+
+    private fun checkAboutUpdates() {
+        status.setText(R.string.xingdun_checking_version)
+        lifecycleScope.launch {
+            runCatching { XingDunSessionManager.checkVersion() }
+                .onSuccess { result ->
+                    status.text = ""
+                    if (!result.hasUpdate || result.latestVersion == null) {
+                        Toast.makeText(this@XingDunFeatureActivity, R.string.xingdun_version_no_update, Toast.LENGTH_SHORT).show()
+                    } else {
+                        val version = result.latestVersion
+                        val downloadUri = publicWebUri(version.downloadUrl)?.takeIf { it.scheme.equals("https", true) }
+                        val message = listOfNotNull(
+                            version.versionName?.takeIf(String::isNotBlank)
+                                ?: version.versionCode.takeIf(String::isNotBlank),
+                            version.updateLog?.takeIf(String::isNotBlank),
+                        ).joinToString("\n\n")
+                        val builder = AlertDialog.Builder(this@XingDunFeatureActivity)
+                            .setTitle(if (result.isForce) R.string.xingdun_force_update else R.string.xingdun_update_available)
+                            .setMessage(message)
+                        if (!result.isForce) builder.setNegativeButton(R.string.xingdun_update_later, null)
+                        if (downloadUri != null) {
+                            builder.setPositiveButton(R.string.xingdun_update_now) { _, _ ->
+                                startActivity(Intent(Intent.ACTION_VIEW, downloadUri))
+                            }
+                        } else {
+                            builder.setPositiveButton(android.R.string.ok, null)
+                        }
+                        builder.create().apply {
+                            setCancelable(!result.isForce)
+                            setCanceledOnTouchOutside(!result.isForce)
+                            show()
+                        }
+                    }
+                }
+                .onFailure {
+                    status.text = ""
+                    AlertDialog.Builder(this@XingDunFeatureActivity)
+                        .setTitle(R.string.xingdun_check_updates)
+                        .setMessage(R.string.xingdun_about_update_failed)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                }
+        }
+    }
+
+    private fun publicWebUri(value: String?): Uri? {
+        val uri = runCatching { Uri.parse(value?.trim().orEmpty()) }.getOrNull() ?: return null
+        return uri.takeIf { it.scheme?.lowercase() in setOf("http", "https") && !it.host.isNullOrBlank() }
     }
 
     private fun showLegalDocument(privacy: Boolean) {

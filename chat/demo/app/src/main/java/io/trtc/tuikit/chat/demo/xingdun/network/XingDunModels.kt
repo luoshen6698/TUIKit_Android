@@ -41,7 +41,9 @@ data class XingDunPushConfiguration(
 data class XingDunPlatformConfiguration(
     val platformName: String? = null,
     val platformLogo: String? = null,
+    val aboutUrl: String? = null,
     val siteCopyright: String? = null,
+    val siteRecordNumber: String? = null,
 )
 
 data class XingDunFeatures(

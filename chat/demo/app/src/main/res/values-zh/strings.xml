@@ -703,6 +703,13 @@
     <string name="xingdun_open_system_settings">打开系统设置</string>
     <string name="xingdun_about_description">星盾是企业即时通讯与协作客户端。实际能力以企业配置和账号权限为准。</string>
     <string name="xingdun_check_updates">检查更新</string>
+    <string name="xingdun_about_title_format">关于%1$s</string>
+    <string name="xingdun_about_version">版本 %1$s</string>
+    <string name="xingdun_about_product_information">产品信息</string>
+    <string name="xingdun_about_official_website">官方网站</string>
+    <string name="xingdun_not_configured">暂未配置</string>
+    <string name="xingdun_about_site_record_number">网站备案号</string>
+    <string name="xingdun_about_update_failed">检查更新失败，请稍后重试。</string>
     <string name="xingdun_legal_unavailable">当前企业暂未配置此法律文档。</string>
     <string name="xingdun_legal_load_failed">法律文档加载失败，请检查网络后重新加载。</string>
     <string name="xingdun_open_document">打开文档</string>
