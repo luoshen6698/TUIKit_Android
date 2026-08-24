@@ -1737,6 +1737,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showAccountSecurity() {
+        applyNotificationSettingsChrome()
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
@@ -1745,26 +1746,146 @@ open class XingDunFeatureActivity : BaseActivity() {
                 )
             }.onSuccess { profile ->
                 setBusy(false)
-                val username = profile.string("username").orEmpty()
-                val isDeviceAccount = username.isBlank() || username.startsWith("dev_")
-                addCard(getString(R.string.xingdun_login_account), if (isDeviceAccount) getString(R.string.xingdun_device_account) else username)
-                addCard(getString(R.string.xingdun_phone), maskPhone(profile.string("phone")))
-                addCard(getString(R.string.xingdun_email), maskEmail(profile.string("email")))
-                if (isDeviceAccount) {
-                    addMessage(R.string.xingdun_device_account_hint)
-                    content.addView(actionButton(R.string.xingdun_upgrade_device_account) { showUpgradeAccountDialog() })
-                } else {
-                    content.addView(actionButton(R.string.xingdun_change_password) { showChangePasswordDialog() })
-                }
-                content.addView(actionButton(R.string.xingdun_bind_phone) { showBindingDialog("phone") })
-                content.addView(actionButton(R.string.xingdun_bind_email) { showBindingDialog("email") })
-                content.addView(actionButton(R.string.xingdun_devices) { start(this@XingDunFeatureActivity, MODE_DEVICES) })
-                if (!isDeviceAccount) {
-                    content.addView(actionButton(R.string.xingdun_deactivate_account) {
-                        start(this@XingDunFeatureActivity, MODE_DEACTIVATE)
+                renderAccountSecurity(profile)
+            }.onFailure { error ->
+                setBusy(false)
+                content.addView(LinearLayout(this@XingDunFeatureActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    background = roundedDrawable(Color.WHITE, 14f)
+                    setPadding(20.dp(), 28.dp(), 20.dp(), 28.dp())
+                    addView(TextView(context).apply {
+                        setText(R.string.xingdun_account_security_load_failed)
+                        textSize = 17f
+                        gravity = Gravity.CENTER
+                        setTextColor(Color.BLACK)
                     })
-                }
-            }.onFailure(::showFailure)
+                    addView(TextView(context).apply {
+                        text = error.localizedMessage ?: getString(R.string.xingdun_action_failed)
+                        textSize = 13f
+                        gravity = Gravity.CENTER
+                        setTextColor(0xFF8A8A8F.toInt())
+                        setPadding(0, 8.dp(), 0, 8.dp())
+                    })
+                    addView(actionButton(R.string.xingdun_retry) {
+                        content.removeAllViews()
+                        showAccountSecurity()
+                    })
+                }, notificationSectionLayoutParams())
+            }
+        }
+    }
+
+    private fun renderAccountSecurity(profile: JsonObject) {
+        val username = profile.string("username").orEmpty()
+        val isDeviceAccount = username.isBlank() || username.startsWith("dev_")
+
+        addNotificationSectionHeader(R.string.xingdun_account_login_section)
+        content.addView(accountSecurityCard(
+            accountSecurityRow(
+                icon = "👤",
+                title = R.string.xingdun_username,
+                value = if (isDeviceAccount) getString(R.string.xingdun_not_bound) else username,
+                action = if (isDeviceAccount) ::showUpgradeAccountDialog else null,
+            )
+        ), notificationSectionLayoutParams())
+        if (isDeviceAccount) addNotificationFooter(R.string.xingdun_device_login_hint)
+
+        addNotificationSectionHeader(R.string.xingdun_account_contact_section)
+        content.addView(accountSecurityCard(
+            accountSecurityRow(
+                "☎",
+                R.string.xingdun_phone,
+                maskPhone(profile.string("phone")),
+                action = { showBindingDialog("phone") },
+            ),
+            notificationDivider(),
+            accountSecurityRow(
+                "✉",
+                R.string.xingdun_email,
+                maskEmail(profile.string("email")),
+                action = { showBindingDialog("email") },
+            ),
+        ), notificationSectionLayoutParams())
+
+        addNotificationSectionHeader(R.string.xingdun_account_password_section)
+        if (isDeviceAccount) {
+            content.addView(accountSecurityMessage(R.string.xingdun_device_password_hint), notificationSectionLayoutParams())
+        } else {
+            content.addView(accountSecurityCard(
+                accountSecurityRow("🔐", R.string.xingdun_change_password, null, ::showChangePasswordDialog),
+            ), notificationSectionLayoutParams())
+        }
+
+        addNotificationSectionHeader(R.string.xingdun_account_management_section)
+        if (isDeviceAccount) {
+            content.addView(accountSecurityMessage(R.string.xingdun_device_deactivation_hint), notificationSectionLayoutParams())
+        } else {
+            content.addView(accountSecurityCard(
+                accountSecurityRow(
+                    "⚠",
+                    R.string.xingdun_deactivate_account,
+                    null,
+                    action = { start(this@XingDunFeatureActivity, MODE_DEACTIVATE) },
+                    danger = true,
+                ),
+            ), notificationSectionLayoutParams())
+        }
+    }
+
+    private fun accountSecurityCard(vararg rows: View): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = roundedDrawable(Color.WHITE, 14f)
+        rows.forEach(::addView)
+    }
+
+    private fun accountSecurityMessage(message: Int): View = TextView(this).apply {
+        setText(message)
+        textSize = 14f
+        setTextColor(0xFF8A8A8F.toInt())
+        background = roundedDrawable(Color.WHITE, 14f)
+        setPadding(16.dp(), 16.dp(), 16.dp(), 16.dp())
+    }
+
+    private fun accountSecurityRow(
+        icon: String,
+        title: Int,
+        value: String?,
+        action: (() -> Unit)? = null,
+        danger: Boolean = false,
+    ): View = LinearLayout(this).apply {
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(14.dp(), 0, 10.dp(), 0)
+        addView(TextView(context).apply {
+            text = icon
+            textSize = 18f
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(34.dp(), 56.dp()))
+        addView(TextView(context).apply {
+            setText(title)
+            textSize = 16f
+            setTextColor(if (danger) 0xFFD93025.toInt() else Color.BLACK)
+            gravity = Gravity.CENTER_VERTICAL
+        }, LinearLayout.LayoutParams(0, 56.dp(), 1f))
+        if (!value.isNullOrBlank()) {
+            addView(TextView(context).apply {
+                text = value
+                maxLines = 1
+                textSize = 14f
+                gravity = Gravity.CENTER_VERTICAL or Gravity.END
+                setTextColor(0xFF8A8A8F.toInt())
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 56.dp()))
+        }
+        if (action != null) {
+            addView(TextView(context).apply {
+                text = "›"
+                textSize = 28f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF8A8A8F.toInt())
+            }, LinearLayout.LayoutParams(28.dp(), 56.dp()))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { action() }
         }
     }
 

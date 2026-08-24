@@ -527,6 +527,14 @@
     <string name="xingdun_unbind_device">Unbind device</string>
     <string name="xingdun_unbind_device_warning">Unbinding a device invalidates all current sessions and requires a new login.</string>
     <string name="xingdun_deactivate_account">Deactivate account</string>
+    <string name="xingdun_account_login_section">Login account</string>
+    <string name="xingdun_account_contact_section">Contact information</string>
+    <string name="xingdun_account_password_section">Password</string>
+    <string name="xingdun_account_management_section">Account management</string>
+    <string name="xingdun_device_login_hint">This is a device account. Bind a username and password to sign in on another device.</string>
+    <string name="xingdun_device_password_hint">Bind a username and password before changing the password.</string>
+    <string name="xingdun_device_deactivation_hint">This is a device account. Bind a username and password before deactivating it.</string>
+    <string name="xingdun_account_security_load_failed">Unable to load account security information</string>
     <string name="xingdun_deactivation_consequences">Account deactivation immediately signs out every device, revokes IM access, and starts the server retention process. This action requires your current password.</string>
     <string name="xingdun_deactivation_reason">Reason (optional, up to 500 characters)</string>
     <string name="xingdun_deactivation_acknowledgement">I have read and understand the consequences of deactivating this account.</string>

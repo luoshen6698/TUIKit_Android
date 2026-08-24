@@ -521,6 +521,14 @@
     <string name="xingdun_unbind_device">解绑设备</string>
     <string name="xingdun_unbind_device_warning">解绑设备会使全部当前会话失效，需要重新登录。</string>
     <string name="xingdun_deactivate_account">注销账号</string>
+    <string name="xingdun_account_login_section">登录账号</string>
+    <string name="xingdun_account_contact_section">联系方式</string>
+    <string name="xingdun_account_password_section">密码</string>
+    <string name="xingdun_account_management_section">账号管理</string>
+    <string name="xingdun_device_login_hint">当前为设备账号，绑定用户名和密码后可在其他设备登录。</string>
+    <string name="xingdun_device_password_hint">请先绑定用户名和密码，再使用修改密码功能。</string>
+    <string name="xingdun_device_deactivation_hint">当前为设备账号。请先绑定用户名和密码，再申请注销账号。</string>
+    <string name="xingdun_account_security_load_failed">无法加载账号安全信息</string>
     <string name="xingdun_deactivation_consequences">注销会立即退出全部设备、撤销 IM 访问并进入服务端数据保留流程。提交前必须验证当前密码。</string>
     <string name="xingdun_deactivation_reason">注销原因（选填，最多 500 字）</string>
     <string name="xingdun_deactivation_acknowledgement">我已阅读并了解账号注销的影响。</string>
