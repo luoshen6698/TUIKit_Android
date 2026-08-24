@@ -525,6 +525,9 @@
     <string name="xingdun_old_password">Current password</string>
     <string name="xingdun_current_password">Current password</string>
     <string name="xingdun_new_password">New password</string>
+    <string name="xingdun_confirm_change">Confirm change</string>
+    <string name="xingdun_change_password_warning">Changing your password signs out this session and all other devices. Sign in again to continue.</string>
+    <string name="xingdun_original_password_incorrect">Enter the correct current password</string>
     <string name="xingdun_devices">Login devices</string>
     <string name="xingdun_device">Device</string>
     <string name="xingdun_devices_empty">No login devices</string>

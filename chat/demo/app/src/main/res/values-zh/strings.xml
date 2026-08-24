@@ -519,6 +519,9 @@
     <string name="xingdun_old_password">原密码</string>
     <string name="xingdun_current_password">当前密码</string>
     <string name="xingdun_new_password">新密码</string>
+    <string name="xingdun_confirm_change">确认修改</string>
+    <string name="xingdun_change_password_warning">修改密码后，当前登录和其他设备会话将失效，需要重新登录。</string>
+    <string name="xingdun_original_password_incorrect">请输入正确的原密码</string>
     <string name="xingdun_devices">登录设备</string>
     <string name="xingdun_device">设备</string>
     <string name="xingdun_devices_empty">暂无登录设备</string>

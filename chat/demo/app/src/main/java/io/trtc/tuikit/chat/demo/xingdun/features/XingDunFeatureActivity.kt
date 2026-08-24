@@ -190,7 +190,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         showPermissionManagement()
     }
 
-    private val accountBindingResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+    private val accountChildResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK && mode == MODE_ACCOUNT_SECURITY) {
             content.removeAllViews()
             showAccountSecurity()
@@ -233,6 +233,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             MODE_ACCOUNT_SECURITY -> showAccountSecurity()
             MODE_BIND_PHONE -> showContactBinding("phone")
             MODE_BIND_EMAIL -> showContactBinding("email")
+            MODE_CHANGE_PASSWORD -> showChangePassword()
             MODE_DEVICES -> showDevices()
             MODE_DEACTIVATE -> showDeactivation()
             MODE_NOTIFICATIONS -> showNotificationSettings()
@@ -1819,14 +1820,14 @@ open class XingDunFeatureActivity : BaseActivity() {
                 "☎",
                 R.string.xingdun_phone,
                 maskPhone(profile.string("phone")),
-                action = { openAccountBinding(MODE_BIND_PHONE) },
+                action = { openAccountChild(MODE_BIND_PHONE) },
             ),
             notificationDivider(),
             accountSecurityRow(
                 "✉",
                 R.string.xingdun_email,
                 maskEmail(profile.string("email")),
-                action = { openAccountBinding(MODE_BIND_EMAIL) },
+                action = { openAccountChild(MODE_BIND_EMAIL) },
             ),
         ), notificationSectionLayoutParams())
 
@@ -1835,7 +1836,12 @@ open class XingDunFeatureActivity : BaseActivity() {
             content.addView(accountSecurityMessage(R.string.xingdun_device_password_hint), notificationSectionLayoutParams())
         } else {
             content.addView(accountSecurityCard(
-                accountSecurityRow("🔐", R.string.xingdun_change_password, null, ::showChangePasswordDialog),
+                accountSecurityRow(
+                    "🔐",
+                    R.string.xingdun_change_password,
+                    null,
+                    action = { openAccountChild(MODE_CHANGE_PASSWORD) },
+                ),
             ), notificationSectionLayoutParams())
         }
 
@@ -1855,9 +1861,9 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
     }
 
-    private fun openAccountBinding(bindingMode: String) {
-        accountBindingResult.launch(Intent(this, XingDunFeatureActivity::class.java).apply {
-            putExtra(EXTRA_MODE, bindingMode)
+    private fun openAccountChild(childMode: String) {
+        accountChildResult.launch(Intent(this, XingDunFeatureActivity::class.java).apply {
+            putExtra(EXTRA_MODE, childMode)
         })
     }
 
@@ -1997,6 +2003,96 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
     }
 
+    private fun showChangePassword() {
+        applyNotificationSettingsChrome()
+        val oldPassword = accountPasswordField(R.string.xingdun_old_password)
+        val newPassword = accountPasswordField(R.string.xingdun_new_password)
+        val confirmation = accountPasswordField(R.string.xingdun_confirm_new_password)
+        val errorView = TextView(this).apply {
+            visibility = View.GONE
+            textSize = 13f
+            setTextColor(0xFFD93025.toInt())
+            setPadding(14.dp(), 10.dp(), 14.dp(), 0)
+        }
+        val confirm = Button(this).apply {
+            setText(R.string.xingdun_confirm_change)
+            isAllCaps = false
+            textSize = 16f
+            setTextColor(0xFF20A88F.toInt())
+            background = roundedDrawable(Color.WHITE, 22f)
+            stateListAnimator = null
+        }
+        val fields = listOf(oldPassword, newPassword, confirmation)
+        fields.forEach { it.doAfterTextChanged { errorView.visibility = View.GONE } }
+        confirm.setOnClickListener {
+            val oldValue = oldPassword.text.toString()
+            val newValue = newPassword.text.toString()
+            val confirmationValue = confirmation.text.toString()
+            val message = when {
+                oldValue.isEmpty() -> R.string.xingdun_original_password_incorrect
+                newValue.isEmpty() -> R.string.xingdun_new_password_required
+                else -> XingDunAccountInputValidator.password(newValue)?.let(::accountInputError)
+                    ?: R.string.xingdun_password_mismatch.takeIf { newValue != confirmationValue }
+                    ?: R.string.xingdun_password_unchanged.takeIf { newValue == oldValue }
+            }
+            if (message != null) {
+                errorView.setText(message)
+                errorView.visibility = View.VISIBLE
+                return@setOnClickListener
+            }
+            fields.forEach { it.isEnabled = false }
+            confirm.isEnabled = false
+            confirm.alpha = 0.55f
+            errorView.visibility = View.GONE
+            lifecycleScope.launch {
+                runCatching {
+                    XingDunSessionManager.apiClient().postEmpty(
+                        requireSession(),
+                        "auth/changePassword",
+                        mapOf(
+                            "old_password" to oldValue,
+                            "new_password" to newValue,
+                            "confirm_password" to confirmationValue,
+                        ),
+                    )
+                }.onSuccess {
+                    completeSecurityLogout()
+                }.onFailure { error ->
+                    fields.forEach { it.isEnabled = true }
+                    confirm.isEnabled = true
+                    confirm.alpha = 1f
+                    errorView.text = error.localizedMessage ?: getString(R.string.xingdun_action_failed)
+                    errorView.visibility = View.VISIBLE
+                }
+            }
+        }
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            addView(oldPassword, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()))
+            addView(notificationDivider())
+            addView(newPassword, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()))
+            addView(notificationDivider())
+            addView(confirmation, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()))
+        }, notificationSectionLayoutParams())
+        addNotificationFooter(R.string.xingdun_change_password_warning)
+        content.addView(errorView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        content.addView(confirm, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 44.dp()).apply {
+            topMargin = 12.dp()
+        })
+    }
+
+    private fun accountPasswordField(hint: Int): EditText = EditText(this).apply {
+        setHint(hint)
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        setSingleLine(true)
+        textSize = 16f
+        setTextColor(Color.BLACK)
+        setHintTextColor(0xFFC7C7CC.toInt())
+        setPadding(14.dp(), 0, 14.dp(), 0)
+        background = null
+    }
+
     private fun showUpgradeAccountDialog() {
         val username = input(R.string.xingdun_username)
         val password = passwordInput(R.string.xingdun_new_password)
@@ -2026,40 +2122,6 @@ open class XingDunFeatureActivity : BaseActivity() {
                         "confirm_password" to confirmation.text.toString()
                     ),
                     refresh = true
-                )
-            }
-            .show()
-    }
-
-    private fun showChangePasswordDialog() {
-        val oldPassword = passwordInput(R.string.xingdun_old_password)
-        val newPassword = passwordInput(R.string.xingdun_new_password)
-        val confirmation = passwordInput(R.string.xingdun_confirm_password)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_change_password)
-            .setView(verticalForm(oldPassword, newPassword, confirmation))
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.xingdun_submit) { _, _ ->
-                val oldValue = oldPassword.text.toString()
-                val newValue = newPassword.text.toString()
-                val validation = XingDunAccountInputError.PASSWORD_REQUIRED.takeIf { oldValue.isEmpty() }
-                    ?: XingDunAccountInputValidator.password(newValue)
-                    ?: XingDunAccountInputError.PASSWORD_MISMATCH.takeIf {
-                        newValue != confirmation.text.toString()
-                    }
-                    ?: XingDunAccountInputError.PASSWORD_UNCHANGED.takeIf { newValue == oldValue }
-                if (validation != null) {
-                    status.setText(accountInputError(validation))
-                    return@setPositiveButton
-                }
-                submitAccountAction(
-                    "auth/changePassword",
-                    mapOf(
-                        "old_password" to oldValue,
-                        "new_password" to newValue,
-                        "confirm_password" to confirmation.text.toString()
-                    ),
-                    logoutAfterSuccess = true
                 )
             }
             .show()
@@ -3847,6 +3909,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_ACCOUNT_SECURITY -> R.string.xingdun_account_security
         MODE_BIND_PHONE -> R.string.xingdun_bind_phone
         MODE_BIND_EMAIL -> R.string.xingdun_bind_email
+        MODE_CHANGE_PASSWORD -> R.string.xingdun_change_password
         MODE_DEVICES -> R.string.xingdun_devices
         MODE_DEACTIVATE -> R.string.xingdun_deactivate_account
         MODE_NOTIFICATIONS -> R.string.xingdun_notification_settings
@@ -3902,6 +3965,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_ACCOUNT_SECURITY = "account_security"
         const val MODE_BIND_PHONE = "bind_phone"
         const val MODE_BIND_EMAIL = "bind_email"
+        const val MODE_CHANGE_PASSWORD = "change_password"
         const val MODE_DEVICES = "devices"
         const val MODE_DEACTIVATE = "deactivate"
         const val MODE_NOTIFICATIONS = "notifications"
