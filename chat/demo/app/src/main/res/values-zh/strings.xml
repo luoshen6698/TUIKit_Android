@@ -663,6 +663,7 @@
     <string name="xingdun_about_description">星盾是企业即时通讯与协作客户端。实际能力以企业配置和账号权限为准。</string>
     <string name="xingdun_check_updates">检查更新</string>
     <string name="xingdun_legal_unavailable">当前企业暂未配置此法律文档。</string>
+    <string name="xingdun_legal_load_failed">法律文档加载失败，请检查网络后重新加载。</string>
     <string name="xingdun_open_document">打开文档</string>
     <string name="xingdun_feature_unavailable">当前企业未启用此功能。</string>
     <string name="xingdun_favorites_empty">暂无收藏，在聊天中长按支持的消息即可收藏。</string>
