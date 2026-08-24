@@ -47,9 +47,11 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.os.LocaleListCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.doAfterTextChanged
@@ -57,6 +59,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.tencent.mmkv.MMKV
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.MultiFormatReader
@@ -75,6 +78,7 @@ import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.chat.app.BuildConfig
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
+import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
@@ -221,6 +225,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             MODE_STORAGE -> showStorageManagement()
             MODE_HELP -> showHelpCenter()
             MODE_PERMISSIONS -> showPermissionManagement()
+            MODE_LANGUAGE -> showLanguageSettings()
             MODE_ABOUT -> showAbout()
             MODE_USER_AGREEMENT -> showLegalDocument(false)
             MODE_PRIVACY_POLICY -> showLegalDocument(true)
@@ -2108,6 +2113,54 @@ open class XingDunFeatureActivity : BaseActivity() {
         }, notificationSectionLayoutParams())
     }
 
+    private fun showLanguageSettings() {
+        applyNotificationSettingsChrome()
+        val selectedTag = currentProductLanguageTag()
+        addNotificationSectionHeader(R.string.xingdun_language_section)
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            addView(languageRow(R.string.demo_settings_zh_hans, "zh-Hans", selectedTag == "zh-Hans"))
+            addView(notificationDivider())
+            addView(languageRow(R.string.demo_settings_en, "en", selectedTag == "en"))
+        }, notificationSectionLayoutParams())
+        addNotificationFooter(R.string.xingdun_language_footer)
+    }
+
+    private fun languageRow(label: Int, tag: String, selected: Boolean): View =
+        LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(16.dp(), 0, 12.dp(), 0)
+            addView(TextView(context).apply {
+                setText(label)
+                textSize = 16f
+                setTextColor(Color.BLACK)
+                gravity = Gravity.CENTER_VERTICAL
+            }, LinearLayout.LayoutParams(0, 56.dp(), 1f))
+            addView(TextView(context).apply {
+                text = if (selected) "✓" else ""
+                textSize = 22f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF20A88F.toInt())
+            }, LinearLayout.LayoutParams(32.dp(), 56.dp()))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { applyProductLanguage(tag) }
+        }
+
+    private fun currentProductLanguageTag(): String {
+        val stored = MMKV.defaultMMKV().decodeString(AppConstants.KEY_APP_LANGUAGE, "").orEmpty()
+        val current = stored.ifBlank { AppCompatDelegate.getApplicationLocales().toLanguageTags() }
+        return if (current.startsWith("en", ignoreCase = true)) "en" else "zh-Hans"
+    }
+
+    private fun applyProductLanguage(tag: String) {
+        val target = LocaleListCompat.forLanguageTags(tag)
+        MMKV.defaultMMKV().encode(AppConstants.KEY_APP_LANGUAGE, tag)
+        if (AppCompatDelegate.getApplicationLocales() == target) return
+        AppCompatDelegate.setApplicationLocales(target)
+    }
+
     private fun applyNotificationSettingsChrome() {
         val background = 0xFFF5F5F9.toInt()
         window.statusBarColor = background
@@ -3458,6 +3511,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_STORAGE -> R.string.xingdun_storage_management
         MODE_HELP -> R.string.xingdun_help_feedback_title
         MODE_PERMISSIONS -> R.string.xingdun_permission_management
+        MODE_LANGUAGE -> R.string.demo_settings_language
         MODE_ABOUT -> R.string.xingdun_about
         MODE_USER_AGREEMENT -> R.string.xingdun_user_agreement
         MODE_PRIVACY_POLICY -> R.string.xingdun_privacy_policy
@@ -3510,6 +3564,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_STORAGE = "storage"
         const val MODE_HELP = "help"
         const val MODE_PERMISSIONS = "permissions"
+        const val MODE_LANGUAGE = "language"
         const val MODE_ABOUT = "about"
         const val MODE_USER_AGREEMENT = "user_agreement"
         const val MODE_PRIVACY_POLICY = "privacy_policy"

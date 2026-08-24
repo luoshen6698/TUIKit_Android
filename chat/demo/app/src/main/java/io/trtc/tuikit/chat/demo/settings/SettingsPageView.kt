@@ -15,7 +15,6 @@ import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.app.AlertDialog
-import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -120,15 +119,6 @@ class SettingsPageView @JvmOverloads constructor(
         "ms" to "Bahasa Melayu",
         "hi" to "हिन्दी"
     )
-
-    private val appLanguageOptions by lazy {
-        listOf(
-            ActionItem(text = context.getString(R.string.demo_settings_zh_hans), value = "zh"),
-            ActionItem(text = context.getString(R.string.demo_settings_zh_hant), value = "zh-Hant"),
-            ActionItem(text = context.getString(R.string.demo_settings_en), value = "en"),
-            ActionItem(text = context.getString(R.string.demo_settings_ar), value = "ar")
-        )
-    }
 
     init {
         LayoutInflater.from(context).inflate(R.layout.demo_page_settings, this, true)
@@ -330,7 +320,7 @@ class SettingsPageView @JvmOverloads constructor(
             context.getString(R.string.demo_settings_language),
             getCurrentLanguageDisplayName()
         ) {
-            showLanguageSelector()
+            XingDunFeatureActivity.start(context, XingDunFeatureActivity.MODE_LANGUAGE)
         }
 
         setupEntryItem(
@@ -643,19 +633,6 @@ class SettingsPageView @JvmOverloads constructor(
         val persisted = themePersistUtil.getCustomPrimaryColor()
         val fallback = AppBuilderConfig.primaryColor
         return PrimaryColorPickerDialog.normalizeHex(persisted ?: fallback)
-    }
-
-    private fun showLanguageSelector() {
-        ActionSheet.show(context, appLanguageOptions) { selected ->
-            val tag = selected.value as String
-            val targetLocales = LocaleListCompat.forLanguageTags(tag)
-            MMKV.defaultMMKV().encode(KEY_APP_LANGUAGE, tag)
-            updateEntryValue(itemLanguage, selected.text)
-            if (AppCompatDelegate.getApplicationLocales() == targetLocales) {
-                return@show
-            }
-            AppCompatDelegate.setApplicationLocales(targetLocales)
-        }
     }
 
     private fun showFriendAddRuleSelector() {

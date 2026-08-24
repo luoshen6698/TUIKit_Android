@@ -642,6 +642,8 @@
     <string name="xingdun_redpacket_account">红包与余额</string>
     <string name="xingdun_help_center">帮助与反馈</string>
     <string name="xingdun_permission_management">权限管理</string>
+    <string name="xingdun_language_section">应用语言</string>
+    <string name="xingdun_language_footer">语言设置仅保存在当前设备，并会立即应用到主界面。</string>
     <string name="xingdun_user_agreement">用户协议</string>
     <string name="xingdun_privacy_policy">隐私政策</string>
     <string name="xingdun_about">关于</string>
