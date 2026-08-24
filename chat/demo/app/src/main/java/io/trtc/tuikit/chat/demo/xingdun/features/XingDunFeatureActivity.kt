@@ -13,6 +13,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
@@ -120,7 +121,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private lateinit var content: LinearLayout
     private lateinit var status: TextView
     private lateinit var scrollView: ScrollView
-    private lateinit var headerBar: LinearLayout
+    private lateinit var headerBar: FrameLayout
     private val mode: String by lazy { intent.getStringExtra(EXTRA_MODE).orEmpty() }
     private val itemId: Int by lazy { intent.getIntExtra(EXTRA_ITEM_ID, 0) }
     private val targetID: String by lazy { intent.getStringExtra(EXTRA_TARGET_ID).orEmpty() }
@@ -254,20 +255,30 @@ open class XingDunFeatureActivity : BaseActivity() {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
-        headerBar = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(12.dp(), 10.dp(), 16.dp(), 10.dp())
-            addView(Button(context).apply {
-                text = getString(R.string.xingdun_back)
+        headerBar = FrameLayout(this).apply {
+            addView(TextView(context).apply {
+                text = "‹"
+                textSize = 34f
+                gravity = Gravity.CENTER
+                contentDescription = getString(R.string.xingdun_back)
+                setTextColor(Color.BLACK)
+                isClickable = true
+                isFocusable = true
                 setOnClickListener { finish() }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            }, FrameLayout.LayoutParams(52.dp(), 52.dp(), Gravity.START or Gravity.CENTER_VERTICAL))
             addView(TextView(context).apply {
                 text = titleForMode()
-                textSize = 20f
-                setPadding(12.dp(), 0, 0, 0)
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                textSize = 17f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(Color.BLACK)
+                maxLines = 1
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp(), Gravity.CENTER).apply {
+                marginStart = 58.dp()
+                marginEnd = 58.dp()
+            })
         }
-        root.addView(headerBar)
+        root.addView(headerBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()))
         scrollView = ScrollView(this).apply {
             isFillViewport = true
             content = LinearLayout(context).apply {
