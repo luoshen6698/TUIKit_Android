@@ -8,6 +8,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -188,6 +189,13 @@ open class XingDunFeatureActivity : BaseActivity() {
         showPermissionManagement()
     }
 
+    private val accountBindingResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK && mode == MODE_ACCOUNT_SECURITY) {
+            content.removeAllViews()
+            showAccountSecurity()
+        }
+    }
+
     private val invitePosterStoragePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val poster = pendingInvitePoster
         pendingInvitePoster = null
@@ -222,6 +230,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             MODE_PERSONAL_QR -> showPersonalQRCode()
             MODE_QR_SCANNER -> showQRCodeScanner()
             MODE_ACCOUNT_SECURITY -> showAccountSecurity()
+            MODE_BIND_PHONE -> showPhoneBinding()
             MODE_DEVICES -> showDevices()
             MODE_DEACTIVATE -> showDeactivation()
             MODE_NOTIFICATIONS -> showNotificationSettings()
@@ -1808,14 +1817,14 @@ open class XingDunFeatureActivity : BaseActivity() {
                 "☎",
                 R.string.xingdun_phone,
                 maskPhone(profile.string("phone")),
-                action = { showBindingDialog("phone") },
+                action = { openAccountBinding(MODE_BIND_PHONE) },
             ),
             notificationDivider(),
             accountSecurityRow(
                 "✉",
                 R.string.xingdun_email,
                 maskEmail(profile.string("email")),
-                action = { showBindingDialog("email") },
+                action = ::showEmailBindingDialog,
             ),
         ), notificationSectionLayoutParams())
 
@@ -1842,6 +1851,80 @@ open class XingDunFeatureActivity : BaseActivity() {
                 ),
             ), notificationSectionLayoutParams())
         }
+    }
+
+    private fun openAccountBinding(bindingMode: String) {
+        accountBindingResult.launch(Intent(this, XingDunFeatureActivity::class.java).apply {
+            putExtra(EXTRA_MODE, bindingMode)
+        })
+    }
+
+    private fun showPhoneBinding() {
+        applyNotificationSettingsChrome()
+        val field = EditText(this).apply {
+            setHint(R.string.xingdun_phone_placeholder)
+            inputType = InputType.TYPE_CLASS_PHONE
+            setSingleLine(true)
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+            textSize = 16f
+            setTextColor(Color.BLACK)
+            setHintTextColor(0xFFC7C7CC.toInt())
+            background = roundedDrawable(Color.WHITE, 22f)
+            setPadding(16.dp(), 0, 16.dp(), 0)
+        }
+        val errorView = TextView(this).apply {
+            visibility = View.GONE
+            textSize = 13f
+            setTextColor(0xFFD93025.toInt())
+            setPadding(14.dp(), 10.dp(), 14.dp(), 0)
+        }
+        val confirm = Button(this).apply {
+            setText(R.string.xingdun_confirm_binding)
+            isAllCaps = false
+            textSize = 16f
+            setTextColor(0xFF20A88F.toInt())
+            backgroundTintList = ColorStateList.valueOf(Color.WHITE)
+            background = roundedDrawable(Color.WHITE, 22f)
+            stateListAnimator = null
+        }
+        field.doAfterTextChanged { errorView.visibility = View.GONE }
+        confirm.setOnClickListener {
+            val phone = field.text.toString().trim()
+            if (XingDunAccountInputValidator.phone(phone) != null) {
+                errorView.setText(R.string.xingdun_phone_format_incorrect)
+                errorView.visibility = View.VISIBLE
+                return@setOnClickListener
+            }
+            confirm.isEnabled = false
+            confirm.alpha = 0.55f
+            field.isEnabled = false
+            errorView.visibility = View.GONE
+            lifecycleScope.launch {
+                runCatching {
+                    XingDunSessionManager.apiClient().postEmpty(
+                        requireSession(),
+                        "auth/bindPhone",
+                        mapOf("phone" to phone),
+                    )
+                }.onSuccess {
+                    setResult(RESULT_OK)
+                    finish()
+                }.onFailure { error ->
+                    confirm.isEnabled = true
+                    confirm.alpha = 1f
+                    field.isEnabled = true
+                    errorView.text = error.localizedMessage ?: getString(R.string.xingdun_action_failed)
+                    errorView.visibility = View.VISIBLE
+                }
+            }
+        }
+        content.addView(field, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()).apply {
+            topMargin = 10.dp()
+        })
+        content.addView(errorView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        content.addView(confirm, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 44.dp()).apply {
+            topMargin = 26.dp()
+        })
     }
 
     private fun accountSecurityCard(vararg rows: View): LinearLayout = LinearLayout(this).apply {
@@ -1900,23 +1983,21 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
     }
 
-    private fun showBindingDialog(kind: String) {
-        val field = input(if (kind == "phone") R.string.xingdun_phone else R.string.xingdun_email).apply {
-            inputType = if (kind == "phone") InputType.TYPE_CLASS_PHONE
-            else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+    private fun showEmailBindingDialog() {
+        val field = input(R.string.xingdun_email).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
         }
         AlertDialog.Builder(this)
-            .setTitle(if (kind == "phone") R.string.xingdun_bind_phone else R.string.xingdun_bind_email)
+            .setTitle(R.string.xingdun_bind_email)
             .setView(field)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.xingdun_submit) { _, _ ->
                 val value = field.text.toString().trim()
-                val validation = if (kind == "phone") XingDunAccountInputValidator.phone(value)
-                else XingDunAccountInputValidator.email(value)
+                val validation = XingDunAccountInputValidator.email(value)
                 if (validation != null) status.setText(accountInputError(validation))
                 else submitAccountAction(
-                    path = if (kind == "phone") "auth/bindPhone" else "auth/bindEmail",
-                    body = mapOf(kind to value),
+                    path = "auth/bindEmail",
+                    body = mapOf("email" to value),
                     refresh = true
                 )
             }
@@ -3771,6 +3852,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_PERSONAL_QR -> R.string.xingdun_personal_qr
         MODE_QR_SCANNER -> R.string.xingdun_scan_qr
         MODE_ACCOUNT_SECURITY -> R.string.xingdun_account_security
+        MODE_BIND_PHONE -> R.string.xingdun_bind_phone
         MODE_DEVICES -> R.string.xingdun_devices
         MODE_DEACTIVATE -> R.string.xingdun_deactivate_account
         MODE_NOTIFICATIONS -> R.string.xingdun_notification_settings
@@ -3824,6 +3906,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_PERSONAL_QR = "personal_qr"
         const val MODE_QR_SCANNER = "qr_scanner"
         const val MODE_ACCOUNT_SECURITY = "account_security"
+        const val MODE_BIND_PHONE = "bind_phone"
         const val MODE_DEVICES = "devices"
         const val MODE_DEACTIVATE = "deactivate"
         const val MODE_NOTIFICATIONS = "notifications"

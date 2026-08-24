@@ -515,6 +515,8 @@
     <string name="xingdun_email">Email</string>
     <string name="xingdun_bind_phone">Bind phone</string>
     <string name="xingdun_bind_email">Bind email</string>
+    <string name="xingdun_confirm_binding">Confirm binding</string>
+    <string name="xingdun_phone_format_incorrect">Invalid phone number format</string>
     <string name="xingdun_not_bound">Not bound</string>
     <string name="xingdun_field_required">This field is required.</string>
     <string name="xingdun_change_password">Change password</string>
