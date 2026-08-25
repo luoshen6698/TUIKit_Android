@@ -2620,7 +2620,6 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun showLanguageSettings() {
         applyNotificationSettingsChrome()
         val selectedTag = currentProductLanguageTag()
-        addNotificationSectionHeader(R.string.xingdun_language_section)
         content.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = roundedDrawable(Color.WHITE, 14f)
@@ -2640,13 +2639,13 @@ open class XingDunFeatureActivity : BaseActivity() {
                 textSize = 16f
                 setTextColor(Color.BLACK)
                 gravity = Gravity.CENTER_VERTICAL
-            }, LinearLayout.LayoutParams(0, 56.dp(), 1f))
+            }, LinearLayout.LayoutParams(0, 48.dp(), 1f))
             addView(TextView(context).apply {
                 text = if (selected) "✓" else ""
                 textSize = 22f
                 gravity = Gravity.CENTER
                 setTextColor(0xFF20A88F.toInt())
-            }, LinearLayout.LayoutParams(32.dp(), 56.dp()))
+            }, LinearLayout.LayoutParams(32.dp(), 48.dp()))
             isClickable = true
             isFocusable = true
             setOnClickListener { applyProductLanguage(tag) }
