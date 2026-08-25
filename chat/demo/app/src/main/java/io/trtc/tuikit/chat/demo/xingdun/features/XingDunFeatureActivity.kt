@@ -3702,16 +3702,13 @@ open class XingDunFeatureActivity : BaseActivity() {
         val session = XingDunSessionManager.currentSession()
         val debugUrl = intent.getStringExtra(EXTRA_DEBUG_LEGAL_URL)
             ?.takeIf { BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false) }
-        if (session == null && debugUrl == null) {
-            showLegalDocumentUnavailable()
-            return
-        }
-        val url = debugUrl ?: if (privacy) session!!.privacy.privacyUrl else session!!.privacy.userAgreementUrl
-        val uri = runCatching { Uri.parse(url) }.getOrNull()
+        val url = debugUrl ?: session?.let { if (privacy) it.privacy.privacyUrl else it.privacy.userAgreementUrl }
+        val uri = runCatching { Uri.parse(url.orEmpty()) }.getOrNull()
         if (uri == null || uri.scheme?.lowercase() !in setOf("http", "https") || uri.host.isNullOrBlank()) {
-            showLegalDocumentUnavailable()
+            showBundledLegalDocument(privacy)
             return
         }
+        val remoteUrl = uri.toString()
         val background = 0xFFF5F5F9.toInt()
         window.statusBarColor = background
         window.navigationBarColor = background
@@ -3753,7 +3750,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 webView.visibility = View.VISIBLE
                 progress.visibility = View.VISIBLE
                 status.setText(R.string.xingdun_loading)
-                webView.loadUrl(url)
+                webView.loadUrl(remoteUrl)
             })
         }
         webView.webChromeClient = object : WebChromeClient() {
@@ -3790,19 +3787,79 @@ open class XingDunFeatureActivity : BaseActivity() {
         val documentHeight = (resources.displayMetrics.heightPixels - 130.dp()).coerceAtLeast(480.dp())
         content.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, documentHeight))
         status.setText(R.string.xingdun_loading)
-        webView.loadUrl(url)
+        webView.loadUrl(remoteUrl)
     }
 
-    private fun showLegalDocumentUnavailable() {
-        content.removeAllViews()
-        content.gravity = Gravity.CENTER
+    private fun showBundledLegalDocument(privacy: Boolean) {
+        val background = 0xFFF5F5F9.toInt()
+        window.statusBarColor = background
+        window.navigationBarColor = background
+        headerBar.setBackgroundColor(background)
+        scrollView.setBackgroundColor(background)
+        content.setBackgroundColor(background)
+        content.setPadding(20.dp(), 18.dp(), 20.dp(), 32.dp())
+
+        val fullTitle = if (privacy) {
+            R.string.xingdun_privacy_policy_full_title
+        } else {
+            R.string.xingdun_user_agreement_full_title
+        }
+        val summary = if (privacy) {
+            R.string.xingdun_privacy_policy_summary
+        } else {
+            R.string.xingdun_user_agreement_summary
+        }
+        val sections = resources.getStringArray(
+            if (privacy) R.array.xingdun_privacy_policy_sections else R.array.xingdun_user_agreement_sections
+        )
+
         content.addView(TextView(this).apply {
-            setText(R.string.xingdun_legal_unavailable)
-            textSize = 16f
-            gravity = Gravity.CENTER
-            setTextColor(0xFF6D6D72.toInt())
-            setPadding(28.dp(), 28.dp(), 28.dp(), 28.dp())
+            setText(fullTitle)
+            textSize = 24f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.BLACK)
         })
+        content.addView(TextView(this).apply {
+            text = getString(
+                R.string.xingdun_legal_version_effective_date,
+                getString(R.string.xingdun_legal_current_version),
+                getString(R.string.xingdun_legal_effective_date),
+            )
+            textSize = 13f
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(0, 7.dp(), 0, 0)
+        })
+        content.addView(TextView(this).apply {
+            setText(summary)
+            textSize = 16f
+            setTextColor(Color.BLACK)
+            setLineSpacing(4.dp().toFloat(), 1f)
+            setPadding(0, 16.dp(), 0, 10.dp())
+        })
+
+        sections.toList().chunked(2).forEach { section ->
+            if (section.size != 2) return@forEach
+            content.addView(View(this).apply {
+                setBackgroundColor(0xFFE1E1E6.toInt())
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1.dp()).apply {
+                topMargin = 18.dp()
+                bottomMargin = 16.dp()
+            })
+            content.addView(TextView(this).apply {
+                text = section[0]
+                textSize = 17f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(Color.BLACK)
+            })
+            content.addView(TextView(this).apply {
+                text = section[1]
+                textSize = 15f
+                setTextColor(0xFF66666B.toInt())
+                setLineSpacing(5.dp().toFloat(), 1f)
+                setPadding(0, 10.dp(), 0, 0)
+            })
+        }
+        status.text = ""
     }
 
     private fun showFavorites() {
