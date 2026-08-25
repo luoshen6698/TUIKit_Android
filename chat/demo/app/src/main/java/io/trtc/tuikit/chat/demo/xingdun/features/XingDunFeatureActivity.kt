@@ -143,6 +143,8 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var managedPermissionFeedbackTitle: Int? = null
     private val debugReportFixtureEnabled: Boolean
         get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_REPORT_FIXTURE, false)
+    private val debugPersonalQRCodeFixtureEnabled: Boolean
+        get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_PERSONAL_QR_FIXTURE, false)
 
     private val attachmentPicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isEmpty()) return@registerForActivityResult
@@ -3946,6 +3948,10 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun showPersonalQRCode() {
         applyPersonalQRCodeChrome()
+        if (debugPersonalQRCodeFixtureEnabled) {
+            renderDebugPersonalQRCode()
+            return
+        }
         val session = runCatching { requireSession() }.getOrElse {
             showFailure(it)
             return
@@ -3980,6 +3986,29 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
     }
 
+    private fun renderDebugPersonalQRCode() {
+        setBusy(true)
+        lifecycleScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    XingDunPersonalQRCodeArtifactStore(this@XingDunFeatureActivity).artifact(
+                        tenantKey = "debug-company|debug-company-id|debug-sdk-app-id",
+                        userID = "xd_debug_user",
+                        displayName = "d001",
+                        accountID = "d001",
+                        avatarURL = null,
+                    )
+                }
+            }.onSuccess { artifact ->
+                setBusy(false)
+                renderPersonalQRCode(artifact)
+            }.onFailure {
+                setBusy(false)
+                showPersonalQRCodeUnavailable()
+            }
+        }
+    }
+
     private fun applyPersonalQRCodeChrome() {
         window.statusBarColor = Color.BLACK
         window.navigationBarColor = Color.BLACK
@@ -3988,7 +4017,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         content.setBackgroundColor(Color.BLACK)
         status.setBackgroundColor(Color.BLACK)
         status.setTextColor(Color.WHITE)
-        (headerBar.getChildAt(0) as? Button)?.apply {
+        (headerBar.getChildAt(0) as? TextView)?.apply {
             setTextColor(Color.WHITE)
             backgroundTintList = android.content.res.ColorStateList.valueOf(Color.BLACK)
         }
@@ -4279,6 +4308,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val EXTRA_MODE = "mode"
         private const val EXTRA_DEBUG_BYPASS_LOGIN = "debug_bypass_login"
         private const val EXTRA_DEBUG_REPORT_FIXTURE = "debug_report_fixture"
+        private const val EXTRA_DEBUG_PERSONAL_QR_FIXTURE = "debug_personal_qr_fixture"
         private const val EXTRA_DEBUG_LEGAL_URL = "debug_legal_url"
         private const val EXTRA_ITEM_ID = "item_id"
         private const val EXTRA_TARGET_ID = "target_id"
