@@ -711,7 +711,7 @@
     <string name="xingdun_help_notification_question">为什么收不到新消息提醒？</string>
     <string name="xingdun_help_notification_answer">请在“设置 - 通知设置”检查系统通知权限、声音和震动，并确认对应会话没有开启消息免打扰。</string>
     <string name="xingdun_help_media_question">图片、语音、视频或文件发送失败怎么办？</string>
-    <string name="xingdun_help_media_answer">检查网络、相机、相册、麦克风和文件权限及文件大小，然后重试失败消息。</string>
+    <string name="xingdun_help_media_answer">检查网络、相机、相册、麦克风权限及文件大小。发送失败的消息会保留在聊天中，可点击重新发送。</string>
     <string name="xingdun_help_storage_question">清理缓存会删除聊天记录吗？</string>
     <string name="xingdun_help_storage_answer">不会。存储空间管理只删除本机媒体缓存，再次查看时可能重新下载；腾讯IM聊天记录和服务端收藏记录不会被删除。</string>
     <string name="xingdun_help_colleague_question">搜索不到同事怎么办？</string>

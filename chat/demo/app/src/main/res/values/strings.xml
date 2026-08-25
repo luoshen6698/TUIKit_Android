@@ -717,7 +717,7 @@
     <string name="xingdun_help_notification_question">Why don’t I receive message alerts?</string>
     <string name="xingdun_help_notification_answer">Open Settings - Notifications and check system notification access, sound and vibration. Also make sure the conversation is not muted.</string>
     <string name="xingdun_help_media_question">Why did a photo, audio, video or file fail to send?</string>
-    <string name="xingdun_help_media_answer">Check the network, camera, photo, microphone and file permissions and the file size, then retry the failed message.</string>
+    <string name="xingdun_help_media_answer">Check the network, camera, photo and microphone permissions and the file size. Failed messages remain in the chat and can be tapped to resend.</string>
     <string name="xingdun_help_storage_question">Does clearing cache delete chat history?</string>
     <string name="xingdun_help_storage_answer">No. Storage management removes only local media cache. Media may be downloaded again; Tencent IM messages and server favorites are preserved.</string>
     <string name="xingdun_help_colleague_question">Why can’t I find a colleague?</string>

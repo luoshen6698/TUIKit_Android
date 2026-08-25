@@ -3167,9 +3167,13 @@ open class XingDunFeatureActivity : BaseActivity() {
             group.addView(helpDivider())
             loadHelpCustomerService(contactRow)
         }
-        group.addView(helpNavigationRow(R.string.xingdun_feedback) { startChildMode(MODE_FEEDBACK) })
+        group.addView(helpNavigationRow(R.string.xingdun_feedback, icon = R.drawable.xingdun_ic_mine_feedback) {
+            startChildMode(MODE_FEEDBACK)
+        })
         group.addView(helpDivider())
-        group.addView(helpNavigationRow(R.string.xingdun_report_violation) { startChildMode(MODE_REPORT_CREATE) })
+        group.addView(helpNavigationRow(R.string.xingdun_report_violation, icon = R.drawable.xingdun_ic_mine_report) {
+            startChildMode(MODE_REPORT_CREATE)
+        })
         content.addView(group, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         content.addView(TextView(this).apply {
             setText(R.string.xingdun_help_support_footer)
@@ -3179,10 +3183,23 @@ open class XingDunFeatureActivity : BaseActivity() {
         })
     }
 
-    private fun helpNavigationRow(title: Int, detail: Int? = null, action: () -> Unit): LinearLayout =
+    private fun helpNavigationRow(
+        title: Int,
+        detail: Int? = null,
+        icon: Int? = null,
+        action: () -> Unit,
+    ): LinearLayout =
         LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(16.dp(), 0, 10.dp(), 0)
+            icon?.let {
+                addView(ImageView(context).apply {
+                    setImageResource(it)
+                    imageTintList = android.content.res.ColorStateList.valueOf(0xFF28B7A2.toInt())
+                }, LinearLayout.LayoutParams(22.dp(), 22.dp()).apply {
+                    marginEnd = 12.dp()
+                })
+            }
             addView(TextView(context).apply {
                 setText(title)
                 textSize = 16f
@@ -3257,7 +3274,12 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun configureHelpCustomerServiceRow(row: LinearLayout, title: Int, detail: Int?, action: () -> Unit) {
         row.removeAllViews()
-        val configured = helpNavigationRow(title, detail, action)
+        val configured = helpNavigationRow(
+            title = title,
+            detail = detail,
+            icon = R.drawable.xingdun_ic_mine_help,
+            action = action,
+        )
         while (configured.childCount > 0) row.addView(configured.getChildAt(0).also { configured.removeView(it) })
         row.orientation = LinearLayout.HORIZONTAL
         row.gravity = Gravity.CENTER_VERTICAL
