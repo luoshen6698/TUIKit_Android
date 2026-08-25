@@ -119,6 +119,23 @@ data class XingDunUserProfile(
     val status: String? = null
 )
 
+/** Tenant-scoped business profile returned by `/user/detail`. */
+data class XingDunContactDetail(
+    val id: Int = 0,
+    val customId: String? = null,
+    val nickname: String? = null,
+    val avatar: String? = null,
+    val birthday: String? = null,
+    val phone: String? = null,
+    val email: String? = null,
+    val signature: String? = null,
+    val timUserId: String = "",
+    val alias: String? = null,
+    val isBlacklist: Boolean = false,
+    val isBlockedByPeer: Boolean = false,
+    val departmentPath: List<String> = emptyList()
+)
+
 data class XingDunLoginRequest(
     val username: String,
     val password: String,

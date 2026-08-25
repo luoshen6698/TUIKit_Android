@@ -47,6 +47,7 @@ import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.search.SearchActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactDetailActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspacePageView
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMinePageView
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
@@ -812,7 +813,7 @@ class MainActivity : BaseActivity() {
             headerTitle = getString(R.string.demo_page_contacts_title),
             headerRightAction = addButton,
             onContactClick = { contactInfo ->
-                ChatActivity.start(this, "c2c_${contactInfo.userID}")
+                XingDunContactDetailActivity.start(this, contactInfo)
             },
             onGroupClick = { contactInfo ->
                 ChatActivity.start(this, "group_${contactInfo.userID}")

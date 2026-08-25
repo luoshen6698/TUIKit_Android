@@ -46,7 +46,7 @@ internal data class XingDunCustomMessage(
                 R.string.xingdun_custom_redpacket_summary,
                 first("greeting", "fallback_text") ?: context.getString(R.string.xingdun_redpacket_default_greeting)
             )
-            "contact_card", "card" -> context.getString(
+            "contact_card", "xingdun_contact_card", "card" -> context.getString(
                 R.string.xingdun_custom_contact_summary,
                 first("display_name", "nickname") ?: context.getString(R.string.xingdun_custom_contact)
             )
@@ -153,7 +153,7 @@ internal object XingDunRedpacketStatusLoader {
 
 internal object XingDunCustomMessageParser {
     private val knownTypes = setOf(
-        "redpacket", "contact_card", "card", "call_record", "xingdun_call_record", "call", "audio_call",
+        "redpacket", "contact_card", "xingdun_contact_card", "card", "call_record", "xingdun_call_record", "call", "audio_call",
         "video_call", "config_refresh", "auto_delete_config", "remote_delete", "pin_message",
         "read_receipt_summary", "report_notice", "workspace_application", "cs_control"
     )
