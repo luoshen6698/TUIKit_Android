@@ -830,6 +830,8 @@
     <string name="xingdun_favorite_picture">[图片]</string>
     <string name="xingdun_favorite_audio">[语音]</string>
     <string name="xingdun_favorite_audio_duration">语音 · %1$d″</string>
+    <string name="xingdun_favorite_audio_playing">播放中 · %1$d″</string>
+    <string name="xingdun_favorite_audio_play_hint">播放或暂停这条语音消息</string>
     <string name="xingdun_favorite_video">[视频]</string>
     <string name="xingdun_favorite_file">[文件]</string>
     <string name="xingdun_favorite_location">[位置]</string>

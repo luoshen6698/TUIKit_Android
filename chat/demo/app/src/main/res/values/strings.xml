@@ -836,6 +836,8 @@
     <string name="xingdun_favorite_picture">[Image]</string>
     <string name="xingdun_favorite_audio">[Voice]</string>
     <string name="xingdun_favorite_audio_duration">Voice · %1$d″</string>
+    <string name="xingdun_favorite_audio_playing">Playing · %1$d″</string>
+    <string name="xingdun_favorite_audio_play_hint">Play or pause this voice message</string>
     <string name="xingdun_favorite_video">[Video]</string>
     <string name="xingdun_favorite_file">[File]</string>
     <string name="xingdun_favorite_location">[Location]</string>

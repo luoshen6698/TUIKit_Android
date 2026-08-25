@@ -96,11 +96,18 @@ import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeRoute
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunAccountDeletionReceiptStore
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
+import io.trtc.tuikit.chat.uikit.components.audioplayer.AudioPlayer
+import io.trtc.tuikit.chat.uikit.components.audioplayer.AudioPlayerListener
+import io.trtc.tuikit.chat.uikit.components.imageviewer.EventHandler
+import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageElement
+import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageViewer
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -148,6 +155,9 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var favoriteLoading = false
     private var favoriteTouchStartY = 0f
     private var favoriteListContainer: LinearLayout? = null
+    private val favoriteAudioPlayer: AudioPlayer by lazy { AudioPlayer.create() }
+    private var favoriteAudioURL: String? = null
+    private var favoriteAudioView: TextView? = null
     private var aboutUpdateProgress: ProgressBar? = null
     private var aboutUpdateRow: View? = null
     private val reportRecords = mutableListOf<JsonObject>()
@@ -279,6 +289,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
+        if (mode == MODE_FAVORITES) favoriteAudioPlayer.stop()
         legalWebView?.apply {
             stopLoading()
             loadUrl("about:blank")
@@ -3926,6 +3937,13 @@ open class XingDunFeatureActivity : BaseActivity() {
             }
             false
         }
+        scrollView.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+            if (scrollY <= oldScrollY || favoriteLoading || favoriteRecords.size >= favoriteTotal) {
+                return@setOnScrollChangeListener
+            }
+            val child = scrollView.getChildAt(0) ?: return@setOnScrollChangeListener
+            if (child.height - (scrollView.height + scrollY) <= 240.dp()) loadFavorites(reset = false)
+        }
         loadFavorites(reset = true)
     }
 
@@ -3983,9 +4001,6 @@ open class XingDunFeatureActivity : BaseActivity() {
             }
             else -> {
                 favoriteRecords.forEach { favorite -> container.addView(favoriteCard(favorite)) }
-                if (favoriteRecords.size < favoriteTotal) {
-                    container.addView(actionButton(R.string.xingdun_load_more) { loadFavorites(reset = false) })
-                }
             }
         }
     }
@@ -4032,6 +4047,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         val messageType = snapshot.string("message_type").orEmpty().uppercase(Locale.ROOT)
         val previewURL = favoriteMediaURL(snapshot, messageType, preview = true)
         val playbackURL = favoriteMediaURL(snapshot, messageType, preview = false)
+        val audioDuration = if (messageType == "AUDIO") favoriteAudioDuration(snapshot) else null
 
         return FrameLayout(this).apply {
             background = roundedDrawable(Color.WHITE, 14f)
@@ -4105,8 +4121,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             } else {
                 body.addView(TextView(context).apply {
                     text = if (messageType == "AUDIO") {
-                        val seconds = favoriteAudioDuration(snapshot)
-                        if (seconds != null) getString(R.string.xingdun_favorite_audio_duration, seconds)
+                        if (audioDuration != null) getString(R.string.xingdun_favorite_audio_duration, audioDuration)
                         else favoriteSummary(snapshot, messageType)
                     } else {
                         favoriteSummary(snapshot, messageType)
@@ -4120,7 +4135,8 @@ open class XingDunFeatureActivity : BaseActivity() {
                         setPadding(12.dp(), 10.dp(), 12.dp(), 10.dp())
                         isClickable = true
                         isFocusable = true
-                        setOnClickListener { openFavoriteMedia(messageType, playbackURL) }
+                        contentDescription = getString(R.string.xingdun_favorite_audio_play_hint)
+                        setOnClickListener { toggleFavoriteAudio(playbackURL, this, audioDuration) }
                     }
                 })
             }
@@ -4262,25 +4278,86 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun openFavoriteMedia(messageType: String, url: String) {
-        if (messageType == "PICTURE") {
-            val image = ImageView(this).apply {
-                adjustViewBounds = true
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(12.dp(), 12.dp(), 12.dp(), 12.dp())
-            }
-            ImageLoader.load(this, image, url, R.drawable.xingdun_ic_storage_image)
-            AlertDialog.Builder(this)
-                .setView(image)
-                .setNegativeButton(R.string.demo_close, null)
-                .show()
+        if (messageType == "AUDIO") return
+        val mediaType = if (messageType == "VIDEO") 1 else 0
+        val element = ImageElement(
+            data = url,
+            type = mediaType,
+            videoData = if (mediaType == 1) url else null,
+            stableId = "favorite-${url.hashCode()}",
+        )
+        val session = ImageViewer.view(
+            listOf(element),
+            onEventTriggered = object : EventHandler {
+                override fun onEvent(eventData: Map<String, Any>, callback: (Any?) -> Unit) {
+                    when (eventData.keys.firstOrNull()) {
+                        ImageViewer.EVENT_SAVE_MEDIA, ImageViewer.EVENT_DOWNLOAD_VIDEO -> {
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                callback(downloadFavoriteMedia(url, mediaType))
+                            }
+                        }
+                        else -> callback(null)
+                    }
+                }
+            },
+        )
+        if (session == null) status.setText(R.string.xingdun_favorite_media_open_failed)
+    }
+
+    private fun toggleFavoriteAudio(url: String, view: TextView, seconds: Int?) {
+        val duration = seconds ?: 1
+        if (favoriteAudioURL == url && favoriteAudioPlayer.isPlaying()) {
+            favoriteAudioPlayer.pause()
+            view.text = getString(R.string.xingdun_favorite_audio_duration, duration)
             return
         }
-        runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                type = if (messageType == "VIDEO") "video/*" else "audio/*"
-            })
-        }.onFailure { status.setText(R.string.xingdun_favorite_media_open_failed) }
+        if (favoriteAudioURL == url && favoriteAudioPlayer.isPaused()) {
+            favoriteAudioPlayer.resume()
+            view.text = getString(R.string.xingdun_favorite_audio_playing, duration)
+            return
+        }
+        favoriteAudioView?.let { previous ->
+            val previousSeconds = previous.tag as? Int ?: 1
+            previous.text = getString(R.string.xingdun_favorite_audio_duration, previousSeconds)
+        }
+        favoriteAudioURL = url
+        favoriteAudioView = view.apply { tag = duration }
+        favoriteAudioPlayer.setListener(object : AudioPlayerListener {
+            override fun onPlay() = updateFavoriteAudioView(view, url, duration, true)
+            override fun onResume() = updateFavoriteAudioView(view, url, duration, true)
+            override fun onPause() = updateFavoriteAudioView(view, url, duration, false)
+            override fun onCompletion() = updateFavoriteAudioView(view, url, duration, false)
+            override fun onError(errorMessage: String) {
+                updateFavoriteAudioView(view, url, duration, false)
+                status.setText(R.string.xingdun_favorite_media_open_failed)
+            }
+        })
+        favoriteAudioPlayer.play(url)
     }
+
+    private fun updateFavoriteAudioView(view: TextView, url: String, seconds: Int, playing: Boolean) {
+        view.post {
+            if (favoriteAudioURL != url) return@post
+            view.text = getString(
+                if (playing) R.string.xingdun_favorite_audio_playing else R.string.xingdun_favorite_audio_duration,
+                seconds,
+            )
+            if (!playing) favoriteAudioURL = null
+        }
+    }
+
+    private fun downloadFavoriteMedia(url: String, mediaType: Int): String? = runCatching {
+        val extension = if (mediaType == 1) ".mp4" else ".jpg"
+        val target = File(cacheDir, "xingdun-favorite-${url.hashCode()}$extension")
+        if (target.exists() && target.length() > 0L) return@runCatching target.absolutePath
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 30_000
+        connection.instanceFollowRedirects = true
+        connection.inputStream.use { input -> FileOutputStream(target).use(input::copyTo) }
+        connection.disconnect()
+        target.absolutePath
+    }.getOrNull()
 
     private fun confirmRemoveFavorite(favoriteID: Int) {
         AlertDialog.Builder(this)
