@@ -32,7 +32,6 @@ import com.google.gson.JsonObject
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
-import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.login.Gender
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.login.UserProfile
@@ -103,20 +102,14 @@ open class SelfDetailActivity : BaseActivity() {
         when (mode) {
             XingDunProfileEditorActivity.MODE_ACCOUNT -> saveCustomID(value)
             XingDunProfileEditorActivity.MODE_NICKNAME ->
-                updateProfileOnServer(mapOf("nickname" to value), UserProfile(nickname = value))
+                updateProfileOnServer(mapOf("nickname" to value))
             XingDunProfileEditorActivity.MODE_SIGNATURE ->
-                updateProfileOnServer(mapOf("signature" to value), UserProfile(selfSignature = value))
+                updateProfileOnServer(mapOf("signature" to value))
             XingDunProfileEditorActivity.MODE_GENDER -> {
-                val gender = when (value) {
-                    "1" -> Gender.MALE
-                    "2" -> Gender.FEMALE
-                    else -> Gender.UNKNOWN
-                }
-                updateProfileOnServer(mapOf("gender" to value.toIntOrNull().orZero()), UserProfile(gender = gender))
+                updateProfileOnServer(mapOf("gender" to value.toIntOrNull().orZero()))
             }
             XingDunProfileEditorActivity.MODE_BIRTHDAY -> {
-                val birthday = value.replace("-", "").toLongOrNull() ?: 0L
-                updateProfileOnServer(mapOf("birthday" to value), UserProfile(birthday = birthday))
+                updateProfileOnServer(mapOf("birthday" to value))
             }
         }
     }
@@ -268,14 +261,14 @@ open class SelfDetailActivity : BaseActivity() {
             title = getString(R.string.xingdun_phone),
             showArrow = true,
             showDivider = true,
-            onClick = { XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_ACCOUNT_SECURITY) },
+            onClick = { XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_BIND_PHONE) },
         )
         emailItem = SettingsEntry(
             context = this,
             title = getString(R.string.xingdun_email),
             showArrow = true,
             showDivider = false,
-            onClick = { XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_ACCOUNT_SECURITY) },
+            onClick = { XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_BIND_EMAIL) },
         )
 
         detailContainer.addView(genderItem.view, entryLayoutParams())
@@ -485,7 +478,6 @@ open class SelfDetailActivity : BaseActivity() {
         }.onSuccess {
             cachedAvatarUrl = null
             renderCachedProfile()
-            LoginStore.shared.setSelfInfo(UserProfile(avatarURL = ""), noopCompletion())
             Toast.makeText(this, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
         }.onFailure(::showProfileError)
     }
@@ -523,7 +515,6 @@ open class SelfDetailActivity : BaseActivity() {
             )
         }.onSuccess {
             loadServerProfile()
-            LoginStore.shared.setSelfInfo(UserProfile(avatarURL = cachedAvatarUrl), noopCompletion())
             Toast.makeText(this, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
         }.onFailure(::showProfileError)
     }
@@ -559,7 +550,7 @@ open class SelfDetailActivity : BaseActivity() {
         }
     }
 
-    private fun updateProfileOnServer(fields: Map<String, Any>, profile: UserProfile) {
+    private fun updateProfileOnServer(fields: Map<String, Any>) {
         val session = XingDunSessionManager.currentSession()
         if (session == null) {
             Toast.makeText(this, R.string.xingdun_session_expired, Toast.LENGTH_LONG).show()
@@ -569,9 +560,6 @@ open class SelfDetailActivity : BaseActivity() {
             runCatching {
                 XingDunSessionManager.apiClient().postEmpty(session, "user/updateProfile", fields)
             }.onSuccess {
-                // Server REST already synchronizes Tencent IM. This call refreshes the local Store;
-                // it is intentionally issued only after the authoritative business write succeeds.
-                LoginStore.shared.setSelfInfo(profile, noopCompletion())
                 loadServerProfile()
                 Toast.makeText(this@SelfDetailActivity, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
             }.onFailure { error ->
@@ -582,11 +570,6 @@ open class SelfDetailActivity : BaseActivity() {
                 ).show()
             }
         }
-    }
-
-    private fun noopCompletion(): CompletionHandler = object : CompletionHandler {
-        override fun onSuccess() {}
-        override fun onFailure(code: Int, desc: String) {}
     }
 
     private fun genderServerValue(): String = when (cachedGender) {
