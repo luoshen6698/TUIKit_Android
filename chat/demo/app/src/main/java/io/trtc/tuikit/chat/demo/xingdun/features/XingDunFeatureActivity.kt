@@ -42,6 +42,7 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.Switch
@@ -100,6 +101,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.text.DateFormat
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
@@ -138,6 +142,12 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var reportTotal = 0
     private var reportLoading = false
     private var reportTouchStartY = 0f
+    private val favoriteRecords = mutableListOf<JsonObject>()
+    private var favoritePage = 1
+    private var favoriteTotal = 0
+    private var favoriteLoading = false
+    private var favoriteTouchStartY = 0f
+    private var favoriteListContainer: LinearLayout? = null
     private var aboutUpdateProgress: ProgressBar? = null
     private var aboutUpdateRow: View? = null
     private val reportRecords = mutableListOf<JsonObject>()
@@ -3867,32 +3877,374 @@ open class XingDunFeatureActivity : BaseActivity() {
             addMessage(R.string.xingdun_feature_unavailable)
             return
         }
+        scrollView.setBackgroundColor(0xFFF5F6FA.toInt())
+        favoriteListContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(favoriteListContainer)
+        scrollView.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> favoriteTouchStartY = event.y
+                MotionEvent.ACTION_UP -> {
+                    if (scrollView.scrollY == 0 && event.y - favoriteTouchStartY > 120.dp()) {
+                        loadFavorites(reset = true)
+                    }
+                }
+            }
+            false
+        }
+        loadFavorites(reset = true)
+    }
+
+    private fun loadFavorites(reset: Boolean) {
+        if (favoriteLoading) return
+        favoriteLoading = true
+        val requestedPage = if (reset) 1 else favoritePage + 1
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
                 XingDunSessionManager.apiClient().get<JsonObject>(
-                    requireSession(), "message/favorites", mapOf("page" to "1", "page_size" to "50"), JsonObject::class.java
+                    requireSession(),
+                    "message/favorites",
+                    mapOf("page" to requestedPage.toString(), "page_size" to FAVORITE_PAGE_SIZE.toString()),
+                    JsonObject::class.java,
                 )
             }.onSuccess { page ->
+                favoriteLoading = false
                 setBusy(false)
                 val list = page.array("items").takeIf { !it.isEmpty } ?: page.array("list")
-                if (list.isEmpty) addMessage(R.string.xingdun_favorites_empty)
+                if (reset) favoriteRecords.clear()
                 list.forEach { element ->
-                    val favorite = element.asJsonObject
-                    val snapshot = favorite.getAsJsonObject("message") ?: favorite
-                    val favoriteID = favorite.int("favorite_id") ?: favorite.int("id")
-                    val summary = snapshot.string("text").orEmpty().ifBlank {
-                        getString(R.string.xingdun_favorite_type_summary, snapshot.string("message_type").orEmpty())
-                    }
-                    addCard(
-                        snapshot.string("sender_nickname") ?: snapshot.string("sender") ?: getString(R.string.xingdun_message),
-                        listOfNotNull(summary, snapshot.string("conversation_name"), favorite.string("favorited_at")).joinToString("\n")
-                    ) {
-                        if (favoriteID != null) confirmRemoveFavorite(favoriteID)
-                    }
+                    val favorite = element.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@forEach
+                    val id = favorite.int("favorite_id") ?: favorite.int("id") ?: return@forEach
+                    if (favoriteRecords.none { (it.int("favorite_id") ?: it.int("id")) == id }) favoriteRecords += favorite
                 }
-            }.onFailure(::showFailure)
+                favoritePage = requestedPage
+                favoriteTotal = page.int("total") ?: favoriteRecords.size
+                renderFavorites()
+            }.onFailure { error ->
+                favoriteLoading = false
+                setBusy(false)
+                if (favoriteRecords.isEmpty()) renderFavorites(error.localizedMessage)
+                else status.setText(R.string.xingdun_favorites_load_more_failed)
+            }
         }
+    }
+
+    private fun renderFavorites(errorMessage: String? = null) {
+        val container = favoriteListContainer ?: return
+        container.removeAllViews()
+        when {
+            errorMessage != null && favoriteRecords.isEmpty() -> {
+                container.addView(favoriteEmptyState(
+                    R.string.xingdun_favorites_load_failed,
+                    R.string.xingdun_favorites_retry_hint,
+                    R.string.xingdun_retry,
+                ) { loadFavorites(reset = true) })
+            }
+            favoriteRecords.isEmpty() -> {
+                container.addView(favoriteEmptyState(
+                    R.string.xingdun_favorites_empty_title,
+                    R.string.xingdun_favorites_empty,
+                ))
+            }
+            else -> {
+                favoriteRecords.forEach { favorite -> container.addView(favoriteCard(favorite)) }
+                if (favoriteRecords.size < favoriteTotal) {
+                    container.addView(actionButton(R.string.xingdun_load_more) { loadFavorites(reset = false) })
+                }
+            }
+        }
+    }
+
+    private fun favoriteEmptyState(
+        titleRes: Int,
+        messageRes: Int,
+        actionRes: Int? = null,
+        action: (() -> Unit)? = null,
+    ): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(24.dp(), 72.dp(), 24.dp(), 36.dp())
+        addView(ImageView(context).apply {
+            setImageResource(R.drawable.xingdun_ic_mine_favorite)
+            imageTintList = ColorStateList.valueOf(0xFF23B39C.toInt())
+        }, LinearLayout.LayoutParams(48.dp(), 48.dp()))
+        addView(TextView(context).apply {
+            setText(titleRes)
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.BLACK)
+            setPadding(0, 18.dp(), 0, 0)
+        })
+        addView(TextView(context).apply {
+            setText(messageRes)
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF7A7F87.toInt())
+            setPadding(0, 8.dp(), 0, 0)
+        })
+        if (actionRes != null && action != null) addView(actionButton(actionRes, action))
+    }
+
+    private fun favoriteCard(favorite: JsonObject): View {
+        val snapshot = favorite.getAsJsonObject("message") ?: favorite
+        val favoriteID = favorite.int("favorite_id") ?: favorite.int("id")
+        val senderID = snapshot.string("sender").orEmpty()
+        val senderName = snapshot.string("sender_nickname") ?: senderID.ifBlank { getString(R.string.xingdun_message) }
+        val conversationName = snapshot.string("conversation_name")
+            ?: favorite.string("conversation_id")
+            ?: getString(R.string.xingdun_favorite_unknown_conversation)
+        val messageType = snapshot.string("message_type").orEmpty().uppercase(Locale.ROOT)
+        val previewURL = favoriteMediaURL(snapshot, messageType, preview = true)
+        val playbackURL = favoriteMediaURL(snapshot, messageType, preview = false)
+
+        return FrameLayout(this).apply {
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(14.dp(), 14.dp(), 10.dp(), 14.dp())
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.TOP
+            }
+            val avatar = ImageView(context).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(0xFFE2F4F0.toInt())
+                }
+                clipToOutline = true
+                setImageResource(R.drawable.xingdun_ic_user)
+            }
+            row.addView(avatar, LinearLayout.LayoutParams(42.dp(), 42.dp()).apply { marginEnd = 12.dp() })
+
+            val body = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+            val header = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(TextView(context).apply {
+                    text = senderName
+                    textSize = 15f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Color.BLACK)
+                    maxLines = 1
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(TextView(context).apply {
+                    text = favoriteDisplayDate(favorite.string("favorited_at") ?: snapshot.string("sent_at"))
+                    textSize = 11f
+                    setTextColor(0xFF9A9EA5.toInt())
+                    maxLines = 1
+                    setPadding(6.dp(), 0, 34.dp(), 0)
+                })
+            }
+            body.addView(header)
+            body.addView(TextView(context).apply {
+                text = "${favoriteTypeLabel(messageType)}  ·  $conversationName"
+                textSize = 12f
+                setTextColor(0xFF66716F.toInt())
+                maxLines = 1
+                setPadding(0, 5.dp(), 0, 0)
+            })
+
+            if ((messageType == "PICTURE" || messageType == "VIDEO") && previewURL != null) {
+                val thumbnail = FrameLayout(context).apply {
+                    background = roundedDrawable(0xFFF0F2F5.toInt(), 10f)
+                    clipToOutline = true
+                    val image = ImageView(context).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+                    addView(image, FrameLayout.LayoutParams(72.dp(), 72.dp()))
+                    ImageLoader.load(
+                        this@XingDunFeatureActivity,
+                        image,
+                        previewURL,
+                        if (messageType == "VIDEO") R.drawable.xingdun_ic_storage_video else R.drawable.xingdun_ic_storage_image,
+                    )
+                    if (messageType == "VIDEO") addView(TextView(context).apply {
+                        text = "▶"
+                        textSize = 22f
+                        gravity = Gravity.CENTER
+                        setTextColor(Color.WHITE)
+                    }, FrameLayout.LayoutParams(72.dp(), 72.dp()))
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { openFavoriteMedia(messageType, playbackURL ?: previewURL) }
+                }
+                body.addView(thumbnail, LinearLayout.LayoutParams(72.dp(), 72.dp()).apply { topMargin = 8.dp() })
+            } else {
+                body.addView(TextView(context).apply {
+                    text = if (messageType == "AUDIO") {
+                        val seconds = favoriteAudioDuration(snapshot)
+                        if (seconds != null) getString(R.string.xingdun_favorite_audio_duration, seconds)
+                        else favoriteSummary(snapshot, messageType)
+                    } else {
+                        favoriteSummary(snapshot, messageType)
+                    }
+                    textSize = 14f
+                    setTextColor(Color.BLACK)
+                    maxLines = 3
+                    setPadding(0, 8.dp(), 0, 0)
+                    if ((messageType == "AUDIO") && playbackURL != null) {
+                        background = roundedDrawable(0x1F23B39C, 10f)
+                        setPadding(12.dp(), 10.dp(), 12.dp(), 10.dp())
+                        isClickable = true
+                        isFocusable = true
+                        setOnClickListener { openFavoriteMedia(messageType, playbackURL) }
+                    }
+                })
+            }
+            row.addView(body, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(row, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(TextView(context).apply {
+                text = "⋯"
+                textSize = 22f
+                gravity = Gravity.CENTER
+                contentDescription = getString(R.string.xingdun_favorite_more_actions)
+                isClickable = favoriteID != null
+                isFocusable = favoriteID != null
+                setTextColor(0xFF69716F.toInt())
+                setOnClickListener { anchor -> favoriteID?.let { showFavoriteActions(anchor, it) } }
+            }, FrameLayout.LayoutParams(38.dp(), 38.dp(), Gravity.TOP or Gravity.END))
+            if (senderID.isNotBlank()) loadFavoriteAvatar(senderID, avatar)
+        }.also { card ->
+            card.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = 12.dp()
+            }
+        }
+    }
+
+    private fun loadFavoriteAvatar(senderID: String, avatar: ImageView) {
+        ContactStore.shared.getContactInfo(
+            listOf(senderID),
+            object : GetContactInfoCompletionHandler {
+                override fun onSuccess(contactInfoList: List<ContactInfo>) {
+                    val url = contactInfoList.firstOrNull()?.avatarURL?.takeIf(String::isNotBlank) ?: return
+                    avatar.post { ImageLoader.load(this@XingDunFeatureActivity, avatar, url, R.drawable.xingdun_ic_user) }
+                }
+
+                override fun onFailure(code: Int, desc: String) = Unit
+            },
+        )
+    }
+
+    private fun favoriteSummary(snapshot: JsonObject, messageType: String): String =
+        snapshot.string("text").orEmpty().ifBlank {
+            getString(
+                when (messageType) {
+                    "PICTURE" -> R.string.xingdun_favorite_picture
+                    "AUDIO" -> R.string.xingdun_favorite_audio
+                    "VIDEO" -> R.string.xingdun_favorite_video
+                    "FILE" -> R.string.xingdun_favorite_file
+                    "LOCATION" -> R.string.xingdun_favorite_location
+                    "CUSTOM" -> R.string.xingdun_favorite_unsupported
+                    else -> R.string.xingdun_favorite_message
+                },
+            )
+        }
+
+    private fun favoriteDisplayDate(raw: String?): String {
+        val value = raw?.trim().orEmpty()
+        if (value.isEmpty()) return ""
+        val date = value.toLongOrNull()?.let { number ->
+            Date(if (number > 10_000_000_000L) number else number * 1_000L)
+        } ?: listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd HH:mm:ss",
+        ).firstNotNullOfOrNull { pattern ->
+            runCatching { SimpleDateFormat(pattern, Locale.US).parse(value) }.getOrNull()
+        }
+        return date?.let {
+            val locale = resources.configuration.locales[0] ?: Locale.getDefault()
+            DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale).format(it)
+        } ?: value
+    }
+
+    private fun favoriteAudioDuration(snapshot: JsonObject): Int? {
+        val attachment = snapshot.get("attachment") ?: return null
+        return listOf("Second", "Duration", "duration")
+            .firstNotNullOfOrNull { key -> attachment.firstDouble(key) }
+            ?.toInt()
+            ?.coerceAtLeast(1)
+    }
+
+    private fun favoriteTypeLabel(messageType: String): String = getString(
+        when (messageType) {
+            "PICTURE" -> R.string.xingdun_favorite_type_picture
+            "AUDIO" -> R.string.xingdun_favorite_type_audio
+            "VIDEO" -> R.string.xingdun_favorite_type_video
+            "FILE" -> R.string.xingdun_favorite_type_file
+            "LOCATION" -> R.string.xingdun_favorite_type_location
+            "CUSTOM" -> R.string.xingdun_favorite_type_custom
+            else -> R.string.xingdun_favorite_type_text
+        },
+    )
+
+    private fun favoriteMediaURL(snapshot: JsonObject, messageType: String, preview: Boolean): String? {
+        val attachment = snapshot.get("attachment") ?: return null
+        val keys = when (messageType) {
+            "PICTURE" -> listOf("ThumbUrl", "ThumbURL", "thumbUrl", "URL", "Url", "url")
+            "VIDEO" -> if (preview) {
+                listOf("ThumbUrl", "ThumbURL", "thumbUrl", "CoverUrl", "coverUrl", "VideoUrl", "VideoURL")
+            } else {
+                listOf("VideoUrl", "VideoURL", "videoUrl", "Url", "URL")
+            }
+            "AUDIO" -> listOf("Url", "URL", "url", "SoundUrl", "SoundURL", "DownloadUrl", "DownloadURL")
+            else -> emptyList()
+        }
+        return keys.firstNotNullOfOrNull { key -> attachment.firstString(key) }
+            ?.trim()
+            ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+    }
+
+    private fun JsonElement.firstString(key: String): String? = when {
+        isJsonObject -> {
+            val objectValue = asJsonObject
+            objectValue.get(key)?.takeUnless(JsonElement::isJsonNull)?.let { direct ->
+                runCatching { direct.asString }.getOrNull()
+            } ?: objectValue.entrySet().firstNotNullOfOrNull { (_, nested) -> nested.firstString(key) }
+        }
+        isJsonArray -> asJsonArray.firstNotNullOfOrNull { it.firstString(key) }
+        else -> null
+    }
+
+    private fun JsonElement.firstDouble(key: String): Double? = when {
+        isJsonObject -> {
+            val objectValue = asJsonObject
+            objectValue.get(key)?.takeUnless(JsonElement::isJsonNull)?.let { direct ->
+                runCatching { direct.asDouble }.getOrNull()
+            } ?: objectValue.entrySet().firstNotNullOfOrNull { (_, nested) -> nested.firstDouble(key) }
+        }
+        isJsonArray -> asJsonArray.firstNotNullOfOrNull { it.firstDouble(key) }
+        else -> null
+    }
+
+    private fun showFavoriteActions(anchor: View, favoriteID: Int) {
+        PopupMenu(this, anchor).apply {
+            menu.add(R.string.xingdun_remove_favorite)
+            setOnMenuItemClickListener {
+                confirmRemoveFavorite(favoriteID)
+                true
+            }
+            show()
+        }
+    }
+
+    private fun openFavoriteMedia(messageType: String, url: String) {
+        if (messageType == "PICTURE") {
+            val image = ImageView(this).apply {
+                adjustViewBounds = true
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(12.dp(), 12.dp(), 12.dp(), 12.dp())
+            }
+            ImageLoader.load(this, image, url, R.drawable.xingdun_ic_storage_image)
+            AlertDialog.Builder(this)
+                .setView(image)
+                .setNegativeButton(R.string.demo_close, null)
+                .show()
+            return
+        }
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                type = if (messageType == "VIDEO") "video/*" else "audio/*"
+            })
+        }.onFailure { status.setText(R.string.xingdun_favorite_media_open_failed) }
     }
 
     private fun confirmRemoveFavorite(favoriteID: Int) {
@@ -3908,8 +4260,10 @@ open class XingDunFeatureActivity : BaseActivity() {
                             requireSession(), "message/favorite", mapOf("favorite_id" to favoriteID)
                         )
                     }.onSuccess {
-                        content.removeAllViews()
-                        showFavorites()
+                        favoriteRecords.removeAll { (it.int("favorite_id") ?: it.int("id")) == favoriteID }
+                        favoriteTotal = maxOf(0, favoriteTotal - 1)
+                        setBusy(false)
+                        renderFavorites()
                     }.onFailure(::showFailure)
                 }
             }.show()
@@ -4507,6 +4861,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_REDPACKET_DETAIL = "redpacket_detail"
         private const val PERMISSION_PREFERENCES = "xingdun_permission_ui"
         private const val REPORT_PAGE_SIZE = 20
+        private const val FAVORITE_PAGE_SIZE = 20
 
         fun start(context: Context, mode: String, itemId: Int = 0) {
             context.startActivity(Intent(context, XingDunFeatureActivity::class.java).apply {
