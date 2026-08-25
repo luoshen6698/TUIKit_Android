@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -20,6 +21,7 @@ import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.login.UserProfile
 import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.settings.SelfDetailActivity
 import io.trtc.tuikit.chat.demo.settings.XingDunSystemSettingsActivity
@@ -132,12 +134,17 @@ class XingDunMinePageView @JvmOverloads constructor(
         )
         populateGroup(
             menuGroups[1],
-            listOf(
-                menu(R.string.xingdun_help_center_title, R.drawable.xingdun_ic_mine_help, XingDunFeatureActivity.MODE_HELP),
-                menu(R.string.xingdun_feedback, R.drawable.xingdun_ic_mine_feedback, XingDunFeatureActivity.MODE_FEEDBACK),
-                menu(R.string.xingdun_user_agreement, R.drawable.xingdun_ic_mine_document, XingDunFeatureActivity.MODE_USER_AGREEMENT),
-                menu(R.string.xingdun_privacy_policy, R.drawable.xingdun_ic_mine_privacy, XingDunFeatureActivity.MODE_PRIVACY_POLICY),
-            ),
+            buildList {
+                add(menu(R.string.xingdun_help_center_title, R.drawable.xingdun_ic_mine_help, XingDunFeatureActivity.MODE_HELP))
+                add(menu(R.string.xingdun_feedback, R.drawable.xingdun_ic_mine_feedback, XingDunFeatureActivity.MODE_FEEDBACK))
+                if (XingDunSessionManager.currentSession()?.features?.customerService == true) {
+                    add(MenuItem(R.string.xingdun_contact_enterprise_support, R.drawable.xingdun_ic_mine_customer_service) {
+                        openEnterpriseCustomerService()
+                    })
+                }
+                add(menu(R.string.xingdun_user_agreement, R.drawable.xingdun_ic_mine_document, XingDunFeatureActivity.MODE_USER_AGREEMENT))
+                add(menu(R.string.xingdun_privacy_policy, R.drawable.xingdun_ic_mine_privacy, XingDunFeatureActivity.MODE_PRIVACY_POLICY))
+            },
         )
         populateGroup(
             menuGroups[2],
@@ -248,6 +255,55 @@ class XingDunMinePageView @JvmOverloads constructor(
         }
         this.favoriteCount = favoriteCount
         renderStats(favoriteCount)
+    }
+
+    private fun openEnterpriseCustomerService() {
+        val session = XingDunSessionManager.currentSession() ?: run {
+            Toast.makeText(context, R.string.xingdun_session_expired, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val activeScope = scope ?: return
+        Toast.makeText(context, R.string.xingdun_loading, Toast.LENGTH_SHORT).show()
+        activeScope.launch {
+            runCatching {
+                XingDunSessionManager.apiClient().get<JsonObject>(
+                    session,
+                    "cs/identity",
+                    emptyMap(),
+                    JsonObject::class.java,
+                )
+            }.onSuccess { identity ->
+                val declaredEnabled = identity.get("customer_service_enabled")
+                    ?.takeUnless { it.isJsonNull }
+                    ?.let { runCatching { it.asBoolean }.getOrNull() }
+                val official = identity.get("official_cs_tim_user_id")
+                    ?.takeUnless { it.isJsonNull }
+                    ?.asString
+                    ?.trim()
+                    ?.takeIf(String::isNotEmpty)
+                val assigned = identity.getAsJsonArray("customer_services")
+                    ?.firstOrNull()
+                    ?.takeIf { it.isJsonObject }
+                    ?.asJsonObject
+                    ?.get("tim_user_id")
+                    ?.takeUnless { it.isJsonNull }
+                    ?.asString
+                    ?.trim()
+                    ?.takeIf(String::isNotEmpty)
+                val target = official ?: assigned
+                val enabled = declaredEnabled
+                    ?: identity.get("is_cs")?.takeUnless { it.isJsonNull }
+                        ?.let { runCatching { it.asBoolean }.getOrNull() }
+                    ?: (target != null)
+                if (enabled && target != null) {
+                    ChatActivity.start(context, "c2c_$target")
+                } else {
+                    Toast.makeText(context, R.string.xingdun_customer_service_not_configured, Toast.LENGTH_SHORT).show()
+                }
+            }.onFailure {
+                Toast.makeText(context, R.string.xingdun_customer_service_load_retry, Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun renderStats(favoriteCount: Int?) {
