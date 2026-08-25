@@ -1410,11 +1410,11 @@ open class XingDunFeatureActivity : BaseActivity() {
             setPadding(14.dp(), 10.dp(), 14.dp(), 10.dp())
             background = roundedDrawable(Color.WHITE, 18f)
         }
-        card.addView(TextView(this).apply {
+        content.addView(TextView(this).apply {
             setText(R.string.xingdun_filter)
             textSize = 14f
             setTextColor(Color.DKGRAY)
-            setPadding(2.dp(), 0, 2.dp(), 8.dp())
+            setPadding(4.dp(), 0, 4.dp(), 8.dp())
         })
         card.addView(reportFilterRow(R.string.xingdun_report_target_type, targetLabels) { position ->
             reportTargetFilter = targetValues[position]
@@ -1552,7 +1552,8 @@ open class XingDunFeatureActivity : BaseActivity() {
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             addView(TextView(context).apply {
-                text = record.string("target_name") ?: reportTargetText(record.string("target_type"))
+                text = record.string("target_name")?.takeIf(String::isNotBlank)
+                    ?: reportTargetText(record.string("target_type"))
                 textSize = 16f
                 setTextColor(Color.BLACK)
                 maxLines = 1
@@ -1607,11 +1608,14 @@ open class XingDunFeatureActivity : BaseActivity() {
         addDetailSection(null, listOf(
             getString(R.string.xingdun_report_processing_status) to reportStatusText(report.int("status"), report.string("status_text")),
             getString(R.string.xingdun_report_number) to report.string("report_no").orEmpty(),
-            getString(R.string.xingdun_report_target) to (report.string("target_name") ?: reportTargetText(report.string("target_type"))),
+            getString(R.string.xingdun_report_target) to (
+                report.string("target_name")?.takeIf(String::isNotBlank)
+                    ?: reportTargetText(report.string("target_type"))
+            ),
             getString(R.string.xingdun_report_target_id) to report.string("target_id").orEmpty(),
             getString(R.string.xingdun_report_reason) to reportReasonText(report.string("reason"), report.string("reason_text")),
             getString(R.string.xingdun_report_submitted_at) to report.string("create_time").orEmpty(),
-        ))
+        ), reportStatusValue = report.int("status"))
         report.string("description")?.let { addDetailTextSection(R.string.xingdun_report_description_section, it) }
         val screenshots = report.array("screenshot").mapNotNull { element ->
             element.takeUnless(JsonElement::isJsonNull)?.let { runCatching { it.asString }.getOrNull() }
@@ -1650,7 +1654,11 @@ open class XingDunFeatureActivity : BaseActivity() {
         })
     }
 
-    private fun addDetailSection(title: Int?, rows: List<Pair<String, String>>) {
+    private fun addDetailSection(
+        title: Int?,
+        rows: List<Pair<String, String>>,
+        reportStatusValue: Int? = null,
+    ) {
         val visibleRows = rows.filter { it.second.isNotBlank() }
         if (visibleRows.isEmpty()) return
         title?.let(::addSectionTitle)
@@ -1669,7 +1677,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                         setTextColor(Color.BLACK)
                     }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                     if (label == getString(R.string.xingdun_report_processing_status)) {
-                        addView(reportStatusBadge(null, value))
+                        addView(reportStatusBadge(reportStatusValue, value))
                     } else {
                         addView(TextView(context).apply {
                             text = value
