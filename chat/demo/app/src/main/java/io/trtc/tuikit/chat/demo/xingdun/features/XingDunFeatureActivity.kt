@@ -145,6 +145,8 @@ open class XingDunFeatureActivity : BaseActivity() {
         get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_REPORT_FIXTURE, false)
     private val debugPersonalQRCodeFixtureEnabled: Boolean
         get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_PERSONAL_QR_FIXTURE, false)
+    private val debugInvitePosterFixtureEnabled: Boolean
+        get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_INVITE_POSTER_FIXTURE, false)
 
     private val attachmentPicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isEmpty()) return@registerForActivityResult
@@ -816,6 +818,10 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun showInvite() {
         applyPersonalQRCodeChrome()
+        if (debugInvitePosterFixtureEnabled) {
+            renderDebugInvitePoster()
+            return
+        }
         showInvitePosterLoading()
         setBusy(true)
         lifecycleScope.launch {
@@ -824,8 +830,8 @@ open class XingDunFeatureActivity : BaseActivity() {
                 val response = XingDunSessionManager.apiClient().get<JsonObject>(
                     session, "share/inviteInfo", emptyMap(), JsonObject::class.java
                 )
-                validateInviteInformation(response, session.companyCode)
-            }.onSuccess { invitation ->
+                validateInviteInformation(response, session.companyCode) to session
+            }.onSuccess { (invitation, session) ->
                 setBusy(false)
                 val qrBitmap = BarcodeEncoder().encodeBitmap(
                     invitation.qrPayload,
@@ -833,13 +839,28 @@ open class XingDunFeatureActivity : BaseActivity() {
                     720,
                     720,
                 )
-                val poster = createInvitePoster(qrBitmap, invitation.inviteCode, requireSession().nickname)
+                val poster = createInvitePoster(
+                    qrBitmap = qrBitmap,
+                    inviteCode = invitation.inviteCode,
+                    nickname = session.nickname,
+                    brandName = session.companyName.ifBlank { getString(R.string.xingdun_platform_brand_name) },
+                )
                 renderInvitePoster(poster, invitation.shareUrl)
             }.onFailure {
                 setBusy(false)
                 showInvitePosterUnavailable()
             }
         }
+    }
+
+    private fun renderDebugInvitePoster() {
+        val inviteCode = "xc2345"
+        val payload = "{\"version\":1,\"type\":\"xingdun_invite\",\"code\":\"$inviteCode\",\"company_code\":\"xc2026\"}"
+        val qrBitmap = BarcodeEncoder().encodeBitmap(payload, BarcodeFormat.QR_CODE, 720, 720)
+        renderInvitePoster(
+            poster = createInvitePoster(qrBitmap, inviteCode, "d001", "XingDunIM"),
+            shareUrl = "https://api.xingdunim.com/prod/xingdun/share.html?code=$inviteCode&company_code=xc2026",
+        )
     }
 
     private fun validateInviteInformation(response: JsonObject, currentCompanyCode: String): InviteInformation {
@@ -938,7 +959,12 @@ open class XingDunFeatureActivity : BaseActivity() {
         })
     }
 
-    private fun createInvitePoster(qrBitmap: Bitmap, inviteCode: String, nickname: String): Bitmap {
+    private fun createInvitePoster(
+        qrBitmap: Bitmap,
+        inviteCode: String,
+        nickname: String,
+        brandName: String,
+    ): Bitmap {
         val poster = Bitmap.createBitmap(1_080, 1_440, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(poster)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
@@ -947,12 +973,12 @@ open class XingDunFeatureActivity : BaseActivity() {
         canvas.drawRect(0f, 0f, 1_080f, 430f, paint)
         paint.color = Color.rgb(31, 140, 89)
         canvas.drawRect(0f, 414f, 1_080f, 430f, paint)
-        drawPosterText(canvas, paint, getString(R.string.xingdun_platform_brand_name), 120f, 62f, Color.WHITE, true)
+        drawPosterText(canvas, paint, brandName, 120f, 62f, Color.WHITE, true)
         drawPosterText(canvas, paint, getString(R.string.xingdun_invite_poster_tagline), 210f, 32f, Color.WHITE)
         drawPosterText(
             canvas,
             paint,
-            getString(R.string.xingdun_invite_poster_invitation, nickname.ifBlank { getString(R.string.xingdun_platform_brand_name) }),
+            getString(R.string.xingdun_invite_poster_invitation, nickname.ifBlank { brandName }),
             326f,
             32f,
             Color.rgb(220, 229, 238)
@@ -960,8 +986,16 @@ open class XingDunFeatureActivity : BaseActivity() {
         paint.color = Color.WHITE
         canvas.drawRoundRect(90f, 500f, 990f, 1_320f, 24f, 24f, paint)
         canvas.drawBitmap(qrBitmap, null, android.graphics.RectF(230f, 570f, 850f, 1_190f), paint)
-        drawPosterText(canvas, paint, getString(R.string.xingdun_invite_poster_code, inviteCode), 1_255f, 34f, Color.rgb(20, 46, 74), true)
-        drawPosterText(canvas, paint, getString(R.string.xingdun_invite_poster_scan_hint), 1_390f, 27f, Color.rgb(89, 99, 112))
+        drawPosterText(
+            canvas,
+            paint,
+            getString(R.string.xingdun_invite_poster_code, inviteCode.uppercase(Locale.ROOT)),
+            1_255f,
+            34f,
+            Color.rgb(20, 46, 74),
+            true,
+        )
+        drawPosterText(canvas, paint, getString(R.string.xingdun_invite_poster_scan_hint, brandName), 1_390f, 27f, Color.rgb(89, 99, 112))
         return poster
     }
 
@@ -4309,6 +4343,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val EXTRA_DEBUG_BYPASS_LOGIN = "debug_bypass_login"
         private const val EXTRA_DEBUG_REPORT_FIXTURE = "debug_report_fixture"
         private const val EXTRA_DEBUG_PERSONAL_QR_FIXTURE = "debug_personal_qr_fixture"
+        private const val EXTRA_DEBUG_INVITE_POSTER_FIXTURE = "debug_invite_poster_fixture"
         private const val EXTRA_DEBUG_LEGAL_URL = "debug_legal_url"
         private const val EXTRA_ITEM_ID = "item_id"
         private const val EXTRA_TARGET_ID = "target_id"

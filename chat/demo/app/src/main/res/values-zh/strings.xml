@@ -676,7 +676,7 @@
     <string name="xingdun_invite_poster_tagline">安全连接团队，高效协同工作</string>
     <string name="xingdun_invite_poster_invitation">%1$s 邀请你加入企业沟通</string>
     <string name="xingdun_invite_poster_code">邀请码  %1$s</string>
-    <string name="xingdun_invite_poster_scan_hint">扫描二维码注册XingDun IM Platform</string>
+    <string name="xingdun_invite_poster_scan_hint">扫描二维码注册%1$s</string>
     <string name="xingdun_invite_poster_preparing">正在准备邀请海报</string>
     <string name="xingdun_invite_poster_unavailable">海报不可用</string>
     <string name="xingdun_invite_poster_unavailable_detail">请检查网络后重新加载邀请信息。</string>

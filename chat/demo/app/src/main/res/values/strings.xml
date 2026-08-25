@@ -682,7 +682,7 @@
     <string name="xingdun_invite_poster_tagline">Connect your team securely and collaborate efficiently</string>
     <string name="xingdun_invite_poster_invitation">%1$s invited you to join the enterprise workspace</string>
     <string name="xingdun_invite_poster_code">Invitation code  %1$s</string>
-    <string name="xingdun_invite_poster_scan_hint">Scan the QR code to register for XingDun IM Platform</string>
+    <string name="xingdun_invite_poster_scan_hint">Scan the QR code to register for %1$s</string>
     <string name="xingdun_invite_poster_preparing">Preparing invitation poster...</string>
     <string name="xingdun_invite_poster_unavailable">Poster unavailable</string>
     <string name="xingdun_invite_poster_unavailable_detail">Check your network and reload the invitation details.</string>
