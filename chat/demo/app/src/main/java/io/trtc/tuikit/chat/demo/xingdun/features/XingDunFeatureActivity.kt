@@ -1173,6 +1173,13 @@ open class XingDunFeatureActivity : BaseActivity() {
                     }
                 }
                 attachmentPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp"))
+            }.apply {
+                setTextColor(0xFF28B7A2.toInt())
+                background = null
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                compoundDrawablePadding = 8.dp()
+                setCompoundDrawablesWithIntrinsicBounds(R.drawable.xingdun_ic_feedback_add_image, 0, 0, 0)
+                elevation = 0f
             }
             addView(addImageButton)
         }, feedbackSectionLayoutParams())
