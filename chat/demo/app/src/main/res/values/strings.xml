@@ -389,6 +389,7 @@
     <string name="xingdun_reports">My reports</string>
     <string name="xingdun_reports_empty">No reports yet</string>
     <string name="xingdun_reports_empty_detail">Submitted reports will appear here.</string>
+    <string name="xingdun_reports_load_failed">Unable to load reports. Try again later.</string>
     <string name="xingdun_filter">Filters</string>
     <string name="xingdun_all">All</string>
     <string name="xingdun_unknown">Unknown</string>
@@ -411,6 +412,8 @@
     <string name="xingdun_report_submitted_at">Submitted at</string>
     <string name="xingdun_report_description_section">Additional details</string>
     <string name="xingdun_report_screenshot_evidence">Screenshot evidence</string>
+    <string name="xingdun_report_screenshot_load_failed">Unable to load screenshot</string>
+    <string name="xingdun_report_detail_load_failed">Unable to load report details. Try again later.</string>
     <string name="xingdun_report_processing_result">Processing result</string>
     <string name="xingdun_report_result">Result</string>
     <string name="xingdun_report_resolution_action">Action taken</string>

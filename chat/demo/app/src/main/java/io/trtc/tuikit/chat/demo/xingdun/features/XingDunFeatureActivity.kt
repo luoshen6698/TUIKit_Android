@@ -16,6 +16,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -62,6 +63,11 @@ import androidx.lifecycle.lifecycleScope
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.engine.GlideException
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
 import com.tencent.mmkv.MMKV
 import com.google.zxing.BarcodeFormat
 import com.journeyapps.barcodescanner.BarcodeEncoder
@@ -1524,8 +1530,9 @@ open class XingDunFeatureActivity : BaseActivity() {
                 renderReportList()
             }.onFailure { error ->
                 reportLoading = false
-                showFailure(error)
-                if (reportRecords.isEmpty()) renderReportList(error.localizedMessage)
+                val message = getString(R.string.xingdun_reports_load_failed)
+                showFailure(IllegalStateException(message, error))
+                if (reportRecords.isEmpty()) renderReportList(message)
             }
         }
     }
@@ -1639,7 +1646,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 setBusy(false)
                 renderReportDetail(it)
             }.onFailure { error ->
-                showFailure(error)
+                showFailure(IllegalStateException(getString(R.string.xingdun_report_detail_load_failed), error))
                 content.addView(actionButton(R.string.xingdun_retry) { content.removeAllViews(); showReportDetail() })
             }
         }
@@ -1665,12 +1672,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         if (screenshots.isNotEmpty()) {
             addSectionTitle(R.string.xingdun_report_screenshot_evidence)
             screenshots.forEach { url ->
-                content.addView(ImageView(this).apply {
-                    adjustViewBounds = true
-                    scaleType = ImageView.ScaleType.CENTER_INSIDE
-                    background = roundedDrawable(Color.WHITE, 14f)
-                    ImageLoader.load(this@XingDunFeatureActivity, this, url, R.drawable.xingdun_ic_mine_report)
-                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                content.addView(reportScreenshotView(url), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     bottomMargin = 10.dp()
                 })
             }
@@ -1685,6 +1687,52 @@ open class XingDunFeatureActivity : BaseActivity() {
                 report.string("handle_time")?.let { getString(R.string.xingdun_report_handled_at) to it },
             ))
         }
+    }
+
+    private fun reportScreenshotView(url: String): View = FrameLayout(this).apply {
+        minimumHeight = 120.dp()
+        background = roundedDrawable(Color.WHITE, 14f)
+        val image = ImageView(context).apply {
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+        }
+        val failure = TextView(context).apply {
+            setText(R.string.xingdun_report_screenshot_load_failed)
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF8A6D1D.toInt())
+            setPadding(16.dp(), 16.dp(), 16.dp(), 16.dp())
+            visibility = View.GONE
+        }
+        addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+        addView(failure, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
+        Glide.with(applicationContext)
+            .load(url)
+            .placeholder(R.drawable.xingdun_ic_mine_report)
+            .error(R.drawable.xingdun_ic_mine_report)
+            .listener(object : RequestListener<Drawable> {
+                override fun onLoadFailed(
+                    e: GlideException?,
+                    model: Any?,
+                    target: Target<Drawable>,
+                    isFirstResource: Boolean,
+                ): Boolean {
+                    failure.visibility = View.VISIBLE
+                    return false
+                }
+
+                override fun onResourceReady(
+                    resource: Drawable,
+                    model: Any,
+                    target: Target<Drawable>?,
+                    dataSource: DataSource,
+                    isFirstResource: Boolean,
+                ): Boolean {
+                    failure.visibility = View.GONE
+                    return false
+                }
+            })
+            .into(image)
     }
 
     private fun addSectionTitle(label: Int) {

@@ -383,6 +383,7 @@
     <string name="xingdun_reports">我的举报</string>
     <string name="xingdun_reports_empty">暂无举报记录</string>
     <string name="xingdun_reports_empty_detail">提交的举报会显示在这里。</string>
+    <string name="xingdun_reports_load_failed">举报记录加载失败，请稍后重试。</string>
     <string name="xingdun_filter">筛选</string>
     <string name="xingdun_all">全部</string>
     <string name="xingdun_unknown">未知</string>
@@ -405,6 +406,8 @@
     <string name="xingdun_report_submitted_at">提交时间</string>
     <string name="xingdun_report_description_section">补充说明</string>
     <string name="xingdun_report_screenshot_evidence">截图证据</string>
+    <string name="xingdun_report_screenshot_load_failed">截图加载失败</string>
+    <string name="xingdun_report_detail_load_failed">举报详情加载失败，请稍后重试。</string>
     <string name="xingdun_report_processing_result">处理结果</string>
     <string name="xingdun_report_result">结果</string>
     <string name="xingdun_report_resolution_action">处置措施</string>
