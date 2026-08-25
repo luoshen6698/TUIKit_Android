@@ -2743,8 +2743,37 @@ open class XingDunFeatureActivity : BaseActivity() {
                     setBusy(false)
                     renderStorageManagement(usage)
                 }
-                .onFailure(::showFailure)
+                .onFailure { error ->
+                    setBusy(false)
+                    renderStorageLoadFailure(error)
+                }
         }
+    }
+
+    private fun renderStorageLoadFailure(error: Throwable) {
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(20.dp(), 24.dp(), 20.dp(), 24.dp())
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_storage_load_failed)
+                textSize = 16f
+                gravity = Gravity.CENTER
+                setTextColor(0xFFD93025.toInt())
+            })
+            addView(TextView(context).apply {
+                text = error.localizedMessage ?: getString(R.string.xingdun_action_failed)
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF8A8A8F.toInt())
+                setPadding(0, 8.dp(), 0, 8.dp())
+            })
+            addView(actionButton(R.string.xingdun_recalculate_storage) {
+                content.removeAllViews()
+                showStorageManagement()
+            })
+        }, storageSectionLayoutParams())
     }
 
     private fun renderStorageManagement(usage: XingDunCacheUsage) {
@@ -2770,10 +2799,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             })
         }, storageSectionLayoutParams())
 
-        addStorageSectionHeader(R.string.xingdun_storage_select_section) {
-            content.removeAllViews()
-            showStorageManagement()
-        }
+        addStorageSectionHeader(R.string.xingdun_storage_select_section)
         val selected = XingDunCacheCategory.entries
             .filterTo(mutableSetOf()) { (usage.bytes[it] ?: 0L) > 0L }
         lateinit var clearButton: Button
@@ -2781,8 +2807,9 @@ open class XingDunFeatureActivity : BaseActivity() {
         val updateSelectionUI = {
             selectionMarkers.forEach { (category, marker) ->
                 val isSelected = category in selected
-                marker.text = if (isSelected) "●" else "○"
-                marker.setTextColor(if (isSelected) 0xFF168F83.toInt() else 0xFFAEAEB2.toInt())
+                marker.text = if (isSelected) "✓" else ""
+                marker.setTextColor(if (isSelected) Color.WHITE else Color.TRANSPARENT)
+                marker.background = storageSelectionDrawable(isSelected)
             }
             val selectedBytes = selected.sumOf { usage.bytes[it] ?: 0L }
             clearButton.text = getString(
@@ -2805,6 +2832,27 @@ open class XingDunFeatureActivity : BaseActivity() {
             }
         }, storageSectionLayoutParams())
 
+        val errorPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            background = roundedDrawable(0xFFFFE7E5.toInt(), 12f)
+            setPadding(14.dp(), 12.dp(), 14.dp(), 10.dp())
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_storage_clear_failed)
+                textSize = 13f
+                setTextColor(0xFFD93025.toInt())
+            })
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_recalculate_storage)
+                textSize = 14f
+                setTextColor(0xFF168F83.toInt())
+                setPadding(0, 8.dp(), 0, 2.dp())
+                setOnClickListener {
+                    content.removeAllViews()
+                    showStorageManagement()
+                }
+            })
+        }
         clearButton = Button(this).apply {
             isAllCaps = false
             textSize = 16f
@@ -2819,10 +2867,20 @@ open class XingDunFeatureActivity : BaseActivity() {
                         Formatter.formatFileSize(this@XingDunFeatureActivity, selectedBytes)
                     ))
                     .setNegativeButton(android.R.string.cancel, null)
-                    .setPositiveButton(R.string.xingdun_clear_cache) { _, _ -> clearStorage(selected.toSet()) }
+                    .setPositiveButton(R.string.xingdun_clear_cache) { _, _ ->
+                        clearButton.isEnabled = false
+                        errorPanel.visibility = View.GONE
+                        clearStorage(selected.toSet()) { error ->
+                            clearButton.isEnabled = true
+                            (errorPanel.getChildAt(0) as TextView).text =
+                                error.localizedMessage ?: getString(R.string.xingdun_storage_clear_failed)
+                            errorPanel.visibility = View.VISIBLE
+                        }
+                    }
                     .show()
             }
         }
+        content.addView(errorPanel, storageSectionLayoutParams())
         content.addView(clearButton, storageSectionLayoutParams().apply { topMargin = 10.dp() })
         addStorageFooter(R.string.xingdun_storage_clear_warning)
         updateSelectionUI()
@@ -2839,41 +2897,16 @@ open class XingDunFeatureActivity : BaseActivity() {
         status.setBackgroundColor(background)
     }
 
-    private fun addStorageSectionHeader(title: Int, refresh: () -> Unit) {
-        content.addView(LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(14.dp(), 10.dp(), 8.dp(), 8.dp())
-            addView(TextView(context).apply {
-                setText(title)
-                textSize = 14f
-                setTextColor(0xFF8A8A8F.toInt())
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(TextView(context).apply {
-                setText(R.string.xingdun_recalculate_storage)
-                textSize = 14f
-                setTextColor(0xFF168F83.toInt())
-                setPadding(12.dp(), 6.dp(), 4.dp(), 6.dp())
-                setOnClickListener { refresh() }
-            })
-        })
-    }
+    private fun addStorageSectionHeader(title: Int) = addNotificationSectionHeader(title)
 
     private fun storageCategoryRow(category: XingDunCacheCategory, bytes: Long, onClick: () -> Unit): LinearLayout =
         LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(14.dp(), 10.dp(), 14.dp(), 10.dp())
-            addView(TextView(context).apply {
-                text = when (category) {
-                    XingDunCacheCategory.IMAGE -> "▧"
-                    XingDunCacheCategory.AUDIO -> "≋"
-                    XingDunCacheCategory.VIDEO -> "▶"
-                    XingDunCacheCategory.FILE -> "▤"
-                    XingDunCacheCategory.THUMBNAIL -> "▥"
-                    XingDunCacheCategory.TEMPORARY -> "◷"
-                }
-                textSize = 20f
-                gravity = Gravity.CENTER
-                setTextColor(0xFF168F83.toInt())
+            addView(ImageView(context).apply {
+                setImageResource(storageCategoryIcon(category))
+                imageTintList = ColorStateList.valueOf(0xFF20A88F.toInt())
+                setPadding(4.dp(), 4.dp(), 8.dp(), 4.dp())
             }, LinearLayout.LayoutParams(34.dp(), 52.dp()))
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
@@ -2895,13 +2928,29 @@ open class XingDunFeatureActivity : BaseActivity() {
                 setPadding(6.dp(), 0, 8.dp(), 0)
             })
             addView(TextView(context).apply {
-                textSize = 22f
+                textSize = 15f
                 gravity = Gravity.CENTER
-            }, LinearLayout.LayoutParams(28.dp(), 52.dp()))
+                setTypeface(typeface, Typeface.BOLD)
+            }, LinearLayout.LayoutParams(24.dp(), 24.dp()).apply { gravity = Gravity.CENTER_VERTICAL })
             isClickable = true
             isFocusable = true
             setOnClickListener { onClick() }
         }
+
+    private fun storageSelectionDrawable(selected: Boolean): GradientDrawable = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(if (selected) 0xFF20A88F.toInt() else Color.TRANSPARENT)
+        setStroke(2.dp(), if (selected) 0xFF20A88F.toInt() else 0xFFAEAEB2.toInt())
+    }
+
+    private fun storageCategoryIcon(category: XingDunCacheCategory): Int = when (category) {
+        XingDunCacheCategory.IMAGE -> R.drawable.xingdun_ic_storage_image
+        XingDunCacheCategory.AUDIO -> R.drawable.xingdun_ic_storage_audio
+        XingDunCacheCategory.VIDEO -> R.drawable.xingdun_ic_storage_video
+        XingDunCacheCategory.FILE -> R.drawable.xingdun_ic_storage_file
+        XingDunCacheCategory.THUMBNAIL -> R.drawable.xingdun_ic_storage_thumbnail
+        XingDunCacheCategory.TEMPORARY -> R.drawable.xingdun_ic_storage_temporary
+    }
 
     private fun storageCategoryTitle(category: XingDunCacheCategory): Int = when (category) {
         XingDunCacheCategory.IMAGE -> R.string.xingdun_storage_images
@@ -3732,7 +3781,7 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun centsText(value: Int): String = getString(R.string.xingdun_currency_amount, value / 100.0)
 
-    private fun clearStorage(selected: Set<XingDunCacheCategory>) {
+    private fun clearStorage(selected: Set<XingDunCacheCategory>, onFailure: (Throwable) -> Unit) {
         setBusy(true)
         lifecycleScope.launch {
             runCatching { XingDunStorageManager.clear(this@XingDunFeatureActivity, selected) }
@@ -3745,7 +3794,10 @@ open class XingDunFeatureActivity : BaseActivity() {
                     showStorageManagement()
                     Toast.makeText(this@XingDunFeatureActivity, resultMessage, Toast.LENGTH_SHORT).show()
                 }
-                .onFailure(::showFailure)
+                .onFailure { error ->
+                    setBusy(false)
+                    onFailure(error)
+                }
         }
     }
 

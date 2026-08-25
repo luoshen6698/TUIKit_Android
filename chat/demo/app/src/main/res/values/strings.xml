@@ -639,6 +639,8 @@
     <string name="xingdun_storage_clear_warning">Images, audio, videos, or files may need to be downloaded again when viewed.</string>
     <string name="xingdun_storage_cleared">Cleared %1$s.</string>
     <string name="xingdun_storage_already_empty">The selected cache is already empty.</string>
+    <string name="xingdun_storage_load_failed">Unable to read cache usage. Try again later.</string>
+    <string name="xingdun_storage_clear_failed">Unable to clear cache. Try again later.</string>
     <string name="xingdun_custom_redpacket_summary">[Red packet] %1$s</string>
     <string name="xingdun_redpacket_default_greeting">Best wishes</string>
     <string name="xingdun_redpacket_closed_detail">Red packets are currently unavailable. This message is shown for compatibility only.</string>
