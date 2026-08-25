@@ -236,6 +236,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             MODE_CHANGE_PASSWORD -> showChangePassword()
             MODE_DEVICES -> showDevices()
             MODE_DEACTIVATE -> showDeactivation()
+            MODE_DEACTIVATION_RULES -> showDeactivationRules()
             MODE_NOTIFICATIONS -> showNotificationSettings()
             MODE_STORAGE -> showStorageManagement()
             MODE_HELP -> showHelpCenter()
@@ -2196,30 +2197,244 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showDeactivation() {
-        addMessage(R.string.xingdun_deactivation_consequences)
-        val password = passwordInput(R.string.xingdun_current_password)
-        val reason = input(R.string.xingdun_deactivation_reason, multiline = true)
-        val acknowledged = Switch(this).apply { setText(R.string.xingdun_deactivation_acknowledgement) }
-        content.addView(password)
-        content.addView(reason)
-        content.addView(acknowledged)
-        content.addView(actionButton(R.string.xingdun_deactivate_account) {
-            if (password.text.isNullOrEmpty() || reason.text.toString().length > 500 || !acknowledged.isChecked) {
-                status.setText(R.string.xingdun_deactivation_invalid)
-                return@actionButton
-            }
+        applyNotificationSettingsChrome()
+
+        addNotificationSectionHeader(R.string.xingdun_deactivation_explanation)
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(16.dp(), 12.dp(), 16.dp(), 12.dp())
+            addView(LinearLayout(context).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                addView(TextView(context).apply {
+                    text = "⚠"
+                    textSize = 18f
+                    gravity = Gravity.CENTER
+                }, LinearLayout.LayoutParams(30.dp(), ViewGroup.LayoutParams.WRAP_CONTENT))
+                addView(TextView(context).apply {
+                    setText(R.string.xingdun_deactivation_stops_immediately)
+                    textSize = 16f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(0xFFD93025.toInt())
+                    setPadding(8.dp(), 4.dp(), 0, 8.dp())
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            })
+            addView(notificationDivider())
+            listOf(
+                R.string.xingdun_deactivation_effect_login,
+                R.string.xingdun_deactivation_effect_recycle,
+                R.string.xingdun_deactivation_effect_retention,
+                R.string.xingdun_deactivation_effect_recovery,
+            ).forEach { addView(deactivationConsequenceRow(it)) }
+        }, notificationSectionLayoutParams())
+
+        addNotificationSectionHeader(R.string.xingdun_deactivation_identity_confirmation)
+        val password = accountPasswordField(R.string.xingdun_current_password_placeholder)
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            addView(password, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 50.dp()))
+            addView(notificationDivider())
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_deactivation_password_hint)
+                textSize = 13f
+                setTextColor(0xFF8A8A8F.toInt())
+                setPadding(14.dp(), 10.dp(), 14.dp(), 12.dp())
+            })
+        }, notificationSectionLayoutParams())
+
+        addNotificationSectionHeader(R.string.xingdun_deactivation_reason_optional)
+        val reason = EditText(this).apply {
+            hint = ""
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            gravity = Gravity.TOP or Gravity.START
+            minHeight = 100.dp()
+            textSize = 15f
+            setTextColor(Color.BLACK)
+            background = null
+            setPadding(14.dp(), 12.dp(), 14.dp(), 8.dp())
+        }
+        val reasonCount = TextView(this).apply {
+            text = getString(R.string.xingdun_deactivation_reason_count, 0)
+            textSize = 12f
+            gravity = Gravity.END
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(14.dp(), 0, 14.dp(), 10.dp())
+        }
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            addView(reason, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(reasonCount)
+        }, notificationSectionLayoutParams())
+
+        val acknowledged = Switch(this).apply {
+            setText(R.string.xingdun_deactivation_acknowledgement)
+            textSize = 15f
+            setTextColor(Color.BLACK)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(16.dp(), 0, 12.dp(), 0)
+        }
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            addView(acknowledged, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 54.dp()))
+            addView(notificationDivider())
+            addView(notificationNavigationRow(R.string.xingdun_read_deactivation_rules) {
+                openDeactivationRules()
+            })
+        }, notificationSectionLayoutParams())
+
+        val errorView = TextView(this).apply {
+            visibility = View.GONE
+            textSize = 13f
+            setTextColor(0xFFD93025.toInt())
+            setPadding(14.dp(), 4.dp(), 14.dp(), 8.dp())
+        }
+        val requestButton = Button(this).apply {
+            setText(R.string.xingdun_request_deactivation)
+            isAllCaps = false
+            textSize = 16f
+            background = roundedDrawable(Color.WHITE, 14f)
+            stateListAnimator = null
+        }
+        val fields = listOf<View>(password, reason, acknowledged)
+        fun updateRequestState() {
+            val allowed = password.text.isNotEmpty() && acknowledged.isChecked && reason.text.toString().trim().length <= 500
+            requestButton.isEnabled = allowed
+            requestButton.setTextColor(if (allowed) 0xFFD93025.toInt() else 0xFFC7C7CC.toInt())
+            requestButton.alpha = if (allowed) 1f else 0.7f
+        }
+        password.doAfterTextChanged {
+            errorView.visibility = View.GONE
+            updateRequestState()
+        }
+        reason.doAfterTextChanged {
+            val count = it?.length ?: 0
+            reasonCount.text = getString(R.string.xingdun_deactivation_reason_count, count)
+            reasonCount.setTextColor(if (count > 500) 0xFFD93025.toInt() else 0xFF8A8A8F.toInt())
+            errorView.visibility = View.GONE
+            updateRequestState()
+        }
+        acknowledged.setOnCheckedChangeListener { _, _ ->
+            errorView.visibility = View.GONE
+            updateRequestState()
+        }
+        requestButton.setOnClickListener {
             AlertDialog.Builder(this)
-                .setTitle(R.string.xingdun_confirm_deactivation)
+                .setTitle(R.string.xingdun_confirm_current_account_deactivation)
                 .setMessage(R.string.xingdun_deactivation_final_warning)
                 .setNegativeButton(android.R.string.cancel, null)
                 .setPositiveButton(R.string.xingdun_confirm_deactivation) { _, _ ->
-                    submitDeactivation(password.text.toString(), reason.text.toString().trim())
+                    fields.forEach { it.isEnabled = false }
+                    requestButton.isEnabled = false
+                    requestButton.setText(R.string.xingdun_loading)
+                    errorView.visibility = View.GONE
+                    submitDeactivation(
+                        password.text.toString(),
+                        reason.text.toString().trim(),
+                    ) { error ->
+                        fields.forEach { it.isEnabled = true }
+                        requestButton.setText(R.string.xingdun_request_deactivation)
+                        errorView.text = error.localizedMessage ?: getString(R.string.xingdun_action_failed)
+                        errorView.visibility = View.VISIBLE
+                        updateRequestState()
+                    }
                 }
                 .show()
+        }
+        updateRequestState()
+        content.addView(errorView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        content.addView(requestButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 46.dp()).apply {
+            topMargin = 4.dp()
+        })
+        addNotificationFooter(R.string.xingdun_deactivation_submit_hint)
+    }
+
+    private fun deactivationConsequenceRow(message: Int): View = LinearLayout(this).apply {
+        gravity = Gravity.TOP
+        addView(TextView(context).apply {
+            text = "✓"
+            textSize = 16f
+            gravity = Gravity.CENTER_HORIZONTAL
+            setTextColor(0xFF8A8A8F.toInt())
+        }, LinearLayout.LayoutParams(28.dp(), ViewGroup.LayoutParams.WRAP_CONTENT))
+        addView(TextView(context).apply {
+            setText(message)
+            textSize = 13f
+            setTextColor(0xFF6D6D72.toInt())
+            setPadding(8.dp(), 2.dp(), 0, 8.dp())
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+    }
+
+    private fun openDeactivationRules() {
+        startActivity(Intent(this, XingDunFeatureActivity::class.java).apply {
+            putExtra(EXTRA_MODE, MODE_DEACTIVATION_RULES)
+            if (BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false)) {
+                putExtra(EXTRA_DEBUG_BYPASS_LOGIN, true)
+            }
         })
     }
 
-    private fun submitDeactivation(password: String, reason: String) {
+    private fun showDeactivationRules() {
+        applyNotificationSettingsChrome()
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 4.dp(), 0, 12.dp())
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_deactivation_rules_full_title)
+                textSize = 24f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(Color.BLACK)
+            })
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_deactivation_rules_version)
+                textSize = 13f
+                setTextColor(0xFF8A8A8F.toInt())
+                setPadding(0, 8.dp(), 0, 12.dp())
+            })
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_deactivation_rules_summary)
+                textSize = 15f
+                setTextColor(Color.BLACK)
+            })
+        })
+        listOf(
+            R.string.xingdun_deactivation_rules_section_1_title to R.string.xingdun_deactivation_rules_section_1_body,
+            R.string.xingdun_deactivation_rules_section_2_title to R.string.xingdun_deactivation_rules_section_2_body,
+            R.string.xingdun_deactivation_rules_section_3_title to R.string.xingdun_deactivation_rules_section_3_body,
+            R.string.xingdun_deactivation_rules_section_4_title to R.string.xingdun_deactivation_rules_section_4_body,
+            R.string.xingdun_deactivation_rules_section_5_title to R.string.xingdun_deactivation_rules_section_5_body,
+            R.string.xingdun_deactivation_rules_section_6_title to R.string.xingdun_deactivation_rules_section_6_body,
+            R.string.xingdun_deactivation_rules_section_7_title to R.string.xingdun_deactivation_rules_section_7_body,
+            R.string.xingdun_deactivation_rules_section_8_title to R.string.xingdun_deactivation_rules_section_8_body,
+            R.string.xingdun_deactivation_rules_section_9_title to R.string.xingdun_deactivation_rules_section_9_body,
+            R.string.xingdun_deactivation_rules_section_10_title to R.string.xingdun_deactivation_rules_section_10_body,
+        ).forEach { (title, body) -> addDeactivationRuleSection(title, body) }
+    }
+
+    private fun addDeactivationRuleSection(title: Int, body: Int) {
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 14.dp(), 0, 0)
+            addView(notificationDivider())
+            addView(TextView(context).apply {
+                setText(title)
+                textSize = 17f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(Color.BLACK)
+                setPadding(0, 14.dp(), 0, 8.dp())
+            })
+            addView(TextView(context).apply {
+                setText(body)
+                textSize = 15f
+                setTextColor(0xFF6D6D72.toInt())
+                setLineSpacing(0f, 1.16f)
+            })
+        })
+    }
+
+    private fun submitDeactivation(password: String, reason: String, onFailure: (Throwable) -> Unit) {
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
@@ -2236,7 +2451,10 @@ open class XingDunFeatureActivity : BaseActivity() {
                     result.string("purge_after")
                 )
                 completeSecurityLogout()
-            }.onFailure(::showFailure)
+            }.onFailure { error ->
+                setBusy(false)
+                onFailure(error)
+            }
         }
     }
 
@@ -3912,6 +4130,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_CHANGE_PASSWORD -> R.string.xingdun_change_password
         MODE_DEVICES -> R.string.xingdun_devices
         MODE_DEACTIVATE -> R.string.xingdun_deactivate_account
+        MODE_DEACTIVATION_RULES -> R.string.xingdun_deactivation_rules_title
         MODE_NOTIFICATIONS -> R.string.xingdun_notification_settings
         MODE_STORAGE -> R.string.xingdun_storage_management
         MODE_HELP -> R.string.xingdun_help_feedback_title
@@ -3968,6 +4187,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_CHANGE_PASSWORD = "change_password"
         const val MODE_DEVICES = "devices"
         const val MODE_DEACTIVATE = "deactivate"
+        const val MODE_DEACTIVATION_RULES = "deactivation_rules"
         const val MODE_NOTIFICATIONS = "notifications"
         const val MODE_STORAGE = "storage"
         const val MODE_HELP = "help"
