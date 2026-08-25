@@ -867,6 +867,21 @@
     <string name="xingdun_custom_id_invalid">Use 3–32 letters, numbers, or underscores.</string>
     <string name="xingdun_not_set">Not set</string>
     <string name="xingdun_avatar_invalid">Choose a valid image smaller than 5 MB.</string>
+    <string name="xingdun_group_list_title">Groups</string>
+    <string name="xingdun_group_list_search_hint">Search group name or ID</string>
+    <string name="xingdun_group_list_joined_count">My Groups (%1$d)</string>
+    <string name="xingdun_group_list_loading">Loading groups</string>
+    <string name="xingdun_group_list_load_failed">Unable to load groups</string>
+    <string name="xingdun_group_list_load_failed_message">Check your network and IM connection, then try again.</string>
+    <string name="xingdun_group_list_empty">No groups</string>
+    <string name="xingdun_group_list_empty_message">Tencent IM groups you join will appear here.</string>
+    <string name="xingdun_group_list_search_empty">No groups found</string>
+    <string name="xingdun_group_list_search_empty_message">Try another group name or ID.</string>
+    <string name="xingdun_group_list_metadata_warning">Enterprise group labels are temporarily unavailable. Tencent IM groups are shown.</string>
+    <string name="xingdun_group_list_official">Official</string>
+    <string name="xingdun_group_list_members">%1$d members</string>
+    <string name="xingdun_group_list_refresh">Refresh groups</string>
+    <string name="xingdun_group_list_muted">Muted</string>
     <string-array name="xingdun_report_reason_values" translatable="false">
         <item>spam</item><item>harassment</item><item>fraud</item><item>violence</item><item>porn</item><item>other</item>
     </string-array>

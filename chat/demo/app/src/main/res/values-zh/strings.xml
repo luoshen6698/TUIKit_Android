@@ -861,6 +861,21 @@
     <string name="xingdun_custom_id_invalid">请输入 3–32 位字母、数字或下划线。</string>
     <string name="xingdun_not_set">未设置</string>
     <string name="xingdun_avatar_invalid">请选择小于 5 MB 的有效图片。</string>
+    <string name="xingdun_group_list_title">群聊</string>
+    <string name="xingdun_group_list_search_hint">搜索群名称或群号</string>
+    <string name="xingdun_group_list_joined_count">我加入的群（%1$d）</string>
+    <string name="xingdun_group_list_loading">正在加载群聊</string>
+    <string name="xingdun_group_list_load_failed">群聊加载失败</string>
+    <string name="xingdun_group_list_load_failed_message">群聊加载失败，请检查网络和 IM 连接后重试。</string>
+    <string name="xingdun_group_list_empty">暂无群聊</string>
+    <string name="xingdun_group_list_empty_message">你加入的腾讯 IM 群聊将在这里显示。</string>
+    <string name="xingdun_group_list_search_empty">未找到群聊</string>
+    <string name="xingdun_group_list_search_empty_message">请尝试其他群名称或群号。</string>
+    <string name="xingdun_group_list_metadata_warning">企业群标识暂时无法更新，已显示腾讯 IM 群列表。</string>
+    <string name="xingdun_group_list_official">官方</string>
+    <string name="xingdun_group_list_members">%1$d 人</string>
+    <string name="xingdun_group_list_refresh">刷新群聊</string>
+    <string name="xingdun_group_list_muted">已免打扰</string>
     <string-array name="xingdun_report_reason_labels">
         <item>垃圾信息</item><item>骚扰</item><item>诈骗</item><item>暴力内容</item><item>色情内容</item><item>其他</item>
     </string-array>

@@ -114,7 +114,7 @@ class XingDunMinePageView @JvmOverloads constructor(
 
     private fun setupStats() {
         friends.setOnClickListener { openMainTab(MainActivity.TAB_CONTACTS) }
-        groups.setOnClickListener { openMainTab(MainActivity.TAB_CONTACTS) }
+        groups.setOnClickListener { XingDunGroupListActivity.start(context) }
         favorites.setOnClickListener {
             if (XingDunSessionManager.currentSession()?.features?.messageFavorite == true) {
                 XingDunFeatureActivity.start(context, XingDunFeatureActivity.MODE_FAVORITES)

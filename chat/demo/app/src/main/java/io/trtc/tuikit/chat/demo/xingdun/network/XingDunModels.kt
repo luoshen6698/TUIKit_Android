@@ -136,6 +136,16 @@ data class XingDunContactDetail(
     val departmentPath: List<String> = emptyList()
 )
 
+/** Business metadata merged into the Tencent IM joined-group list. */
+data class XingDunGroupMetadata(
+    val groupId: String = "",
+    val name: String? = null,
+    val avatar: String? = null,
+    val announcement: String? = null,
+    val isOfficial: Boolean = false,
+    val isCustomerService: Boolean = false
+)
+
 data class XingDunLoginRequest(
     val username: String,
     val password: String,
