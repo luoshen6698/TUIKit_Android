@@ -64,13 +64,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.tencent.mmkv.MMKV
 import com.google.zxing.BarcodeFormat
-import com.google.zxing.BinaryBitmap
-import com.google.zxing.MultiFormatReader
-import com.google.zxing.RGBLuminanceSource
 import com.journeyapps.barcodescanner.BarcodeEncoder
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
-import com.google.zxing.common.HybridBinarizer
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
 import io.trtc.tuikit.atomicx.common.imageloader.ImageLoader
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
@@ -169,17 +163,10 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
     }
 
-    private val qrScanner = registerForActivityResult(ScanContract()) { result ->
-        result.contents?.let(::handleScannedPayload)
-    }
-
-    private val qrImagePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri ?: return@registerForActivityResult
-        lifecycleScope.launch {
-            runCatching { decodeQRCode(uri) }
-                .onSuccess(::handleScannedPayload)
-                .onFailure { status.setText(R.string.xingdun_qr_unrecognized) }
-        }
+    private val qrScanner = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val payload = result.data?.getStringExtra(XingDunQRCodeScannerActivity.EXTRA_PAYLOAD)
+        if (result.resultCode == RESULT_OK && !payload.isNullOrBlank()) handleScannedPayload(payload)
+        else finish()
     }
 
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -4358,23 +4345,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showQRCodeScanner() {
-        addMessage(R.string.xingdun_qr_scan_description)
-        content.addView(actionButton(R.string.xingdun_scan_with_camera) {
-            qrScanner.launch(
-                ScanOptions()
-                    .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                    .setPrompt(getString(R.string.xingdun_qr_scan_prompt))
-                    .setBeepEnabled(false)
-                    .setOrientationLocked(false)
-            )
-        })
-        content.addView(actionButton(R.string.xingdun_scan_from_gallery) { qrImagePicker.launch("image/*") })
-        val manual = input(R.string.xingdun_qr_manual_payload, multiline = true)
-        content.addView(manual)
-        content.addView(actionButton(R.string.xingdun_continue) {
-            runCatching { handleScannedPayload(manual.text.toString()) }
-                .onFailure { status.setText(R.string.xingdun_qr_unrecognized) }
-        })
+        qrScanner.launch(Intent(this, XingDunQRCodeScannerActivity::class.java))
     }
 
     private fun handleScannedPayload(payload: String) {
@@ -4443,20 +4414,6 @@ open class XingDunFeatureActivity : BaseActivity() {
             clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.xingdun_invitation_code), route.code))
             status.setText(R.string.xingdun_invitation_copied)
         })
-    }
-
-    private suspend fun decodeQRCode(uri: Uri): String = withContext(Dispatchers.IO) {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        var sample = 1
-        while (bounds.outWidth / sample > 2_048 || bounds.outHeight / sample > 2_048) sample *= 2
-        val bitmap = contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
-        } ?: throw IllegalArgumentException("Unable to decode QR image")
-        val pixels = IntArray(bitmap.width * bitmap.height)
-        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-        val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
-        MultiFormatReader().decode(BinaryBitmap(HybridBinarizer(source))).text
     }
 
     private fun showPersonalQRCode() {

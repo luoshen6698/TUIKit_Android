@@ -497,6 +497,11 @@
     <string name="xingdun_scan_with_camera">Scan with camera</string>
     <string name="xingdun_scan_from_gallery">Choose from gallery</string>
     <string name="xingdun_qr_scan_prompt">Place the QR code inside the frame</string>
+    <string name="xingdun_qr_center_hint">Place the QR code in the center, or choose one from Photos.</string>
+    <string name="xingdun_qr_flashlight">Flashlight</string>
+    <string name="xingdun_qr_camera_unavailable">Camera unavailable</string>
+    <string name="xingdun_qr_camera_permission_hint">Allow camera access in system settings, then return and try again.</string>
+    <string name="xingdun_cancel">Cancel</string>
     <string name="xingdun_qr_manual_payload">Paste QR content for manual verification</string>
     <string name="xingdun_qr_unrecognized">This QR code is not a supported XingDun code.</string>
     <string name="xingdun_qr_user_not_found">The account in this QR code was not found.</string>

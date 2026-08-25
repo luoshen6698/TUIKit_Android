@@ -46,6 +46,7 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.search.SearchActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspacePageView
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMinePageView
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
@@ -752,6 +753,13 @@ class MainActivity : BaseActivity() {
                             }
                         },
                         iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_chat_add
+                    ),
+                    PopupMenuItem(
+                        title = getString(R.string.xingdun_scan_qr),
+                        onClick = {
+                            XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_QR_SCANNER)
+                        },
+                        iconResId = R.drawable.xingdun_ic_mine_qr
                     )
                 )
             )
@@ -789,6 +797,13 @@ class MainActivity : BaseActivity() {
                         title = getString(R.string.demo_add_group),
                         onClick = { ContactFlowLauncher.showAddGroupPage(this) },
                         iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_chat_add
+                    ),
+                    PopupMenuItem(
+                        title = getString(R.string.xingdun_scan_qr),
+                        onClick = {
+                            XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_QR_SCANNER)
+                        },
+                        iconResId = R.drawable.xingdun_ic_mine_qr
                     )
                 )
             )
