@@ -3302,9 +3302,9 @@ open class XingDunFeatureActivity : BaseActivity() {
                     requireSession(), "cs/identity", emptyMap(), JsonObject::class.java
                 )
             }.onSuccess { identity ->
-                val official = identity.string("official_cs_tim_user_id")
-                val assigned = identity.array("customer_services").firstOrNull()?.asJsonObject?.string("tim_user_id")
-                val target = official?.takeIf(String::isNotBlank) ?: assigned?.takeIf(String::isNotBlank)
+                val target = identity.string("official_cs_tim_user_id")?.takeIf {
+                    identity.boolean("customer_service_enabled") && identity.boolean("ordinary_entry_enabled")
+                }
                 if (target == null) {
                     configureHelpCustomerServiceRow(
                         row,
