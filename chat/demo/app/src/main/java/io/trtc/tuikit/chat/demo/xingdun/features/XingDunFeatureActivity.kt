@@ -140,6 +140,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var reportTouchStartY = 0f
     private val reportRecords = mutableListOf<JsonObject>()
     private var reportListContainer: LinearLayout? = null
+    private var managedPermissionFeedbackTitle: Int? = null
     private val debugReportFixtureEnabled: Boolean
         get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_REPORT_FIXTURE, false)
 
@@ -181,9 +182,20 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private val managedPermissionRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val permissionTitle = managedPermissionFeedbackTitle
+        managedPermissionFeedbackTitle = null
         Toast.makeText(
             this,
-            getString(if (granted) R.string.xingdun_permission_granted_feedback else R.string.xingdun_permission_denied_feedback),
+            permissionTitle?.let {
+                getString(
+                    if (granted) R.string.xingdun_managed_permission_granted_feedback
+                    else R.string.xingdun_managed_permission_denied_feedback,
+                    getString(it),
+                )
+            } ?: getString(
+                if (granted) R.string.xingdun_permission_granted_feedback
+                else R.string.xingdun_permission_denied_feedback
+            ),
             Toast.LENGTH_SHORT,
         ).show()
         content.removeAllViews()
@@ -3238,32 +3250,32 @@ open class XingDunFeatureActivity : BaseActivity() {
         })
 
         addRuntimePermissionCard(
-            "♧", R.string.xingdun_notification_permission,
+            R.drawable.xingdun_ic_permission_notification, R.string.xingdun_permission_notification,
             R.string.xingdun_permission_notification_summary, R.string.xingdun_permission_notification_usage,
             Manifest.permission.POST_NOTIFICATIONS, notification = true,
         )
         addRuntimePermissionCard(
-            "▣", R.string.xingdun_permission_camera,
+            R.drawable.xingdun_ic_permission_camera, R.string.xingdun_permission_camera,
             R.string.xingdun_permission_camera_summary, R.string.xingdun_permission_camera_usage,
             Manifest.permission.CAMERA,
         )
         addPickerScopedPermissionCard(
-            "▧", R.string.xingdun_permission_photos,
+            R.drawable.xingdun_ic_permission_photos, R.string.xingdun_permission_photos,
             R.string.xingdun_permission_photos_summary, R.string.xingdun_permission_photos_usage,
         )
         addRuntimePermissionCard(
-            "●", R.string.xingdun_permission_microphone,
+            R.drawable.xingdun_ic_permission_microphone, R.string.xingdun_permission_microphone,
             R.string.xingdun_permission_microphone_summary, R.string.xingdun_permission_microphone_usage,
             Manifest.permission.RECORD_AUDIO,
         )
         addPickerScopedPermissionCard(
-            "▤", R.string.xingdun_permission_files,
+            R.drawable.xingdun_ic_permission_files, R.string.xingdun_permission_files,
             R.string.xingdun_permission_files_summary, R.string.xingdun_permission_files_usage,
         )
     }
 
     private fun addRuntimePermissionCard(
-        icon: String,
+        icon: Int,
         title: Int,
         summary: Int,
         usage: Int,
@@ -3281,15 +3293,35 @@ open class XingDunFeatureActivity : BaseActivity() {
             (requested && !shouldShowRequestPermissionRationale(permission)))
         val status = when {
             granted -> R.string.xingdun_permission_enabled
+            !runtimePermissionRequired -> R.string.xingdun_permission_closed
             requested -> R.string.xingdun_permission_closed
             else -> R.string.xingdun_permission_not_requested
+        }
+        val statusTextColor: Int
+        val statusBackgroundColor: Int
+        when {
+            granted -> {
+                statusTextColor = 0xFF168F83.toInt()
+                statusBackgroundColor = 0xFFDFF3EF.toInt()
+            }
+            !runtimePermissionRequired || requested -> {
+                statusTextColor = 0xFFD93025.toInt()
+                statusBackgroundColor = 0xFFFFE7E5.toInt()
+            }
+            else -> {
+                statusTextColor = 0xFF168F83.toInt()
+                statusBackgroundColor = 0xFFDFF3EF.toInt()
+            }
         }
         val action = when {
             granted -> R.string.xingdun_permission_enabled
             shouldOpenSettings -> R.string.xingdun_permission_go_to_settings
             else -> R.string.xingdun_permission_allow_access
         }
-        addPermissionCard(icon, title, summary, usage, status, granted, action, !granted) {
+        addPermissionCard(
+            icon, title, summary, usage, status,
+            statusTextColor, statusBackgroundColor, action, !granted,
+        ) {
             if (shouldOpenSettings) {
                 managedPermissionSettings.launch(
                     if (notification) Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
@@ -3298,26 +3330,29 @@ open class XingDunFeatureActivity : BaseActivity() {
                 )
             } else {
                 markPermissionRequested(permission)
+                managedPermissionFeedbackTitle = title
                 managedPermissionRequest.launch(permission)
             }
         }
     }
 
-    private fun addPickerScopedPermissionCard(icon: String, title: Int, summary: Int, usage: Int) {
+    private fun addPickerScopedPermissionCard(icon: Int, title: Int, summary: Int, usage: Int) {
         addPermissionCard(
             icon, title, summary, usage,
-            R.string.xingdun_permission_picker_scoped, true,
+            R.string.xingdun_permission_picker_scoped,
+            0xFF168F83.toInt(), 0xFFDFF3EF.toInt(),
             R.string.xingdun_permission_system_picker, false,
         ) {}
     }
 
     private fun addPermissionCard(
-        icon: String,
+        icon: Int,
         title: Int,
         summary: Int,
         usage: Int,
         statusLabel: Int,
-        positiveStatus: Boolean,
+        statusTextColor: Int,
+        statusBackgroundColor: Int,
         actionLabel: Int,
         actionEnabled: Boolean,
         action: () -> Unit,
@@ -3328,12 +3363,11 @@ open class XingDunFeatureActivity : BaseActivity() {
             setPadding(16.dp(), 14.dp(), 16.dp(), 14.dp())
             addView(LinearLayout(context).apply {
                 gravity = Gravity.TOP
-                addView(TextView(context).apply {
-                    text = icon
-                    textSize = 20f
-                    gravity = Gravity.CENTER
-                    setTextColor(0xFF168F83.toInt())
+                addView(ImageView(context).apply {
+                    setImageResource(icon)
+                    imageTintList = ColorStateList.valueOf(0xFF168F83.toInt())
                     background = roundedDrawable(0xFFDFF3EF.toInt(), 10f)
+                    setPadding(10.dp(), 10.dp(), 10.dp(), 10.dp())
                 }, LinearLayout.LayoutParams(40.dp(), 40.dp()))
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
@@ -3348,8 +3382,8 @@ open class XingDunFeatureActivity : BaseActivity() {
                         addView(TextView(context).apply {
                             setText(statusLabel)
                             textSize = 12f
-                            setTextColor(if (positiveStatus) 0xFF168F83.toInt() else 0xFFD93025.toInt())
-                            background = roundedDrawable(if (positiveStatus) 0xFFDFF3EF.toInt() else 0xFFFFE7E5.toInt(), 10f)
+                            setTextColor(statusTextColor)
+                            background = roundedDrawable(statusBackgroundColor, 10f)
                             setPadding(8.dp(), 3.dp(), 8.dp(), 3.dp())
                         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                             marginStart = 8.dp()

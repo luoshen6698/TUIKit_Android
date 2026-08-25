@@ -735,7 +735,7 @@
     <string name="xingdun_report_violation">Report inappropriate content</string>
     <string name="xingdun_help_support_footer">Use Feedback for product suggestions or usage questions. Use Report for inappropriate users, groups or messages.</string>
     <string name="xingdun_report_from_target_hint">Open a user, group or incoming message and choose Report so the evidence target is retained.</string>
-    <string name="xingdun_permission_description">System access is requested only when the corresponding feature is used. You can review current access here.</string>
+    <string name="xingdun_permission_description">Review the system capabilities this app can access and enable each permission only when needed.</string>
     <string name="xingdun_permission_enterprise_badge">Enterprise communication access</string>
     <string name="xingdun_permission_request_when_needed">Requested only when you use the feature</string>
     <string name="xingdun_permission_not_requested">Not requested</string>
@@ -746,6 +746,9 @@
     <string name="xingdun_permission_system_picker">Authorized by system picker</string>
     <string name="xingdun_permission_granted_feedback">Permission enabled.</string>
     <string name="xingdun_permission_denied_feedback">Permission is not enabled. Request it again or open system settings.</string>
+    <string name="xingdun_managed_permission_granted_feedback">%1$s permission enabled.</string>
+    <string name="xingdun_managed_permission_denied_feedback">%1$s permission is disabled. Enable it in system settings.</string>
+    <string name="xingdun_permission_notification">Notifications</string>
     <string name="xingdun_permission_notification_summary">Receive new messages, audio/video calls, and enterprise task alerts.</string>
     <string name="xingdun_permission_notification_usage">Alerts you to chats, groups, or approvals in the background or on the lock screen. Messages remain available in the app when disabled.</string>
     <string name="xingdun_permission_camera">Camera</string>

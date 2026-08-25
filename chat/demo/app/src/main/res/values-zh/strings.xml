@@ -729,7 +729,7 @@
     <string name="xingdun_report_violation">举报违规内容</string>
     <string name="xingdun_help_support_footer">功能建议和使用问题请选择意见反馈；涉及用户、群聊或消息违规时请选择举报。</string>
     <string name="xingdun_report_from_target_hint">请从用户、群聊或收到的消息进入举报，系统会保留正确的举报对象与证据。</string>
-    <string name="xingdun_permission_description">仅在使用对应功能时申请系统权限，你可以在这里查看当前授权状态。</string>
+    <string name="xingdun_permission_description">你可以在这里查看当前应用使用系统能力的授权状态，并按需开启对应权限。</string>
     <string name="xingdun_permission_enterprise_badge">企业通讯权限</string>
     <string name="xingdun_permission_request_when_needed">仅在使用对应功能前申请</string>
     <string name="xingdun_permission_not_requested">未申请</string>
@@ -740,6 +740,9 @@
     <string name="xingdun_permission_system_picker">系统选择器授权</string>
     <string name="xingdun_permission_granted_feedback">权限已开启。</string>
     <string name="xingdun_permission_denied_feedback">权限未开启，可再次申请或前往系统设置。</string>
+    <string name="xingdun_managed_permission_granted_feedback">%1$s权限已开启。</string>
+    <string name="xingdun_managed_permission_denied_feedback">%1$s权限已关闭，可前往系统设置开启。</string>
+    <string name="xingdun_permission_notification">通知</string>
     <string name="xingdun_permission_notification_summary">接收本应用的新消息、音视频来电和企业待办提醒。</string>
     <string name="xingdun_permission_notification_usage">例如在锁屏或后台时提醒新的单聊、群聊或审批消息；关闭后仍可进入应用查看消息。</string>
     <string name="xingdun_permission_camera">相机</string>
