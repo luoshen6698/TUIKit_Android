@@ -487,6 +487,16 @@
     <string name="xingdun_invalid_group">群标识无效。</string>
     <string name="xingdun_saved">已保存。</string>
     <string name="xingdun_scan_qr">扫一扫</string>
+    <string name="xingdun_profile_friends_title">好友</string>
+    <string name="xingdun_profile_friends_search_hint">搜索好友昵称或账号</string>
+    <string name="xingdun_profile_friends_loading">正在加载好友</string>
+    <string name="xingdun_profile_friends_empty">暂无好友</string>
+    <string name="xingdun_profile_friends_empty_detail">添加好友后将在这里显示。</string>
+    <string name="xingdun_profile_friends_no_result">未找到好友</string>
+    <string name="xingdun_profile_friends_no_result_detail">请尝试其他昵称或账号。</string>
+    <string name="xingdun_profile_friends_load_failed">好友加载失败</string>
+    <string name="xingdun_profile_friends_retry">重新加载</string>
+    <string name="xingdun_profile_friends_user_id">账号：%1$s</string>
     <string name="xingdun_qr_scan_description">扫描星盾账号、群聊或企业邀请二维码。</string>
     <string name="xingdun_scan_with_camera">使用相机扫描</string>
     <string name="xingdun_scan_from_gallery">从相册选择</string>

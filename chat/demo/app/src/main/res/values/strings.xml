@@ -493,6 +493,16 @@
     <string name="xingdun_invalid_group">The group identifier is invalid.</string>
     <string name="xingdun_saved">Saved.</string>
     <string name="xingdun_scan_qr">Scan QR code</string>
+    <string name="xingdun_profile_friends_title">Friends</string>
+    <string name="xingdun_profile_friends_search_hint">Search by friend name or account</string>
+    <string name="xingdun_profile_friends_loading">Loading friends</string>
+    <string name="xingdun_profile_friends_empty">No friends yet</string>
+    <string name="xingdun_profile_friends_empty_detail">Friends you add will appear here.</string>
+    <string name="xingdun_profile_friends_no_result">No friends found</string>
+    <string name="xingdun_profile_friends_no_result_detail">Try another name or account.</string>
+    <string name="xingdun_profile_friends_load_failed">Could not load friends</string>
+    <string name="xingdun_profile_friends_retry">Reload</string>
+    <string name="xingdun_profile_friends_user_id">Account: %1$s</string>
     <string name="xingdun_qr_scan_description">Scan a XingDun account, group, or invitation QR code.</string>
     <string name="xingdun_scan_with_camera">Scan with camera</string>
     <string name="xingdun_scan_from_gallery">Choose from gallery</string>
