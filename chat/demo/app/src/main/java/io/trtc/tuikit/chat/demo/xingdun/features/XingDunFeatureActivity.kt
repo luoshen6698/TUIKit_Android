@@ -138,6 +138,8 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var reportTotal = 0
     private var reportLoading = false
     private var reportTouchStartY = 0f
+    private var aboutUpdateProgress: ProgressBar? = null
+    private var aboutUpdateRow: View? = null
     private val reportRecords = mutableListOf<JsonObject>()
     private var reportListContainer: LinearLayout? = null
     private var managedPermissionFeedbackTitle: Int? = null
@@ -3529,7 +3531,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             addView(XingDunEnterpriseLogoView(context).apply {
                 contentDescription = brandName
                 loadLogo(lifecycleScope, enterprise?.let(XingDunAuthUiSupport::logoUrl))
-            }, LinearLayout.LayoutParams(100.dp(), 100.dp()))
+            }, LinearLayout.LayoutParams(84.dp(), 84.dp()))
             addView(TextView(context).apply {
                 text = brandName
                 textSize = 20f
@@ -3553,15 +3555,22 @@ open class XingDunFeatureActivity : BaseActivity() {
             background = roundedDrawable(Color.WHITE, 14f)
             addView(aboutValueRow(
                 R.string.xingdun_about_official_website,
+                R.drawable.xingdun_ic_about_website,
                 if (aboutUri == null) getString(R.string.xingdun_not_configured) else null,
+                externalAction = aboutUri != null,
             ) {
                 aboutUri?.let { startActivity(Intent(Intent.ACTION_VIEW, it)) }
             })
             addView(notificationDivider())
-            addView(aboutValueRow(R.string.xingdun_check_updates, null) { checkAboutUpdates() })
+            addView(aboutValueRow(
+                R.string.xingdun_check_updates,
+                R.drawable.xingdun_ic_about_refresh,
+                value = null,
+                showsProgress = true,
+            ) { checkAboutUpdates() }.also { aboutUpdateRow = it })
             enterprise?.platform?.siteRecordNumber?.trim()?.takeIf(String::isNotEmpty)?.let { record ->
                 addView(notificationDivider())
-                addView(aboutValueRow(R.string.xingdun_about_site_record_number, record, null))
+                addView(aboutValueRow(R.string.xingdun_about_site_record_number, null, record))
             }
         }, notificationSectionLayoutParams())
 
@@ -3576,10 +3585,25 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
     }
 
-    private fun aboutValueRow(label: Int, value: String?, action: (() -> Unit)?): View =
+    private fun aboutValueRow(
+        label: Int,
+        icon: Int?,
+        value: String?,
+        externalAction: Boolean = false,
+        showsProgress: Boolean = false,
+        action: (() -> Unit)? = null,
+    ): View =
         LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(16.dp(), 0, 10.dp(), 0)
+            icon?.let { iconResource ->
+                addView(ImageView(context).apply {
+                    setImageResource(iconResource)
+                    imageTintList = ColorStateList.valueOf(0xFF168F83.toInt())
+                }, LinearLayout.LayoutParams(21.dp(), 21.dp()).apply {
+                    marginEnd = 12.dp()
+                })
+            }
             addView(TextView(context).apply {
                 setText(label)
                 textSize = 16f
@@ -3594,10 +3618,18 @@ open class XingDunFeatureActivity : BaseActivity() {
                     setTextColor(0xFF8A8A8F.toInt())
                 }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 56.dp()))
             }
+            if (showsProgress) {
+                addView(ProgressBar(context).apply {
+                    visibility = View.GONE
+                    aboutUpdateProgress = this
+                }, LinearLayout.LayoutParams(20.dp(), 20.dp()).apply {
+                    marginEnd = 8.dp()
+                })
+            }
             if (action != null && value.isNullOrBlank()) {
                 addView(TextView(context).apply {
-                    text = "›"
-                    textSize = 28f
+                    text = if (externalAction) "↗" else "›"
+                    textSize = if (externalAction) 19f else 28f
                     gravity = Gravity.CENTER
                     setTextColor(0xFF8A8A8F.toInt())
                 }, LinearLayout.LayoutParams(28.dp(), 56.dp()))
@@ -3610,10 +3642,15 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
 
     private fun checkAboutUpdates() {
+        if (aboutUpdateProgress?.visibility == View.VISIBLE) return
+        aboutUpdateProgress?.visibility = View.VISIBLE
+        aboutUpdateRow?.isEnabled = false
         status.setText(R.string.xingdun_checking_version)
         lifecycleScope.launch {
             runCatching { XingDunSessionManager.checkVersion() }
                 .onSuccess { result ->
+                    aboutUpdateProgress?.visibility = View.GONE
+                    aboutUpdateRow?.isEnabled = true
                     status.text = ""
                     if (!result.hasUpdate || result.latestVersion == null) {
                         Toast.makeText(this@XingDunFeatureActivity, R.string.xingdun_version_no_update, Toast.LENGTH_SHORT).show()
@@ -3644,6 +3681,8 @@ open class XingDunFeatureActivity : BaseActivity() {
                     }
                 }
                 .onFailure {
+                    aboutUpdateProgress?.visibility = View.GONE
+                    aboutUpdateRow?.isEnabled = true
                     status.text = ""
                     AlertDialog.Builder(this@XingDunFeatureActivity)
                         .setTitle(R.string.xingdun_check_updates)
