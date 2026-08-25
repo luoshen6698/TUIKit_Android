@@ -434,6 +434,11 @@
     <string name="xingdun_profile_clear_birthday">清除生日</string>
     <string name="xingdun_profile_birthday_cleared">保存后将清除生日。</string>
     <string name="xingdun_profile_nickname_required">昵称不能为空。</string>
+    <string name="xingdun_profile_load_failed">个人资料加载失败，请稍后重试。</string>
+    <string name="xingdun_profile_copy_account">复制</string>
+    <string name="xingdun_profile_account_copied">账号ID已复制。</string>
+    <string name="xingdun_profile_account_hint">账号ID为 3-32 位字母、数字或下划线，修改后可能受冷却期限制。</string>
+    <string name="xingdun_profile_set_birthday">设置生日</string>
     <string name="xingdun_personal_qr">我的二维码</string>
     <string name="xingdun_personal_qr_description">%1$s\n账号：%2$s</string>
     <string name="xingdun_personal_qr_validity">此二维码用于识别您的星盾账号，请仅分享给可信联系人。</string>

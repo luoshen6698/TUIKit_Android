@@ -7,24 +7,31 @@
 
     <include layout="@layout/demo_widget_chat_header" />
 
-    <ScrollView
-        android:id="@+id/demo_selfDetailScrollView"
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/demo_selfDetailSwipeRefresh"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:fillViewport="true"
-        android:overScrollMode="never">
+        android:layout_weight="1">
 
-        <LinearLayout
-            android:id="@+id/demo_selfDetailContent"
+        <ScrollView
+            android:id="@+id/demo_selfDetailScrollView"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:layoutDirection="locale"
-            android:orientation="vertical"
-            android:paddingTop="16dp"
-            android:paddingBottom="16dp" />
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:overScrollMode="never">
 
-    </ScrollView>
+            <LinearLayout
+                android:id="@+id/demo_selfDetailContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:layoutDirection="locale"
+                android:orientation="vertical"
+                android:paddingTop="16dp"
+                android:paddingBottom="16dp" />
+
+        </ScrollView>
+
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
 </LinearLayout>

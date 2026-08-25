@@ -28,6 +28,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.gson.JsonObject
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
@@ -61,6 +62,7 @@ open class SelfDetailActivity : BaseActivity() {
     private lateinit var headerDivider: View
     private lateinit var badgeContainer: FrameLayout
     private lateinit var leftContainer: LinearLayout
+    private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var scrollView: ScrollView
     private lateinit var contentColumn: LinearLayout
 
@@ -100,16 +102,22 @@ open class SelfDetailActivity : BaseActivity() {
         val mode = result.data?.getStringExtra(XingDunProfileEditorActivity.EXTRA_MODE).orEmpty()
         val value = result.data?.getStringExtra(XingDunProfileEditorActivity.EXTRA_VALUE).orEmpty()
         when (mode) {
-            XingDunProfileEditorActivity.MODE_ACCOUNT -> saveCustomID(value)
+            XingDunProfileEditorActivity.MODE_ACCOUNT ->
+                if (value != cachedCustomID) saveCustomID(value)
             XingDunProfileEditorActivity.MODE_NICKNAME ->
-                updateProfileOnServer(mapOf("nickname" to value))
+                if (value != cachedNickname) updateProfileOnServer(mapOf("nickname" to value))
             XingDunProfileEditorActivity.MODE_SIGNATURE ->
-                updateProfileOnServer(mapOf("signature" to value))
+                if (value != cachedSignature) updateProfileOnServer(mapOf("signature" to value))
             XingDunProfileEditorActivity.MODE_GENDER -> {
-                updateProfileOnServer(mapOf("gender" to value.toIntOrNull().orZero()))
+                if (value != genderServerValue()) {
+                    updateProfileOnServer(mapOf("gender" to value.toIntOrNull().orZero()))
+                }
             }
             XingDunProfileEditorActivity.MODE_BIRTHDAY -> {
-                updateProfileOnServer(mapOf("birthday" to value))
+                val current = birthdayDisplayText(cachedBirthday)
+                    .takeUnless { it == getString(R.string.xingdun_not_set) }
+                    .orEmpty()
+                if (value != current) updateProfileOnServer(mapOf("birthday" to value))
             }
         }
     }
@@ -139,6 +147,7 @@ open class SelfDetailActivity : BaseActivity() {
         headerDivider = findViewById(R.id.demo_headerDivider)
         badgeContainer = findViewById(R.id.demo_badgeContainer)
         leftContainer = findViewById(R.id.demo_leftContainer)
+        swipeRefresh = findViewById(R.id.demo_selfDetailSwipeRefresh)
         scrollView = findViewById(R.id.demo_selfDetailScrollView)
         contentColumn = findViewById(R.id.demo_selfDetailContent)
 
@@ -156,6 +165,10 @@ open class SelfDetailActivity : BaseActivity() {
         tvTitle.setText(R.string.xingdun_profile_title)
 
         buildBody()
+        swipeRefresh.setColorSchemeColors(BRAND)
+        swipeRefresh.setOnRefreshListener {
+            activityScope?.launch { loadServerProfile(showFailure = true) }
+        }
         if (isDebugPreview) {
             applyDebugPreviewState()
         }
@@ -353,8 +366,14 @@ open class SelfDetailActivity : BaseActivity() {
         birthdayItem.setValue(birthdayDisplayText(cachedBirthday))
     }
 
-    private suspend fun loadServerProfile() {
-        val session = XingDunSessionManager.currentSession() ?: return
+    private suspend fun loadServerProfile(showFailure: Boolean = false) {
+        val session = XingDunSessionManager.currentSession() ?: run {
+            swipeRefresh.isRefreshing = false
+            if (showFailure) {
+                Toast.makeText(this, R.string.xingdun_session_expired, Toast.LENGTH_LONG).show()
+            }
+            return
+        }
         runCatching {
             XingDunSessionManager.apiClient().get<JsonObject>(
                 session, "user/profile", emptyMap(), JsonObject::class.java
@@ -373,7 +392,16 @@ open class SelfDetailActivity : BaseActivity() {
             phoneItem.setValue(profile.string("phone")?.let(::maskPhone) ?: getString(R.string.xingdun_not_bound))
             emailItem.setValue(profile.string("email")?.let(::maskEmail) ?: getString(R.string.xingdun_not_bound))
             renderCachedProfile()
+        }.onFailure { error ->
+            if (showFailure) {
+                Toast.makeText(
+                    this,
+                    error.localizedMessage ?: getString(R.string.xingdun_profile_load_failed),
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
         }
+        swipeRefresh.isRefreshing = false
     }
 
     private fun renderCachedProfile() {

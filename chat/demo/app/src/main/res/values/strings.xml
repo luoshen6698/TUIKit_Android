@@ -440,6 +440,11 @@
     <string name="xingdun_profile_clear_birthday">Clear birthday</string>
     <string name="xingdun_profile_birthday_cleared">Birthday will be cleared after saving.</string>
     <string name="xingdun_profile_nickname_required">Nickname cannot be empty.</string>
+    <string name="xingdun_profile_load_failed">Unable to load your profile. Try again later.</string>
+    <string name="xingdun_profile_copy_account">Copy</string>
+    <string name="xingdun_profile_account_copied">Account ID copied.</string>
+    <string name="xingdun_profile_account_hint">Account ID must contain 3–32 letters, numbers, or underscores. Changes may be subject to a cooldown period.</string>
+    <string name="xingdun_profile_set_birthday">Set birthday</string>
     <string name="xingdun_personal_qr">My QR code</string>
     <string name="xingdun_personal_qr_description">%1$s\nAccount: %2$s</string>
     <string name="xingdun_personal_qr_validity">This QR code identifies your XingDun account. Share it only with people you trust.</string>

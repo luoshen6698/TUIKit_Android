@@ -1,6 +1,8 @@
 package io.trtc.tuikit.chat.demo.settings
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -14,6 +16,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.widget.DatePicker
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -22,8 +25,10 @@ import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -61,12 +66,12 @@ class XingDunProfileEditorActivity : BaseActivity() {
     private lateinit var scroll: ScrollView
     private lateinit var content: LinearLayout
     private lateinit var card: LinearLayout
-    private lateinit var saveButton: TextView
     private var counter: TextView? = null
     private var editor: EditText? = null
     private var genderGroup: RadioGroup? = null
     private var datePicker: DatePicker? = null
     private var birthdayIsSet = true
+    private var isCompleting = false
 
     private val mode: String by lazy { intent.getStringExtra(EXTRA_MODE).orEmpty() }
     private val initialValue: String by lazy { intent.getStringExtra(EXTRA_VALUE).orEmpty() }
@@ -77,6 +82,9 @@ class XingDunProfileEditorActivity : BaseActivity() {
         setContentView(R.layout.xingdun_activity_profile_editor)
         bindViews()
         configureHeader()
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = complete()
+        })
         buildContent()
         applyColors(themeStore.themeState.value.currentTheme.tokens.color)
 
@@ -113,7 +121,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
 
     private fun configureHeader() {
         headerTitle.setText(titleForMode())
-        left.setOnClickListener { finish() }
+        left.setOnClickListener { complete() }
         more.visibility = View.GONE
         badge.visibility = View.GONE
     }
@@ -134,19 +142,6 @@ class XingDunProfileEditorActivity : BaseActivity() {
             else -> finish()
         }
 
-        saveButton = TextView(this).apply {
-            setText(R.string.xingdun_profile_save)
-            gravity = Gravity.CENTER
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { complete() }
-        }
-        content.addView(
-            saveButton,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()).apply { topMargin = 20.dp() },
-        )
     }
 
     private fun buildTextEditor(limit: Int, multiline: Boolean) {
@@ -162,6 +157,18 @@ class XingDunProfileEditorActivity : BaseActivity() {
                 MODE_SIGNATURE -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
                 else -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             }
+            if (!multiline) {
+                isSingleLine = true
+                imeOptions = EditorInfo.IME_ACTION_DONE
+                setOnEditorActionListener { _, actionId, _ ->
+                    if (actionId == EditorInfo.IME_ACTION_DONE) {
+                        complete()
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
             if (multiline) setPadding(0, 14.dp(), 0, 14.dp())
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -171,7 +178,42 @@ class XingDunProfileEditorActivity : BaseActivity() {
                 override fun afterTextChanged(s: Editable?) = Unit
             })
         }
-        card.addView(editor, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        if (mode == MODE_ACCOUNT) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            row.addView(editor, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(TextView(this).apply {
+                setText(R.string.xingdun_profile_copy_account)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setTextColor(BRAND)
+                gravity = Gravity.CENTER
+                setPadding(14.dp(), 10.dp(), 0, 10.dp())
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    val value = editor?.text?.toString().orEmpty()
+                    getSystemService(ClipboardManager::class.java)?.setPrimaryClip(
+                        ClipData.newPlainText(getString(R.string.demo_settings_self_detail_account), value)
+                    )
+                    Toast.makeText(
+                        this@XingDunProfileEditorActivity,
+                        R.string.xingdun_profile_account_copied,
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            })
+            card.addView(
+                row,
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
+        } else {
+            card.addView(
+                editor,
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
+        }
         counter = TextView(this).apply {
             text = getString(R.string.xingdun_profile_character_count, initialValue.length, limit)
             gravity = Gravity.END
@@ -179,6 +221,14 @@ class XingDunProfileEditorActivity : BaseActivity() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
         }
         card.addView(counter, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        if (mode == MODE_ACCOUNT) {
+            card.addView(TextView(this).apply {
+                setText(R.string.xingdun_profile_account_hint)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                setPadding(0, 8.dp(), 0, 6.dp())
+                setTextColor(themeStore.themeState.value.currentTheme.tokens.color.textColorSecondary)
+            })
+        }
     }
 
     private fun buildGenderEditor() {
@@ -198,11 +248,19 @@ class XingDunProfileEditorActivity : BaseActivity() {
             }
             genderGroup?.addView(option, RadioGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
+        genderGroup?.setOnCheckedChangeListener { group, checkedId ->
+            val selected = group.findViewById<RadioButton>(checkedId)?.tag?.toString()
+            if (selected != null && selected != initialValue.ifBlank { "0" }) {
+                complete()
+            }
+        }
         card.addView(genderGroup, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
     private fun buildBirthdayEditor() {
-        val calendar = Calendar.getInstance()
+        val calendar = Calendar.getInstance().apply {
+            set(1990, Calendar.JANUARY, 1)
+        }
         birthdayIsSet = initialValue.isNotBlank()
         runCatching {
             val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(initialValue)
@@ -210,25 +268,26 @@ class XingDunProfileEditorActivity : BaseActivity() {
         }
         datePicker = DatePicker(this).apply {
             maxDate = System.currentTimeMillis()
+            visibility = if (birthdayIsSet) View.VISIBLE else View.GONE
             init(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)) { _, _, _, _ ->
                 birthdayIsSet = true
             }
         }
-        card.addView(datePicker, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        card.addView(TextView(this).apply {
-            setText(R.string.xingdun_profile_clear_birthday)
-            gravity = Gravity.CENTER
-            setPadding(0, 14.dp(), 0, 14.dp())
-            isClickable = true
-            isFocusable = true
-            setOnClickListener {
-                birthdayIsSet = false
-                Toast.makeText(this@XingDunProfileEditorActivity, R.string.xingdun_profile_birthday_cleared, Toast.LENGTH_SHORT).show()
+        card.addView(Switch(this).apply {
+            setText(R.string.xingdun_profile_set_birthday)
+            gravity = Gravity.CENTER_VERTICAL
+            minHeight = 56.dp()
+            isChecked = birthdayIsSet
+            setOnCheckedChangeListener { _, checked ->
+                birthdayIsSet = checked
+                datePicker?.visibility = if (checked) View.VISIBLE else View.GONE
             }
         })
+        card.addView(datePicker, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
     private fun complete() {
+        if (isCompleting) return
         val value = when (mode) {
             MODE_NICKNAME -> editor?.text?.toString()?.trim().orEmpty().also {
                 if (it.isEmpty()) return showInvalid(R.string.xingdun_profile_nickname_required)
@@ -243,6 +302,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
             }.orEmpty()
             else -> ""
         }
+        isCompleting = true
         setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_MODE, mode).putExtra(EXTRA_VALUE, value))
         finish()
     }
@@ -278,8 +338,6 @@ class XingDunProfileEditorActivity : BaseActivity() {
                 }
             }
         }
-        saveButton.background = rounded(BRAND, 16f)
-        saveButton.setTextColor(android.graphics.Color.WHITE)
     }
 
     private fun rounded(color: Int, radiusDp: Float) = GradientDrawable().apply {
