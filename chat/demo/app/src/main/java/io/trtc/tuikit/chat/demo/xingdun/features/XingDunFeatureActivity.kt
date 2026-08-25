@@ -165,7 +165,12 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
     }
 
-    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        Toast.makeText(
+            this,
+            if (granted) R.string.xingdun_permission_granted_feedback else R.string.xingdun_permission_denied_feedback,
+            Toast.LENGTH_SHORT,
+        ).show()
         content.removeAllViews()
         showNotificationSettings()
     }
@@ -2515,10 +2520,10 @@ open class XingDunFeatureActivity : BaseActivity() {
             addView(LinearLayout(context).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(16.dp(), 12.dp(), 16.dp(), 12.dp())
-                addView(TextView(context).apply {
-                    text = "🔔"
-                    textSize = 22f
-                    gravity = Gravity.CENTER
+                addView(ImageView(context).apply {
+                    setImageResource(R.drawable.xingdun_ic_notification_bell)
+                    imageTintList = ColorStateList.valueOf(0xFF20A88F.toInt())
+                    setPadding(5.dp(), 5.dp(), 5.dp(), 5.dp())
                 }, LinearLayout.LayoutParams(36.dp(), 52.dp()))
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
@@ -2550,10 +2555,13 @@ open class XingDunFeatureActivity : BaseActivity() {
                 })
             }
             addView(notificationDivider())
-            addView(notificationNavigationRow(R.string.xingdun_open_system_notification_settings) {
-                systemNotificationSettings.launch(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                    putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-                })
+                addView(notificationNavigationRow(
+                    R.string.xingdun_open_system_notification_settings,
+                    R.drawable.xingdun_ic_notification_settings,
+                ) {
+                    systemNotificationSettings.launch(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                        putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                    })
             })
         }, notificationSectionLayoutParams())
 
@@ -2587,10 +2595,18 @@ open class XingDunFeatureActivity : BaseActivity() {
             orientation = LinearLayout.VERTICAL
             background = roundedDrawable(Color.WHITE, 14f)
             setPadding(16.dp(), 14.dp(), 16.dp(), 14.dp())
-            addView(TextView(context).apply {
-                setText(R.string.xingdun_notification_conversation_mute_hint)
-                textSize = 15f
-                setTextColor(Color.BLACK)
+            addView(LinearLayout(context).apply {
+                gravity = Gravity.TOP
+                addView(ImageView(context).apply {
+                    setImageResource(R.drawable.xingdun_ic_notification_muted)
+                    imageTintList = ColorStateList.valueOf(0xFF8A8A8F.toInt())
+                    setPadding(2.dp(), 2.dp(), 8.dp(), 2.dp())
+                }, LinearLayout.LayoutParams(32.dp(), 32.dp()))
+                addView(TextView(context).apply {
+                    setText(R.string.xingdun_notification_conversation_mute_hint)
+                    textSize = 15f
+                    setTextColor(Color.BLACK)
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             })
             addView(TextView(context).apply {
                 setText(R.string.xingdun_notification_conversation_priority_hint)
@@ -2679,10 +2695,17 @@ open class XingDunFeatureActivity : BaseActivity() {
         })
     }
 
-    private fun notificationNavigationRow(title: Int, action: () -> Unit): View =
+    private fun notificationNavigationRow(title: Int, icon: Int? = null, action: () -> Unit): View =
         LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(16.dp(), 0, 10.dp(), 0)
+            if (icon != null) {
+                addView(ImageView(context).apply {
+                    setImageResource(icon)
+                    imageTintList = ColorStateList.valueOf(0xFF20A88F.toInt())
+                    setPadding(0, 4.dp(), 10.dp(), 4.dp())
+                }, LinearLayout.LayoutParams(34.dp(), 52.dp()))
+            }
             addView(TextView(context).apply {
                 setText(title)
                 textSize = 15f
