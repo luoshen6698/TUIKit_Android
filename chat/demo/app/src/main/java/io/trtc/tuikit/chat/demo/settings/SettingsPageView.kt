@@ -4,6 +4,7 @@ import io.trtc.tuikit.chat.demo.common.AppConstants
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
+import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
@@ -89,7 +90,10 @@ class SettingsPageView @JvmOverloads constructor(
     private val allDividers = mutableListOf<View>()
     private val allSpacers = mutableListOf<View>()
     private val productFeatureItems = mutableListOf<Pair<View, String>>()
+    private val systemSettingsRows = mutableListOf<View>()
+    private val systemSettingsDividers = mutableListOf<View>()
     private var backButton: ImageView? = null
+    private var systemSettingsMode = false
 
     private var enableReadReceipt: Boolean = AppBuilderConfig.enableReadReceipt
     private var translateTargetLanguage: String = AppBuilderConfig.translateTargetLanguage
@@ -223,7 +227,11 @@ class SettingsPageView @JvmOverloads constructor(
 
         settingsGroup1.setBackgroundColor(colors.bgColorOperate)
         settingsGroup2.setBackgroundColor(colors.bgColorOperate)
-        settingsGroupVoice.setBackgroundColor(colors.bgColorOperate)
+        settingsGroupVoice.background = if (systemSettingsMode) {
+            roundedBackground(colors.bgColorOperate, 18f)
+        } else {
+            GradientDrawable().apply { setColor(colors.bgColorOperate) }
+        }
 
         for (divider in allDividers) {
             divider.setBackgroundColor(colors.strokeColorPrimary)
@@ -240,12 +248,19 @@ class SettingsPageView @JvmOverloads constructor(
             itemAddRule,
             itemTranslateLanguage,
             itemVoiceMessage,
-        ) + productFeatureItems.map { it.first }
+        ) + productFeatureItems.map { it.first } + systemSettingsRows
         for (item in entryItems) {
             item.findViewById<TextView>(R.id.demo_tvSettingsTitle)?.setTextColor(colors.textColorSecondary)
             item.findViewById<TextView>(R.id.demo_tvSettingsValue)?.setTextColor(colors.textColorPrimary)
             item.findViewById<ImageView>(R.id.demo_ivArrow)?.setColorFilter(colors.textColorTertiary)
         }
+        systemSettingsRows.forEach { row ->
+            row.findViewById<TextView>(R.id.xingdun_mine_menu_title)?.setTextColor(colors.textColorPrimary)
+            row.findViewById<ImageView>(R.id.xingdun_mine_menu_icon)?.setColorFilter(XINGDUN_GREEN)
+            row.findViewById<ImageView>(R.id.xingdun_mine_menu_arrow)?.setColorFilter(colors.textColorTertiary)
+            row.findViewWithTag<TextView>(SYSTEM_SETTINGS_VALUE_TAG)?.setTextColor(colors.textColorTertiary)
+        }
+        systemSettingsDividers.forEach { it.setBackgroundColor(colors.strokeColorPrimary) }
         updatePrimaryColorPreview(currentPrimaryColorHex(), colors.strokeColorPrimary)
 
         tvReadReceiptTitle.setTextColor(colors.textColorSecondary)
@@ -267,6 +282,7 @@ class SettingsPageView @JvmOverloads constructor(
 
     /** Reuses the existing settings controls as the iOS-style My tab's child screen. */
     fun showAsSystemSettings(onBack: () -> Unit) {
+        systemSettingsMode = true
         setHeaderTitle(context.getString(R.string.xingdun_system_settings))
         backButton = ImageView(context).apply {
             setImageResource(R.drawable.demo_ic_back)
@@ -282,17 +298,80 @@ class SettingsPageView @JvmOverloads constructor(
         findViewById<View>(R.id.demo_spacer1).visibility = View.GONE
         profileMetrics.visibility = View.GONE
         findViewById<View>(R.id.xingdun_metricsSpacer).visibility = View.GONE
+        settingsGroup1.visibility = View.GONE
+        settingsGroup2.visibility = View.GONE
+        findViewById<View>(R.id.demo_spacer2).visibility = View.GONE
+        findViewById<View>(R.id.demo_spacer4).visibility = View.GONE
+        rebuildSystemSettingsMenu()
+        btnLogout.setOnClickListener { confirmSystemSettingsLogout() }
+        applyThemeColors(themeStore.themeState.value.currentTheme.tokens.color)
+    }
 
-        val systemModes = setOf(
-            XingDunFeatureActivity.MODE_ACCOUNT_SECURITY,
-            XingDunFeatureActivity.MODE_NOTIFICATIONS,
-            XingDunFeatureActivity.MODE_STORAGE,
-            XingDunFeatureActivity.MODE_PERMISSIONS,
-        )
-        productFeatureItems.forEach { (view, mode) ->
-            view.visibility = if (mode in systemModes) View.VISIBLE else View.GONE
+    private fun rebuildSystemSettingsMenu() {
+        systemSettingsRows.clear()
+        systemSettingsDividers.clear()
+        settingsGroupVoice.removeAllViews()
+        settingsGroupVoice.layoutParams = LinearLayout.LayoutParams(
+            LayoutParams.MATCH_PARENT,
+            LayoutParams.WRAP_CONTENT,
+        ).apply {
+            marginStart = 16.dp()
+            marginEnd = 16.dp()
         }
-        backButton?.setColorFilter(themeStore.themeState.value.currentTheme.tokens.color.textColorPrimary)
+
+        val entries = listOf(
+            Triple(R.string.xingdun_account_security, R.drawable.xingdun_ic_settings_account, XingDunFeatureActivity.MODE_ACCOUNT_SECURITY),
+            Triple(R.string.xingdun_notification_settings, R.drawable.xingdun_ic_notification_bell, XingDunFeatureActivity.MODE_NOTIFICATIONS),
+            Triple(R.string.demo_settings_language, R.drawable.demo_ic_login_language, XingDunFeatureActivity.MODE_LANGUAGE),
+            Triple(R.string.xingdun_storage_management, R.drawable.xingdun_ic_storage_file, XingDunFeatureActivity.MODE_STORAGE),
+            Triple(R.string.xingdun_permission_management, R.drawable.xingdun_ic_mine_privacy, XingDunFeatureActivity.MODE_PERMISSIONS),
+        )
+        entries.forEachIndexed { index, (title, icon, mode) ->
+            val row = LayoutInflater.from(context).inflate(R.layout.xingdun_item_mine_menu, settingsGroupVoice, false)
+            row.findViewById<ImageView>(R.id.xingdun_mine_menu_icon).setImageResource(icon)
+            row.findViewById<TextView>(R.id.xingdun_mine_menu_title).apply {
+                setText(title)
+                setTypeface(typeface, Typeface.NORMAL)
+            }
+            if (mode == XingDunFeatureActivity.MODE_LANGUAGE) {
+                val arrow = row.findViewById<ImageView>(R.id.xingdun_mine_menu_arrow)
+                val value = TextView(context).apply {
+                    text = getCurrentLanguageDisplayName()
+                    textSize = 14f
+                    maxLines = 1
+                    tag = SYSTEM_SETTINGS_VALUE_TAG
+                }
+                (row as LinearLayout).addView(
+                    value,
+                    row.indexOfChild(arrow),
+                    LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT),
+                )
+            }
+            row.setOnClickListener { XingDunFeatureActivity.start(context, mode) }
+            settingsGroupVoice.addView(row)
+            systemSettingsRows += row
+            if (index < entries.lastIndex) {
+                val divider = View(context)
+                settingsGroupVoice.addView(
+                    divider,
+                    LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 1.dp()).apply {
+                        marginStart = 52.dp()
+                        marginEnd = 18.dp()
+                    },
+                )
+                systemSettingsDividers += divider
+            }
+        }
+    }
+
+    private fun confirmSystemSettingsLogout() {
+        AlertDialog.Builder(context)
+            .setTitle(R.string.xingdun_logout_confirm_title)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.demo_logout) { _, _ ->
+                XingDunTenantSessionCoordinator.logout(::openLogin)
+            }
+            .show()
     }
 
     private fun setupSettingsItems() {
@@ -427,6 +506,11 @@ class SettingsPageView @JvmOverloads constructor(
     }
 
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
+
+    private fun roundedBackground(color: Int, radiusDp: Float) = GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = radiusDp * resources.displayMetrics.density
+    }
 
     private fun updateReadReceiptDescription() {
         tvReadReceiptDesc.text = if (enableReadReceipt) {
@@ -702,5 +786,7 @@ class SettingsPageView @JvmOverloads constructor(
         private const val KEY_ENABLE_READ_RECEIPT = AppConstants.KEY_ENABLE_READ_RECEIPT
         private const val KEY_APP_LANGUAGE = AppConstants.KEY_APP_LANGUAGE
         private const val DEFAULT_PRIMARY_COLOR = "#1C66E5"
+        private const val SYSTEM_SETTINGS_VALUE_TAG = "xingdun_system_settings_value"
+        private const val XINGDUN_GREEN = 0xFF23B39C.toInt()
     }
 }

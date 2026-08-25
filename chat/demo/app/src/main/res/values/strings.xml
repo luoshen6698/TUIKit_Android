@@ -699,6 +699,7 @@
     <string name="xingdun_share_poster">Share poster</string>
     <string name="xingdun_help_center_title">Help Center</string>
     <string name="xingdun_system_settings">System Settings</string>
+    <string name="xingdun_logout_confirm_title">Sign out of this account?</string>
     <string name="xingdun_about_platform">About XingDun IM Platform</string>
     <string name="xingdun_message_favorites">Message favorites</string>
     <string name="xingdun_redpacket_account">Red packets &amp; balance</string>

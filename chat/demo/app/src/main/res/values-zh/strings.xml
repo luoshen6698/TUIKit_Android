@@ -693,6 +693,7 @@
     <string name="xingdun_share_poster">分享海报</string>
     <string name="xingdun_help_center_title">帮助中心</string>
     <string name="xingdun_system_settings">系统设置</string>
+    <string name="xingdun_logout_confirm_title">退出当前账号？</string>
     <string name="xingdun_about_platform">关于 XingDun IM Platform</string>
     <string name="xingdun_message_favorites">消息收藏</string>
     <string name="xingdun_redpacket_account">红包与余额</string>
