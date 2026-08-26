@@ -1,7 +1,9 @@
 package io.trtc.tuikit.chat.demo.xingdun.features
 
 import android.Manifest
+import android.app.DatePickerDialog
 import android.app.NotificationManager
+import android.app.TimePickerDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
@@ -112,6 +114,7 @@ import java.text.DateFormat
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Currency
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
@@ -137,6 +140,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private lateinit var status: TextView
     private lateinit var scrollView: ScrollView
     private lateinit var headerBar: FrameLayout
+    private lateinit var headerTitle: TextView
     private val mode: String by lazy { intent.getStringExtra(EXTRA_MODE).orEmpty() }
     private val itemId: Int by lazy { intent.getIntExtra(EXTRA_ITEM_ID, 0) }
     private val targetID: String by lazy { intent.getStringExtra(EXTRA_TARGET_ID).orEmpty() }
@@ -168,6 +172,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var workspaceApplicationCategory: String? = null
     private var workspaceDetailLoading = false
     private var workspaceDetailTouchStartY = 0f
+    private var workspaceFormLoading = false
     private var favoriteListContainer: LinearLayout? = null
     private val favoriteAudioPlayer: AudioPlayer by lazy { AudioPlayer.create() }
     private var favoriteAudioURL: String? = null
@@ -340,14 +345,15 @@ open class XingDunFeatureActivity : BaseActivity() {
                 isFocusable = true
                 setOnClickListener { finish() }
             }, FrameLayout.LayoutParams(52.dp(), 52.dp(), Gravity.START or Gravity.CENTER_VERTICAL))
-            addView(TextView(context).apply {
+            headerTitle = TextView(context).apply {
                 text = titleForMode()
                 textSize = 17f
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
                 setTextColor(Color.BLACK)
                 maxLines = 1
-            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp(), Gravity.CENTER).apply {
+            }
+            addView(headerTitle, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp(), Gravity.CENTER).apply {
                 marginStart = 58.dp()
                 marginEnd = 58.dp()
             })
@@ -1049,81 +1055,355 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showWorkspaceForm() {
+        applyWorkspaceListChrome()
+        if (workspaceFormLoading) return
+        workspaceFormLoading = true
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
                 val values = XingDunSessionManager.apiClient().get<JsonArray>(
                     requireSession(), "workspace/types", emptyMap(), JsonArray::class.java
                 )
-                XingDunWorkspaceContracts.parseTypes(values).filter(XingDunWorkspaceType::available)
-            }.onSuccess(::renderWorkspaceForm).onFailure(::showFailure)
+                XingDunWorkspaceContracts.parseTypes(values)
+            }.onSuccess {
+                workspaceFormLoading = false
+                renderWorkspaceForm(it)
+            }.onFailure {
+                workspaceFormLoading = false
+                setBusy(false)
+                renderWorkspaceFormLoadFailure()
+            }
         }
     }
 
     private fun renderWorkspaceForm(types: List<XingDunWorkspaceType>) {
         setBusy(false)
-        if (types.isEmpty()) {
-            addMessage(R.string.xingdun_workspace_no_available_types)
+        content.removeAllViews()
+        val availableTypes = types.filter(XingDunWorkspaceType::available)
+        val selected = if (targetID.isNotBlank()) {
+            availableTypes.firstOrNull { it.type == targetID }
+        } else {
+            availableTypes.firstOrNull()
+        }
+        if (selected == null) {
+            headerTitle.setText(R.string.xingdun_workspace_create)
+            content.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                background = roundedDrawable(Color.WHITE, 14f)
+                setPadding(20.dp(), 30.dp(), 20.dp(), 30.dp())
+                addView(TextView(context).apply {
+                    setText(R.string.xingdun_workspace_no_available_types)
+                    textSize = 15f
+                    gravity = Gravity.CENTER
+                    setTextColor(0xFF8A8A8F.toInt())
+                })
+            }, workspaceListSectionLayoutParams())
             return
         }
-        val initialIndex = types.indexOfFirst { it.type == targetID }.takeIf { it >= 0 } ?: 0
-        val type = Spinner(this).apply {
-            adapter = ArrayAdapter(
-                this@XingDunFeatureActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                types.map(XingDunWorkspaceType::name)
-            )
-            setSelection(initialIndex)
+
+        val typeTitle = workspaceTypeLabel(selected.type, selected.name)
+        headerTitle.text = typeTitle
+        val requestID = UUID.randomUUID().toString().lowercase(Locale.ROOT)
+        val startCalendar = Calendar.getInstance().apply { set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+        val endCalendar = (startCalendar.clone() as Calendar).apply { add(Calendar.HOUR_OF_DAY, 1) }
+
+        fun sectionHeader(label: Int) {
+            content.addView(TextView(this).apply {
+                setText(label)
+                textSize = 14f
+                setTextColor(0xFF8A8A8F.toInt())
+                setPadding(14.dp(), 10.dp(), 8.dp(), 7.dp())
+            })
         }
-        val title = input(R.string.xingdun_workspace_form_title)
-        val reason = input(R.string.xingdun_workspace_form_reason, multiline = true)
-        val start = input(R.string.xingdun_workspace_form_start)
-        val end = input(R.string.xingdun_workspace_form_end)
-        val amount = input(R.string.xingdun_workspace_form_amount, decimal = true)
-        content.addView(type)
-        listOf(title, reason, start, end, amount).forEach(content::addView)
-        val updateRequirements = {
-            val selected = types[type.selectedItemPosition]
-            start.visibility = if (selected.requiresTime) View.VISIBLE else View.GONE
-            end.visibility = if (selected.requiresTime) View.VISIBLE else View.GONE
-            amount.visibility = if (selected.requiresAmount) View.VISIBLE else View.GONE
-            status.text = selected.approverName?.let { getString(R.string.xingdun_workspace_approver, it) }.orEmpty()
+
+        fun formCard(): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(16.dp(), 4.dp(), 16.dp(), 4.dp())
         }
-        type.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) = updateRequirements()
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+
+        fun divider(): View = View(this).apply { setBackgroundColor(0xFFE5E5EA.toInt()) }
+
+        fun footer(text: String): TextView = TextView(this).apply {
+            this.text = text
+            textSize = 12f
+            gravity = Gravity.END
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(12.dp(), 5.dp(), 12.dp(), 5.dp())
         }
-        updateRequirements()
-        content.addView(actionButton(R.string.xingdun_submit) {
-            val selected = types[type.selectedItemPosition]
+
+        sectionHeader(R.string.xingdun_workspace_form_basic_information)
+        val basicCard = formCard()
+        val title = EditText(this).apply {
+            setHint(R.string.xingdun_workspace_form_title)
+            setText(getString(R.string.xingdun_workspace_default_title, typeTitle))
+            textSize = 16f
+            setTextColor(0xFF1C1C1E.toInt())
+            setHintTextColor(0xFFAEAEB2.toInt())
+            background = null
+            setSingleLine(true)
+            setPadding(0, 10.dp(), 0, 10.dp())
+        }
+        basicCard.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()))
+        selected.approverName?.takeIf(String::isNotBlank)?.let { approver ->
+            basicCard.addView(divider(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1.dp()))
+            basicCard.addView(LinearLayout(this).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                addView(TextView(context).apply {
+                    setText(R.string.xingdun_workspace_form_approver)
+                    textSize = 16f
+                    setTextColor(0xFF1C1C1E.toInt())
+                }, LinearLayout.LayoutParams(0, 52.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
+                addView(TextView(context).apply {
+                    text = approver
+                    textSize = 15f
+                    setTextColor(0xFF8A8A8F.toInt())
+                })
+            })
+        }
+        content.addView(basicCard, workspaceListSectionLayoutParams())
+        val titleCounter = footer(getString(R.string.xingdun_workspace_title_count, title.text.length))
+        content.addView(titleCounter)
+
+        sectionHeader(R.string.xingdun_workspace_form_reason_title)
+        val reason = EditText(this).apply {
+            setHint(R.string.xingdun_workspace_form_reason)
+            textSize = 16f
+            setTextColor(0xFF1C1C1E.toInt())
+            setHintTextColor(0xFFAEAEB2.toInt())
+            background = null
+            gravity = Gravity.TOP or Gravity.START
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 5
+            setPadding(0, 12.dp(), 0, 12.dp())
+        }
+        content.addView(formCard().apply { addView(reason) }, workspaceListSectionLayoutParams())
+        val reasonCounter = footer(getString(R.string.xingdun_workspace_reason_count, 0))
+        content.addView(reasonCounter)
+
+        var startValue: TextView? = null
+        var endValue: TextView? = null
+        var timeFooter: TextView? = null
+        fun dateRow(label: Int, calendar: Calendar, onClick: () -> Unit): LinearLayout = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(TextView(context).apply {
+                setText(label)
+                textSize = 16f
+                setTextColor(0xFF1C1C1E.toInt())
+            }, LinearLayout.LayoutParams(0, 54.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
+            val value = TextView(context).apply {
+                text = workspaceFormDisplayDate(calendar)
+                textSize = 15f
+                setTextColor(0xFF3A3A3C.toInt())
+                gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            }
+            addView(value)
+            addView(TextView(context).apply {
+                text = "›"
+                textSize = 24f
+                setTextColor(0xFF8A8A8F.toInt())
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(24.dp(), 54.dp()))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+            if (label == R.string.xingdun_workspace_form_start_label) startValue = value else endValue = value
+        }
+        fun updateTimeState() {
+            startValue?.text = workspaceFormDisplayDate(startCalendar)
+            endValue?.text = workspaceFormDisplayDate(endCalendar)
+            timeFooter?.visibility = if (startCalendar.before(endCalendar)) View.GONE else View.VISIBLE
+        }
+        if (selected.requiresTime) {
+            sectionHeader(R.string.xingdun_workspace_form_time_title)
+            val timeCard = formCard()
+            timeCard.addView(dateRow(R.string.xingdun_workspace_form_start_label, startCalendar) {
+                showWorkspaceDateTimePicker(startCalendar) { updateTimeState() }
+            })
+            timeCard.addView(divider(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1.dp()))
+            timeCard.addView(dateRow(R.string.xingdun_workspace_form_end_label, endCalendar) {
+                showWorkspaceDateTimePicker(endCalendar) { updateTimeState() }
+            })
+            content.addView(timeCard, workspaceListSectionLayoutParams())
+            timeFooter = TextView(this).apply {
+                setText(R.string.xingdun_workspace_time_invalid)
+                textSize = 12f
+                setTextColor(0xFFD93025.toInt())
+                setPadding(12.dp(), 0, 12.dp(), 5.dp())
+                visibility = View.GONE
+            }
+            content.addView(timeFooter)
+        }
+
+        var amount: EditText? = null
+        var amountFooter: TextView? = null
+        if (selected.requiresAmount) {
+            sectionHeader(R.string.xingdun_workspace_form_amount_title)
+            amount = EditText(this).apply {
+                hint = "0.00"
+                textSize = 16f
+                setTextColor(0xFF1C1C1E.toInt())
+                setHintTextColor(0xFFAEAEB2.toInt())
+                background = null
+                inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                setSingleLine(true)
+                setPadding(0, 10.dp(), 0, 10.dp())
+            }
+            content.addView(formCard().apply { addView(amount) }, workspaceListSectionLayoutParams())
+            amountFooter = TextView(this).apply {
+                setText(R.string.xingdun_workspace_amount_invalid)
+                textSize = 12f
+                setPadding(12.dp(), 0, 12.dp(), 5.dp())
+            }
+            content.addView(amountFooter)
+        }
+
+        val errorBanner = TextView(this).apply {
+            textSize = 14f
+            setTextColor(0xFF8A3A00.toInt())
+            background = roundedDrawable(0xFFFFF3E0.toInt(), 12f)
+            setPadding(14.dp(), 12.dp(), 14.dp(), 12.dp())
+            visibility = View.GONE
+        }
+        content.addView(errorBanner, workspaceListSectionLayoutParams())
+
+        fun showValidationError(error: XingDunWorkspaceSubmissionError) {
+            errorBanner.setText(when (error) {
+                XingDunWorkspaceSubmissionError.TITLE -> R.string.xingdun_workspace_title_invalid
+                XingDunWorkspaceSubmissionError.REASON -> R.string.xingdun_workspace_reason_invalid
+                XingDunWorkspaceSubmissionError.TIME -> R.string.xingdun_workspace_time_invalid
+                XingDunWorkspaceSubmissionError.AMOUNT -> R.string.xingdun_workspace_amount_invalid
+            })
+            errorBanner.visibility = View.VISIBLE
+        }
+
+        title.doAfterTextChanged {
+            val count = it?.length ?: 0
+            titleCounter.text = getString(R.string.xingdun_workspace_title_count, count)
+            titleCounter.setTextColor(if (count > 128) 0xFFD93025.toInt() else 0xFF8A8A8F.toInt())
+        }
+        reason.doAfterTextChanged {
+            val count = it?.length ?: 0
+            reasonCounter.text = getString(R.string.xingdun_workspace_reason_count, count)
+            reasonCounter.setTextColor(if (count > 5_000) 0xFFD93025.toInt() else 0xFF8A8A8F.toInt())
+        }
+        amount?.doAfterTextChanged {
+            val value = it?.toString()?.trim()?.toBigDecimalOrNull()
+            val invalid = value == null || value <= java.math.BigDecimal.ZERO || value > java.math.BigDecimal("99999999.99")
+            amountFooter?.setTextColor(if (invalid) 0xFFD93025.toInt() else 0xFF8A8A8F.toInt())
+        }
+        if (selected.requiresAmount) amountFooter?.setTextColor(0xFFD93025.toInt())
+
+        var submitting = false
+        val submitButton = Button(this).apply {
+            setText(R.string.xingdun_workspace_submit_application)
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            backgroundTintList = ColorStateList.valueOf(0xFF20A88F.toInt())
+            minHeight = 50.dp()
+        }
+        submitButton.setOnClickListener {
+            if (submitting) return@setOnClickListener
+            val start = if (selected.requiresTime) workspaceFormPayloadDate(startCalendar) else ""
+            val end = if (selected.requiresTime) workspaceFormPayloadDate(endCalendar) else ""
+            val amountText = amount?.text?.toString().orEmpty()
             val validation = XingDunWorkspaceSubmissionValidator.validate(
                 selected,
                 title.text.toString(),
                 reason.text.toString(),
-                start.text.toString(),
-                end.text.toString(),
-                amount.text.toString()
+                start,
+                end,
+                amountText,
             )
             if (validation != null) {
-                status.setText(when (validation) {
-                    XingDunWorkspaceSubmissionError.TITLE -> R.string.xingdun_workspace_title_required
-                    XingDunWorkspaceSubmissionError.REASON -> R.string.xingdun_workspace_reason_invalid
-                    XingDunWorkspaceSubmissionError.TIME -> R.string.xingdun_workspace_time_invalid
-                    XingDunWorkspaceSubmissionError.AMOUNT -> R.string.xingdun_workspace_amount_invalid
-                })
-                return@actionButton
+                showValidationError(validation)
+                return@setOnClickListener
             }
+            errorBanner.visibility = View.GONE
             val body = linkedMapOf<String, Any?>(
                 "type" to selected.type,
                 "title" to title.text.toString().trim(),
-                "reason" to reason.text.toString().trim().takeIf(String::isNotEmpty),
-                "start_time" to start.text.toString().trim().takeIf { selected.requiresTime && it.isNotEmpty() },
-                "end_time" to end.text.toString().trim().takeIf { selected.requiresTime && it.isNotEmpty() },
-                "amount" to amount.text.toString().trim().toBigDecimalOrNull().takeIf { selected.requiresAmount },
-                "client_request_id" to UUID.randomUUID().toString()
+                "reason" to reason.text.toString().trim(),
+                "start_time" to start.takeIf { selected.requiresTime },
+                "end_time" to end.takeIf { selected.requiresTime },
+                "amount" to amountText.trim().toBigDecimalOrNull().takeIf { selected.requiresAmount },
+                "client_request_id" to requestID,
             )
-            submitEmpty("workspace/save", body, R.string.xingdun_workspace_submitted)
+            submitting = true
+            submitButton.isEnabled = false
+            submitButton.alpha = 0.58f
+            submitButton.setText(R.string.xingdun_loading)
+            lifecycleScope.launch {
+                runCatching {
+                    XingDunSessionManager.apiClient().postEmpty(requireSession(), "workspace/save", body)
+                }.onSuccess {
+                    Toast.makeText(this@XingDunFeatureActivity, R.string.xingdun_workspace_submitted, Toast.LENGTH_SHORT).show()
+                    setResult(RESULT_OK)
+                    finish()
+                }.onFailure {
+                    submitting = false
+                    submitButton.isEnabled = true
+                    submitButton.alpha = 1f
+                    submitButton.setText(R.string.xingdun_workspace_submit_application)
+                    errorBanner.setText(R.string.xingdun_workspace_submit_failed)
+                    errorBanner.visibility = View.VISIBLE
+                }
+            }
+        }
+        content.addView(submitButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()).apply {
+            topMargin = 10.dp()
+            bottomMargin = 12.dp()
         })
+    }
+
+    private fun showWorkspaceDateTimePicker(calendar: Calendar, onSelected: () -> Unit) {
+        DatePickerDialog(
+            this,
+            { _, year, month, day ->
+                TimePickerDialog(
+                    this,
+                    { _, hour, minute ->
+                        calendar.set(year, month, day, hour, minute, 0)
+                        calendar.set(Calendar.MILLISECOND, 0)
+                        onSelected()
+                    },
+                    calendar.get(Calendar.HOUR_OF_DAY),
+                    calendar.get(Calendar.MINUTE),
+                    android.text.format.DateFormat.is24HourFormat(this),
+                ).show()
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH),
+        ).show()
+    }
+
+    private fun workspaceFormDisplayDate(calendar: Calendar): String {
+        val locale = resources.configuration.locales[0] ?: Locale.getDefault()
+        return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, locale).format(calendar.time)
+    }
+
+    private fun workspaceFormPayloadDate(calendar: Calendar): String =
+        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(calendar.time)
+
+    private fun renderWorkspaceFormLoadFailure() {
+        content.removeAllViews()
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(20.dp(), 30.dp(), 20.dp(), 30.dp())
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_workspace_form_load_failed)
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF8A8A8F.toInt())
+            })
+            addView(actionButton(R.string.xingdun_retry) { showWorkspaceForm() })
+        }, workspaceListSectionLayoutParams())
     }
 
     private fun showCustomerService() {
