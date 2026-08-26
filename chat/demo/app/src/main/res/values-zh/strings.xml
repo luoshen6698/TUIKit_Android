@@ -411,6 +411,7 @@
     <string name="xingdun_report_target_user">用户</string>
     <string name="xingdun_report_target_team">群聊</string>
     <string name="xingdun_report_target_message">聊天消息</string>
+    <string name="xingdun_report_target_message_short">消息</string>
     <string name="xingdun_report_status_pending">待处理</string>
     <string name="xingdun_report_status_processing">处理中</string>
     <string name="xingdun_report_status_confirmed">确认违规</string>
@@ -482,6 +483,17 @@
     <string name="xingdun_attachment_empty">所选图片为空。</string>
     <string name="xingdun_attachment_unreadable">无法读取所选图片。</string>
     <string name="xingdun_report_target">举报对象</string>
+    <string name="xingdun_report_target_object">对象</string>
+    <string name="xingdun_report_target_identifier">标识</string>
+    <string name="xingdun_report_description_hint">请描述问题</string>
+    <string name="xingdun_report_description_footer">必填，最多 500 个字符</string>
+    <string name="xingdun_report_character_count">%1$d/500</string>
+    <string name="xingdun_report_images_count">截图证据（%1$d/5）</string>
+    <string name="xingdun_report_add_image">添加截图</string>
+    <string name="xingdun_report_submit">提交举报</string>
+    <string name="xingdun_report_view_history">查看我的举报</string>
+    <string name="xingdun_report_success_result">举报已提交，编号：%1$s</string>
+    <string name="xingdun_report_duplicate_result">该问题已经提交，请勿重复举报。</string>
     <string name="xingdun_report_description_required">补充说明（必填，最多 500 字）</string>
     <string name="xingdun_report_description_required_error">请输入 1 至 500 字补充说明。</string>
     <string name="xingdun_report_invalid_target">举报对象无效。</string>
@@ -964,7 +976,7 @@
     <string name="xingdun_group_list_refresh">刷新群聊</string>
     <string name="xingdun_group_list_muted">已免打扰</string>
     <string-array name="xingdun_report_reason_labels">
-        <item>垃圾信息</item><item>骚扰</item><item>诈骗</item><item>暴力内容</item><item>色情内容</item><item>其他</item>
+        <item>垃圾广告</item><item>骚扰辱骂</item><item>欺诈诈骗</item><item>暴力违法</item><item>色情低俗</item><item>其他问题</item>
     </string-array>
     <string-array name="xingdun_workspace_type_labels">
         <item>请假申请</item><item>出差申请</item><item>外出申请</item><item>加班申请</item><item>报销申请</item><item>采购申请</item><item>人力需求</item><item>转正申请</item><item>离职申请</item>

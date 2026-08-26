@@ -133,6 +133,11 @@ open class XingDunFeatureActivity : BaseActivity() {
         val duplicate: Boolean,
     )
 
+    private data class ReportSubmissionResult(
+        val reportNo: String,
+        val duplicate: Boolean? = null,
+    )
+
     override val requiresLogin: Boolean
         get() = !(BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false))
 
@@ -145,6 +150,8 @@ open class XingDunFeatureActivity : BaseActivity() {
     private val itemId: Int by lazy { intent.getIntExtra(EXTRA_ITEM_ID, 0) }
     private val targetID: String by lazy { intent.getStringExtra(EXTRA_TARGET_ID).orEmpty() }
     private val targetType: String by lazy { intent.getStringExtra(EXTRA_TARGET_TYPE).orEmpty() }
+    private val targetDisplayName: String by lazy { intent.getStringExtra(EXTRA_TARGET_DISPLAY_NAME).orEmpty() }
+    private val targetDisplayID: String by lazy { intent.getStringExtra(EXTRA_TARGET_DISPLAY_ID).orEmpty() }
     private var attachmentSelectionHandler: ((List<XingDunAttachment>) -> Unit)? = null
     private var pendingInvitePoster: Bitmap? = null
     private var pendingPersonalQRCode: XingDunPersonalQRCodeArtifact? = null
@@ -2452,47 +2459,216 @@ open class XingDunFeatureActivity : BaseActivity() {
             showFailure(IllegalArgumentException(getString(R.string.xingdun_report_invalid_target)))
             return
         }
+        applyFeedbackFormChrome()
         val reasonValues = resources.getStringArray(R.array.xingdun_report_reason_values)
         val reasonLabels = resources.getStringArray(R.array.xingdun_report_reason_labels)
         val reason = Spinner(this).apply {
             adapter = ArrayAdapter(this@XingDunFeatureActivity, android.R.layout.simple_spinner_dropdown_item, reasonLabels.toList())
         }
-        val description = input(R.string.xingdun_report_description_required, multiline = true)
+        val description = input(R.string.xingdun_report_description_hint, multiline = true).apply {
+            minHeight = 140.dp()
+            gravity = Gravity.TOP or Gravity.START
+        }
+        val descriptionCount = TextView(this).apply {
+            textSize = 12f
+            setTextColor(0xFF8A8A8F.toInt())
+            gravity = Gravity.END
+        }
         var attachments = emptyList<XingDunAttachment>()
-        val attachmentSummary = TextView(this).apply { setText(R.string.xingdun_no_attachments) }
-        addCard(getString(R.string.xingdun_report_target), "$targetType · $targetID")
-        content.addView(reason)
-        content.addView(description)
-        content.addView(attachmentSummary)
-        content.addView(actionButton(R.string.xingdun_choose_images) {
-            attachmentSelectionHandler = { selected ->
-                attachments = selected
-                attachmentSummary.text = attachmentSummary(selected)
+        var result: ReportSubmissionResult? = null
+        var submitting = false
+        val attachmentTitle = TextView(this)
+        val attachmentRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val attachmentScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(attachmentRow)
+        }
+        lateinit var addImageButton: Button
+        lateinit var submitButton: Button
+        lateinit var historyButton: Button
+        lateinit var updateState: () -> Unit
+        lateinit var renderAttachments: () -> Unit
+        renderAttachments = {
+            attachmentTitle.text = getString(R.string.xingdun_report_images_count, attachments.size)
+            attachmentRow.removeAllViews()
+            attachments.forEach { attachment ->
+                attachmentRow.addView(feedbackAttachmentPreview(attachment, result == null && !submitting) {
+                    if (result == null && !submitting) {
+                        attachments = attachments.filterNot { it.uri == attachment.uri }
+                        renderAttachments()
+                        updateState()
+                    }
+                })
             }
-            attachmentPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp"))
-        })
-        content.addView(actionButton(R.string.xingdun_clear_attachments) {
-            attachments = emptyList()
-            attachmentSummary.setText(R.string.xingdun_no_attachments)
-        })
-        content.addView(actionButton(R.string.xingdun_submit) {
+            attachmentScroll.visibility = if (attachments.isEmpty()) View.GONE else View.VISIBLE
+        }
+
+        addFeedbackSection(
+            R.string.xingdun_report_target,
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(reportTargetRow(R.string.xingdun_report_target_type, reportFormTargetText(targetType)))
+                addView(reportDivider())
+                addView(reportTargetRow(
+                    R.string.xingdun_report_target_object,
+                    targetDisplayName.trim().ifEmpty { reportTargetText(targetType) },
+                ))
+                addView(reportDivider())
+                addView(reportTargetRow(
+                    R.string.xingdun_report_target_identifier,
+                    targetDisplayID.trim().ifEmpty { targetID },
+                ))
+            },
+        )
+        addFeedbackSection(R.string.xingdun_report_reason, reason)
+        addFeedbackSection(
+            R.string.xingdun_report_description_section,
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(description)
+                addView(LinearLayout(context).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(TextView(context).apply {
+                        setText(R.string.xingdun_report_description_footer)
+                        textSize = 12f
+                        setTextColor(0xFF8A8A8F.toInt())
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    addView(descriptionCount)
+                })
+            },
+        )
+        addFeedbackSectionHeader(attachmentTitle)
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(14.dp(), 10.dp(), 14.dp(), 12.dp())
+            addView(attachmentScroll)
+            addImageButton = actionButton(R.string.xingdun_report_add_image) {
+                attachmentSelectionHandler = { selected ->
+                    val combined = (attachments + selected).distinctBy(XingDunAttachment::uri)
+                    if (combined.size > XingDunAttachmentResolver.MAX_COUNT) {
+                        showAttachmentFailure(XingDunAttachmentException(XingDunAttachmentError.TOO_MANY))
+                    } else {
+                        attachments = combined
+                        renderAttachments()
+                        updateState()
+                    }
+                }
+                attachmentPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp"))
+            }.apply {
+                setTextColor(0xFF28B7A2.toInt())
+                background = null
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                compoundDrawablePadding = 8.dp()
+                setCompoundDrawablesWithIntrinsicBounds(R.drawable.xingdun_ic_feedback_add_image, 0, 0, 0)
+                elevation = 0f
+            }
+            addView(addImageButton)
+        }, feedbackSectionLayoutParams())
+
+        historyButton = actionButton(R.string.xingdun_report_view_history) {
+            start(this@XingDunFeatureActivity, MODE_REPORTS)
+        }.apply { visibility = View.GONE }
+        content.addView(historyButton)
+        submitButton = actionButton(R.string.xingdun_report_submit) {
+            result?.let {
+                finish()
+                return@actionButton
+            }
             val detail = description.text.toString().trim()
             if (detail.isEmpty() || detail.length > 500) {
                 status.setText(R.string.xingdun_report_description_required_error)
                 return@actionButton
             }
-            submitMultipart(
-                path = "report/save",
-                fields = mapOf(
-                    "target_type" to targetType,
-                    "target_id" to targetID,
-                    "reason" to reasonValues[reason.selectedItemPosition],
-                    "description" to detail
-                ),
-                attachments = attachments,
-                successMessage = R.string.xingdun_report_submitted
-            )
-        })
+            submitting = true
+            updateState()
+            setBusy(true)
+            lifecycleScope.launch {
+                runCatching {
+                    val files = XingDunAttachmentResolver.uploadFiles(this@XingDunFeatureActivity, attachments)
+                    XingDunSessionManager.apiClient().postMultipart<ReportSubmissionResult>(
+                        session = requireSession(),
+                        path = "report/save",
+                        fields = mapOf(
+                            "target_type" to targetType,
+                            "target_id" to targetID,
+                            "reason" to reasonValues[reason.selectedItemPosition],
+                            "description" to detail,
+                        ),
+                        files = files,
+                        responseType = ReportSubmissionResult::class.java,
+                    )
+                }.onSuccess { submission ->
+                    result = submission
+                    submitting = false
+                    setBusy(false)
+                    reason.isEnabled = false
+                    description.isEnabled = false
+                    val message = if (submission.duplicate == true) {
+                        getString(R.string.xingdun_report_duplicate_result)
+                    } else {
+                        getString(R.string.xingdun_report_success_result, submission.reportNo)
+                    }
+                    status.text = message
+                    Toast.makeText(this@XingDunFeatureActivity, message, Toast.LENGTH_LONG).show()
+                    historyButton.visibility = View.VISIBLE
+                    submitButton.setText(R.string.xingdun_complete)
+                    renderAttachments()
+                    updateState()
+                }.onFailure { error ->
+                    submitting = false
+                    updateState()
+                    if (error is XingDunAttachmentException) showAttachmentFailure(error) else showFailure(error)
+                }
+            }
+        }
+        submitButton.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF18A987.toInt())
+        content.addView(submitButton)
+
+        updateState = {
+            val count = description.text.toString().count()
+            descriptionCount.text = getString(R.string.xingdun_report_character_count, count)
+            descriptionCount.setTextColor(if (count > 500) 0xFFD93025.toInt() else 0xFF8A8A8F.toInt())
+            addImageButton.isEnabled = result == null && attachments.size < XingDunAttachmentResolver.MAX_COUNT && !submitting
+            submitButton.isEnabled = result != null || (count in 1..500 && !submitting)
+            submitButton.setText(if (submitting) R.string.xingdun_workspace_processing else if (result != null) R.string.xingdun_complete else R.string.xingdun_report_submit)
+        }
+        description.doAfterTextChanged { updateState() }
+        renderAttachments()
+        updateState()
+    }
+
+    private fun reportTargetRow(label: Int, value: String): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = 48.dp()
+        addView(TextView(context).apply {
+            setText(label)
+            textSize = 16f
+            setTextColor(0xFF1C1C1E.toInt())
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        addView(TextView(context).apply {
+            text = value
+            textSize = 15f
+            gravity = Gravity.END
+            setTextColor(0xFF8A8A8F.toInt())
+            setTextIsSelectable(true)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.6f))
+    }
+
+    private fun reportDivider(): View = View(this).apply {
+        setBackgroundColor(0xFFE5E5EA.toInt())
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1.dp())
+    }
+
+    private fun reportFormTargetText(value: String): String = when (value) {
+        "user" -> getString(R.string.xingdun_report_target_user)
+        "team" -> getString(R.string.xingdun_report_target_team)
+        "message" -> getString(R.string.xingdun_report_target_message_short)
+        else -> getString(R.string.xingdun_report_target)
     }
 
     private fun showVersion() {
@@ -6084,6 +6260,8 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val EXTRA_ITEM_ID = "item_id"
         private const val EXTRA_TARGET_ID = "target_id"
         private const val EXTRA_TARGET_TYPE = "target_type"
+        private const val EXTRA_TARGET_DISPLAY_NAME = "target_display_name"
+        private const val EXTRA_TARGET_DISPLAY_ID = "target_display_id"
         const val MODE_WORKSPACE_LIST = "workspace_list"
         const val MODE_WORKSPACE_PENDING = "workspace_pending"
         const val MODE_WORKSPACE_DETAIL = "workspace_detail"
@@ -6143,11 +6321,19 @@ open class XingDunFeatureActivity : BaseActivity() {
             })
         }
 
-        fun startReport(context: Context, targetType: String, targetID: String) {
+        fun startReport(
+            context: Context,
+            targetType: String,
+            targetID: String,
+            displayName: String? = null,
+            displayID: String? = null,
+        ) {
             context.startActivity(Intent(context, XingDunFeatureActivity::class.java).apply {
                 putExtra(EXTRA_MODE, MODE_REPORT_CREATE)
                 putExtra(EXTRA_TARGET_TYPE, targetType)
                 putExtra(EXTRA_TARGET_ID, targetID)
+                displayName?.takeIf(String::isNotBlank)?.let { putExtra(EXTRA_TARGET_DISPLAY_NAME, it) }
+                displayID?.takeIf(String::isNotBlank)?.let { putExtra(EXTRA_TARGET_DISPLAY_ID, it) }
                 if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
         }

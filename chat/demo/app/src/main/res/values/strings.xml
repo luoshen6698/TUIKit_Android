@@ -417,6 +417,7 @@
     <string name="xingdun_report_target_user">User</string>
     <string name="xingdun_report_target_team">Group chat</string>
     <string name="xingdun_report_target_message">Chat message</string>
+    <string name="xingdun_report_target_message_short">Message</string>
     <string name="xingdun_report_status_pending">Pending</string>
     <string name="xingdun_report_status_processing">Processing</string>
     <string name="xingdun_report_status_confirmed">Violation confirmed</string>
@@ -488,6 +489,17 @@
     <string name="xingdun_attachment_empty">The selected image is empty.</string>
     <string name="xingdun_attachment_unreadable">The selected image cannot be read.</string>
     <string name="xingdun_report_target">Report target</string>
+    <string name="xingdun_report_target_object">Target</string>
+    <string name="xingdun_report_target_identifier">Identifier</string>
+    <string name="xingdun_report_description_hint">Describe the issue</string>
+    <string name="xingdun_report_description_footer">Required, up to 500 characters</string>
+    <string name="xingdun_report_character_count">%1$d/500</string>
+    <string name="xingdun_report_images_count">Screenshot evidence (%1$d/5)</string>
+    <string name="xingdun_report_add_image">Add screenshot</string>
+    <string name="xingdun_report_submit">Submit report</string>
+    <string name="xingdun_report_view_history">View my reports</string>
+    <string name="xingdun_report_success_result">Report submitted. Reference: %1$s</string>
+    <string name="xingdun_report_duplicate_result">This issue was already reported. Please do not submit it again.</string>
     <string name="xingdun_report_description_required">Additional details (required, up to 500 characters)</string>
     <string name="xingdun_report_description_required_error">Enter 1 to 500 characters of additional details.</string>
     <string name="xingdun_report_invalid_target">The report target is invalid.</string>
@@ -973,7 +985,7 @@
         <item>spam</item><item>harassment</item><item>fraud</item><item>violence</item><item>porn</item><item>other</item>
     </string-array>
     <string-array name="xingdun_report_reason_labels">
-        <item>Spam</item><item>Harassment</item><item>Fraud</item><item>Violence</item><item>Sexual content</item><item>Other</item>
+        <item>Spam</item><item>Harassment or abuse</item><item>Fraud or scams</item><item>Violence or illegal activity</item><item>Sexual or explicit content</item><item>Other issue</item>
     </string-array>
     <string-array name="xingdun_workspace_type_values" translatable="false">
         <item>leave</item><item>travel</item><item>out</item><item>overtime</item><item>reimburse</item><item>purchase</item><item>hr_need</item><item>confirmation</item><item>resign</item>

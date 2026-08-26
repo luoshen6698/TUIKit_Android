@@ -379,7 +379,15 @@ class XingDunContactDetailActivity : BaseActivity() {
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     MENU_RECOMMEND -> showRecommendPicker()
-                    MENU_REPORT -> XingDunFeatureActivity.startReport(this@XingDunContactDetailActivity, "user", timUserID)
+                    MENU_REPORT -> detail?.let { current ->
+                        XingDunFeatureActivity.startReport(
+                            this@XingDunContactDetailActivity,
+                            "user",
+                            timUserID,
+                            current.alias.normalized() ?: current.nickname.normalized() ?: timUserID,
+                            current.customId.normalized() ?: current.timUserId.ifBlank { timUserID },
+                        )
+                    }
                     MENU_DELETE -> confirmDelete()
                 }
                 true

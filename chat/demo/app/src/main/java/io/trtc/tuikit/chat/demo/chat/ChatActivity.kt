@@ -368,7 +368,9 @@ class ChatActivity : BaseActivity() {
     private fun openSecurityReport(conversationID: String) {
         val targetType = if (conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)) "user" else "team"
         val targetID = if (targetType == "user") getUserID(conversationID) else getGroupID(conversationID)
-        if (!targetID.isNullOrBlank()) XingDunFeatureActivity.startReport(this, targetType, targetID)
+        if (!targetID.isNullOrBlank()) {
+            XingDunFeatureActivity.startReport(this, targetType, targetID, latestChatTitle, targetID)
+        }
     }
 
     private fun applyColors(colors: ColorTokens) {
