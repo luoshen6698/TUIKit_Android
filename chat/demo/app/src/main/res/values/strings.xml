@@ -773,6 +773,12 @@
     <string name="xingdun_workspace_confirm_delete">Deleting removes this application from the list. Continue?</string>
     <string name="xingdun_workspace_confirm_delete_action">Confirm deletion</string>
     <string name="xingdun_workspace_rejection_reason">Rejection reason</string>
+    <string name="xingdun_workspace_reject_title">Reject application</string>
+    <string name="xingdun_workspace_confirm_reject">Confirm rejection</string>
+    <string name="xingdun_workspace_reject_reason_hint">Enter a reason for rejection</string>
+    <string name="xingdun_workspace_reject_count">%1$d/500</string>
+    <string name="xingdun_workspace_processing">Processing</string>
+    <string name="xingdun_workspace_reject_failed">Could not reject the application. Please try again.</string>
     <string name="xingdun_workspace_detail_reason">Reason</string>
     <string name="xingdun_workspace_detail_start_time">Start time</string>
     <string name="xingdun_workspace_detail_end_time">End time</string>

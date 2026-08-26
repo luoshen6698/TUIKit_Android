@@ -767,6 +767,12 @@
     <string name="xingdun_workspace_confirm_delete">删除后将从申请列表移除，确定删除吗？</string>
     <string name="xingdun_workspace_confirm_delete_action">确认删除</string>
     <string name="xingdun_workspace_rejection_reason">驳回原因</string>
+    <string name="xingdun_workspace_reject_title">驳回申请</string>
+    <string name="xingdun_workspace_confirm_reject">确认驳回</string>
+    <string name="xingdun_workspace_reject_reason_hint">请输入驳回原因</string>
+    <string name="xingdun_workspace_reject_count">%1$d/500</string>
+    <string name="xingdun_workspace_processing">处理中</string>
+    <string name="xingdun_workspace_reject_failed">驳回申请失败，请稍后重试。</string>
     <string name="xingdun_workspace_detail_reason">事由</string>
     <string name="xingdun_workspace_detail_start_time">开始时间</string>
     <string name="xingdun_workspace_detail_end_time">结束时间</string>

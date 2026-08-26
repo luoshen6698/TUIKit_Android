@@ -676,21 +676,125 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showWorkspaceListRejection(item: JsonObject, path: String, emptyMessage: Int) {
-        val reason = EditText(this).apply {
-            setHint(R.string.xingdun_workspace_rejection_reason)
-            minLines = 3
-            maxLines = 6
+        val id = item.int("id") ?: return
+        val dialog = AlertDialog.Builder(this).create()
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 18f)
+            setPadding(18.dp(), 10.dp(), 18.dp(), 18.dp())
         }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_workspace_reject)
-            .setView(reason)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.xingdun_submit) { _, _ ->
-                val value = reason.text.toString().trim()
-                if (value.isBlank()) status.setText(R.string.xingdun_workspace_reject_comment_required)
-                else submitWorkspaceListDecision(item, "reject", value, path, emptyMessage)
+        val cancel = TextView(this).apply {
+            setText(R.string.xingdun_cancel)
+            textSize = 15f
+            gravity = Gravity.CENTER_VERTICAL
+            setTextColor(0xFF168F83.toInt())
+            setPadding(4.dp(), 0, 8.dp(), 0)
+        }
+        val confirm = TextView(this).apply {
+            setText(R.string.xingdun_workspace_confirm_reject)
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            setPadding(8.dp(), 0, 4.dp(), 0)
+        }
+        panel.addView(LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(cancel, LinearLayout.LayoutParams(0, 52.dp(), 1f))
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_workspace_reject_title)
+                textSize = 17f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(0xFF1C1C1E.toInt())
+            }, LinearLayout.LayoutParams(0, 52.dp(), 2f))
+            addView(confirm, LinearLayout.LayoutParams(0, 52.dp(), 1f))
+        })
+        panel.addView(TextView(this).apply {
+            setText(R.string.xingdun_workspace_rejection_reason)
+            textSize = 14f
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(12.dp(), 8.dp(), 8.dp(), 7.dp())
+        })
+        val reason = EditText(this).apply {
+            setHint(R.string.xingdun_workspace_reject_reason_hint)
+            textSize = 16f
+            setTextColor(0xFF1C1C1E.toInt())
+            setHintTextColor(0xFFAEAEB2.toInt())
+            gravity = Gravity.TOP or Gravity.START
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 5
+            maxLines = 8
+            background = roundedDrawable(0xFFF7F7F9.toInt(), 12f)
+            setPadding(12.dp(), 12.dp(), 12.dp(), 12.dp())
+        }
+        panel.addView(reason, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 140.dp()))
+        val counter = TextView(this).apply {
+            text = getString(R.string.xingdun_workspace_reject_count, 0)
+            textSize = 12f
+            gravity = Gravity.END
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(8.dp(), 6.dp(), 8.dp(), 2.dp())
+        }
+        panel.addView(counter)
+        val error = TextView(this).apply {
+            setText(R.string.xingdun_workspace_reject_failed)
+            textSize = 13f
+            setTextColor(0xFFD93025.toInt())
+            setPadding(8.dp(), 6.dp(), 8.dp(), 0)
+            visibility = View.GONE
+        }
+        panel.addView(error)
+        dialog.setView(panel)
+
+        var submitting = false
+        fun updateActions() {
+            val valid = reason.text.toString().trim().isNotEmpty() && reason.text.length <= 500
+            confirm.isEnabled = valid && !submitting
+            confirm.setTextColor(if (confirm.isEnabled) 0xFF168F83.toInt() else 0xFFAEAEB2.toInt())
+            confirm.text = getString(
+                if (submitting) R.string.xingdun_workspace_processing else R.string.xingdun_workspace_confirm_reject
+            )
+            cancel.isEnabled = !submitting
+            cancel.alpha = if (submitting) 0.48f else 1f
+        }
+        reason.doAfterTextChanged {
+            val count = it?.length ?: 0
+            counter.text = getString(R.string.xingdun_workspace_reject_count, count)
+            counter.setTextColor(if (count > 500) 0xFFD93025.toInt() else 0xFF8A8A8F.toInt())
+            error.visibility = View.GONE
+            updateActions()
+        }
+        cancel.setOnClickListener { if (!submitting) dialog.dismiss() }
+        confirm.setOnClickListener {
+            if (!confirm.isEnabled || submitting) return@setOnClickListener
+            val comment = reason.text.toString().trim()
+            submitting = true
+            updateActions()
+            lifecycleScope.launch {
+                runCatching {
+                    XingDunSessionManager.apiClient().postEmpty(
+                        requireSession(),
+                        "workspace/handle",
+                        mapOf("id" to id, "action" to "reject", "comment" to comment),
+                    )
+                }.onSuccess {
+                    dialog.dismiss()
+                    reloadWorkspaceApplications(path, emptyMessage)
+                }.onFailure {
+                    submitting = false
+                    error.visibility = View.VISIBLE
+                    updateActions()
+                }
             }
-            .show()
+        }
+        updateActions()
+        dialog.setOnShowListener {
+            dialog.window?.setLayout(
+                (resources.displayMetrics.widthPixels * 0.92f).toInt(),
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+        }
+        dialog.show()
     }
 
     private fun submitWorkspaceListDecision(item: JsonObject, action: String, comment: String, path: String, emptyMessage: Int) {
