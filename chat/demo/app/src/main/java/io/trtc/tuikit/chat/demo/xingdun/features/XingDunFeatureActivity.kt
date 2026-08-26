@@ -154,6 +154,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var favoriteTotal = 0
     private var favoriteLoading = false
     private var favoriteTouchStartY = 0f
+    private var accountSecurityTouchStartY = 0f
     private var favoriteListContainer: LinearLayout? = null
     private val favoriteAudioPlayer: AudioPlayer by lazy { AudioPlayer.create() }
     private var favoriteAudioURL: String? = null
@@ -267,6 +268,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             MODE_PERSONAL_QR -> showPersonalQRCode()
             MODE_QR_SCANNER -> showQRCodeScanner()
             MODE_ACCOUNT_SECURITY -> showAccountSecurity()
+            MODE_UPGRADE_ACCOUNT -> showUpgradeAccount()
             MODE_BIND_PHONE -> showContactBinding("phone")
             MODE_BIND_EMAIL -> showContactBinding("email")
             MODE_CHANGE_PASSWORD -> showChangePassword()
@@ -1888,6 +1890,18 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun showAccountSecurity() {
         applyNotificationSettingsChrome()
+        scrollView.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> accountSecurityTouchStartY = event.y
+                MotionEvent.ACTION_UP -> {
+                    if (scrollView.scrollY == 0 && event.y - accountSecurityTouchStartY > 120.dp()) {
+                        content.removeAllViews()
+                        showAccountSecurity()
+                    }
+                }
+            }
+            false
+        }
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
@@ -1897,7 +1911,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             }.onSuccess { profile ->
                 setBusy(false)
                 renderAccountSecurity(profile)
-            }.onFailure { error ->
+            }.onFailure {
                 setBusy(false)
                 content.addView(LinearLayout(this@XingDunFeatureActivity).apply {
                     orientation = LinearLayout.VERTICAL
@@ -1911,7 +1925,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                         setTextColor(Color.BLACK)
                     })
                     addView(TextView(context).apply {
-                        text = error.localizedMessage ?: getString(R.string.xingdun_action_failed)
+                        setText(R.string.xingdun_account_security_retry_hint)
                         textSize = 13f
                         gravity = Gravity.CENTER
                         setTextColor(0xFF8A8A8F.toInt())
@@ -1936,7 +1950,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 icon = "👤",
                 title = R.string.xingdun_username,
                 value = if (isDeviceAccount) getString(R.string.xingdun_not_bound) else username,
-                action = if (isDeviceAccount) ::showUpgradeAccountDialog else null,
+                action = if (isDeviceAccount) { { openAccountChild(MODE_UPGRADE_ACCOUNT) } } else null,
             )
         ), notificationSectionLayoutParams())
         if (isDeviceAccount) addNotificationFooter(R.string.xingdun_device_login_hint)
@@ -2220,38 +2234,88 @@ open class XingDunFeatureActivity : BaseActivity() {
         background = null
     }
 
-    private fun showUpgradeAccountDialog() {
-        val username = input(R.string.xingdun_username)
-        val password = passwordInput(R.string.xingdun_new_password)
-        val confirmation = passwordInput(R.string.xingdun_confirm_password)
-        val form = verticalForm(username, password, confirmation)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_upgrade_device_account)
-            .setView(form)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.xingdun_submit) { _, _ ->
-                val name = username.text.toString().trim()
-                val newPassword = password.text.toString()
-                val validation = XingDunAccountInputValidator.username(name)
-                    ?: XingDunAccountInputValidator.password(newPassword, listOf(name))
-                    ?: XingDunAccountInputError.PASSWORD_MISMATCH.takeIf {
-                        newPassword != confirmation.text.toString()
-                    }
-                if (validation != null) {
-                    status.setText(accountInputError(validation))
-                    return@setPositiveButton
-                }
-                submitAccountAction(
-                    "auth/bindAccount",
-                    mapOf(
-                        "username" to name,
-                        "password" to newPassword,
-                        "confirm_password" to confirmation.text.toString()
-                    ),
-                    refresh = true
-                )
+    private fun showUpgradeAccount() {
+        applyNotificationSettingsChrome()
+        val username = EditText(this).apply {
+            setHint(R.string.xingdun_username_placeholder)
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine(true)
+            textSize = 16f
+            setTextColor(Color.BLACK)
+            setHintTextColor(0xFFC7C7CC.toInt())
+            setPadding(14.dp(), 0, 14.dp(), 0)
+            background = null
+        }
+        val password = accountPasswordField(R.string.xingdun_new_password)
+        val confirmation = accountPasswordField(R.string.xingdun_confirm_password)
+        val errorView = TextView(this).apply {
+            visibility = View.GONE
+            textSize = 13f
+            setTextColor(0xFFD93025.toInt())
+            setPadding(14.dp(), 10.dp(), 14.dp(), 0)
+        }
+        val fields = listOf(username, password, confirmation)
+        fields.forEach { it.doAfterTextChanged { errorView.visibility = View.GONE } }
+        val confirm = Button(this).apply {
+            setText(R.string.xingdun_confirm_account_upgrade)
+            isAllCaps = false
+            textSize = 16f
+            setTextColor(0xFF20A88F.toInt())
+            background = roundedDrawable(Color.WHITE, 22f)
+            stateListAnimator = null
+        }
+        confirm.setOnClickListener {
+            val name = username.text.toString().trim()
+            val newPassword = password.text.toString()
+            val confirmationValue = confirmation.text.toString()
+            val validation = XingDunAccountInputValidator.username(name)
+                ?: XingDunAccountInputValidator.password(newPassword, listOf(name))
+                ?: XingDunAccountInputError.PASSWORD_MISMATCH.takeIf { newPassword != confirmationValue }
+            if (validation != null) {
+                errorView.setText(accountInputError(validation))
+                errorView.visibility = View.VISIBLE
+                return@setOnClickListener
             }
-            .show()
+            fields.forEach { it.isEnabled = false }
+            confirm.isEnabled = false
+            confirm.alpha = 0.55f
+            lifecycleScope.launch {
+                runCatching {
+                    XingDunSessionManager.apiClient().postEmpty(
+                        requireSession(),
+                        "auth/bindAccount",
+                        mapOf(
+                            "username" to name,
+                            "password" to newPassword,
+                            "confirm_password" to confirmationValue,
+                        ),
+                    )
+                }.onSuccess {
+                    setResult(RESULT_OK)
+                    finish()
+                }.onFailure {
+                    fields.forEach { field -> field.isEnabled = true }
+                    confirm.isEnabled = true
+                    confirm.alpha = 1f
+                    errorView.setText(R.string.xingdun_account_upgrade_failed)
+                    errorView.visibility = View.VISIBLE
+                }
+            }
+        }
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            addView(username, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()))
+            addView(notificationDivider())
+            addView(password, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()))
+            addView(notificationDivider())
+            addView(confirmation, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()))
+        }, notificationSectionLayoutParams())
+        addNotificationFooter(R.string.xingdun_device_account_upgrade_hint)
+        content.addView(errorView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        content.addView(confirm, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 44.dp()).apply {
+            topMargin = 12.dp()
+        })
     }
 
     private fun submitAccountAction(
@@ -4865,6 +4929,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_PERSONAL_QR -> R.string.xingdun_personal_qr
         MODE_QR_SCANNER -> R.string.xingdun_scan_qr
         MODE_ACCOUNT_SECURITY -> R.string.xingdun_account_security
+        MODE_UPGRADE_ACCOUNT -> R.string.xingdun_upgrade_device_account
         MODE_BIND_PHONE -> R.string.xingdun_bind_phone
         MODE_BIND_EMAIL -> R.string.xingdun_bind_email
         MODE_CHANGE_PASSWORD -> R.string.xingdun_change_password
@@ -4924,6 +4989,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_PERSONAL_QR = "personal_qr"
         const val MODE_QR_SCANNER = "qr_scanner"
         const val MODE_ACCOUNT_SECURITY = "account_security"
+        const val MODE_UPGRADE_ACCOUNT = "upgrade_account"
         const val MODE_BIND_PHONE = "bind_phone"
         const val MODE_BIND_EMAIL = "bind_email"
         const val MODE_CHANGE_PASSWORD = "change_password"

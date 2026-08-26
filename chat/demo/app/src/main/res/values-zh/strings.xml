@@ -546,11 +546,15 @@
     <string name="xingdun_invitation_usage_hint">新账号注册时填写该邀请码，即可记录企业邀请来源。</string>
     <string name="xingdun_copy_invitation_code">复制邀请码</string>
     <string name="xingdun_invitation_copied">邀请码已复制。</string>
-    <string name="xingdun_account_security">账号安全</string>
+    <string name="xingdun_account_security">账号与安全</string>
     <string name="xingdun_login_account">登录账号</string>
     <string name="xingdun_device_account">设备账号</string>
     <string name="xingdun_device_account_hint">绑定用户名和密码后，才能在其他设备登录或申请注销账号。</string>
     <string name="xingdun_upgrade_device_account">绑定用户名和密码</string>
+    <string name="xingdun_username_placeholder">3–20 位字母、数字或下划线</string>
+    <string name="xingdun_confirm_account_upgrade">确认绑定</string>
+    <string name="xingdun_device_account_upgrade_hint">绑定后可使用该用户名和密码在其他设备登录。</string>
+    <string name="xingdun_account_upgrade_failed">账号绑定失败，请稍后重试。</string>
     <string name="xingdun_username">用户名</string>
     <string name="xingdun_phone">手机号</string>
     <string name="xingdun_email">邮箱</string>
@@ -582,6 +586,7 @@
     <string name="xingdun_device_password_hint">请先绑定用户名和密码，再使用修改密码功能。</string>
     <string name="xingdun_device_deactivation_hint">当前为设备账号。请先绑定用户名和密码，再申请注销账号。</string>
     <string name="xingdun_account_security_load_failed">无法加载账号安全信息</string>
+    <string name="xingdun_account_security_retry_hint">请检查网络连接后重试。</string>
     <string name="xingdun_deactivation_consequences">注销会立即退出全部设备、撤销 IM 访问并进入服务端数据保留流程。提交前必须验证当前密码。</string>
     <string name="xingdun_deactivation_reason">注销原因（选填，最多 500 字）</string>
     <string name="xingdun_deactivation_acknowledgement">我已阅读并了解账号注销的影响。</string>
