@@ -753,6 +753,16 @@
     <string name="xingdun_workspace_confirm_delete">删除后将从申请列表移除，确定删除吗？</string>
     <string name="xingdun_workspace_confirm_delete_action">确认删除</string>
     <string name="xingdun_workspace_rejection_reason">驳回原因</string>
+    <string name="xingdun_workspace_detail_reason">事由</string>
+    <string name="xingdun_workspace_detail_start_time">开始时间</string>
+    <string name="xingdun_workspace_detail_end_time">结束时间</string>
+    <string name="xingdun_workspace_detail_amount">金额</string>
+    <string name="xingdun_workspace_detail_create_time">提交时间</string>
+    <string name="xingdun_workspace_detail_update_time">更新时间</string>
+    <string name="xingdun_workspace_close_detail">关闭申请详情</string>
+    <string name="xingdun_workspace_detail_load_failed">申请详情加载失败，请稍后重试。</string>
+    <string name="xingdun_workspace_withdraw_failed">撤回申请失败，请稍后重试。</string>
+    <string name="xingdun_workspace_delete_failed">删除申请失败，请稍后重试。</string>
     <string name="xingdun_workspace_no_available_types">当前暂无可提交的申请类型。</string>
     <string name="xingdun_workspace_approver">审批人：%1$s</string>
     <string name="xingdun_workspace_reason_invalid">申请事由最多 5000 个字符。</string>
