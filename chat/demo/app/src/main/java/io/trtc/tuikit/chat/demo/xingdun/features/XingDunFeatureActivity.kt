@@ -158,6 +158,12 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var storageTouchStartY = 0f
     private var customerServiceTouchStartY = 0f
     private var customerServiceLoading = false
+    private val workspaceApplicationRecords = mutableListOf<JsonObject>()
+    private var workspaceApplicationPage = 1
+    private var workspaceApplicationTotal = 0
+    private var workspaceApplicationLoading = false
+    private var workspaceApplicationTouchStartY = 0f
+    private var workspaceApplicationCategory: String? = null
     private var favoriteListContainer: LinearLayout? = null
     private val favoriteAudioPlayer: AudioPlayer by lazy { AudioPlayer.create() }
     private var favoriteAudioURL: String? = null
@@ -365,38 +371,419 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showWorkspaceApplications(path: String, emptyMessage: Int) {
+        applyWorkspaceListChrome()
+        workspaceApplicationRecords.clear()
+        workspaceApplicationPage = 1
+        workspaceApplicationTotal = 0
+        scrollView.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> workspaceApplicationTouchStartY = event.y
+                MotionEvent.ACTION_UP -> {
+                    if (!workspaceApplicationLoading && scrollView.scrollY == 0 &&
+                        event.y - workspaceApplicationTouchStartY > 120.dp()
+                    ) {
+                        reloadWorkspaceApplications(path, emptyMessage)
+                    }
+                }
+            }
+            false
+        }
+        renderWorkspaceApplicationList(path, emptyMessage)
+        loadWorkspaceApplications(path, emptyMessage, reset = true)
+    }
+
+    private fun reloadWorkspaceApplications(path: String, emptyMessage: Int) {
+        if (workspaceApplicationLoading) return
+        workspaceApplicationRecords.clear()
+        workspaceApplicationPage = 1
+        workspaceApplicationTotal = 0
+        renderWorkspaceApplicationList(path, emptyMessage)
+        loadWorkspaceApplications(path, emptyMessage, reset = true)
+    }
+
+    private fun loadWorkspaceApplications(path: String, emptyMessage: Int, reset: Boolean) {
+        if (workspaceApplicationLoading) return
+        workspaceApplicationLoading = true
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
                 val session = requireSession()
+                val query = linkedMapOf(
+                    "page" to workspaceApplicationPage.toString(),
+                    "page_size" to "20",
+                ).apply {
+                    if (path == "workspace/mine") workspaceApplicationCategory?.let { put("category", it) }
+                }
                 XingDunSessionManager.apiClient().get<JsonObject>(
                     session,
                     path,
-                    mapOf("page" to "1", "page_size" to "50"),
+                    query,
                     JsonObject::class.java
                 )
             }.onSuccess { page ->
+                workspaceApplicationLoading = false
                 setBusy(false)
                 val list = page.array("list")
-                if (list.isEmpty) addMessage(emptyMessage)
-                list.forEach { element ->
-                    val item = element.asJsonObject
-                    addCard(
-                        item.string("title").orEmpty().ifBlank { getString(R.string.xingdun_workspace_untitled) },
-                        listOfNotNull(
-                            item.string("type"),
-                            item.string("status_text") ?: item.string("status"),
-                            item.string("create_time")
-                        ).joinToString(" · ")
-                    ) {
-                        item.int("id")?.takeIf { it > 0 }?.let {
-                            start(this@XingDunFeatureActivity, MODE_WORKSPACE_DETAIL, it)
-                        }
-                    }
+                if (reset) workspaceApplicationRecords.clear()
+                list.filter(JsonElement::isJsonObject).map(JsonElement::getAsJsonObject).forEach { item ->
+                    val id = item.int("id") ?: return@forEach
+                    if (workspaceApplicationRecords.none { it.int("id") == id }) workspaceApplicationRecords += item
                 }
-            }.onFailure(::showFailure)
+                workspaceApplicationTotal = page.int("total") ?: workspaceApplicationRecords.size
+                if (workspaceApplicationRecords.size < workspaceApplicationTotal) workspaceApplicationPage += 1
+                renderWorkspaceApplicationList(path, emptyMessage)
+            }.onFailure {
+                workspaceApplicationLoading = false
+                setBusy(false)
+                renderWorkspaceApplicationList(path, emptyMessage, failed = true)
+            }
         }
     }
+
+    private fun renderWorkspaceApplicationList(path: String, emptyMessage: Int, failed: Boolean = false) {
+        content.removeAllViews()
+        if (path == "workspace/mine") addWorkspaceApplicationFilters(path, emptyMessage)
+        if (failed) {
+            content.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                background = roundedDrawable(Color.WHITE, 14f)
+                setPadding(20.dp(), 22.dp(), 20.dp(), 22.dp())
+                addView(TextView(context).apply {
+                    setText(R.string.xingdun_workspace_list_load_failed)
+                    textSize = 14f
+                    gravity = Gravity.CENTER
+                    setTextColor(0xFF8A8A8F.toInt())
+                })
+                addView(actionButton(R.string.xingdun_retry) {
+                    loadWorkspaceApplications(path, emptyMessage, reset = workspaceApplicationRecords.isEmpty())
+                })
+            }, workspaceListSectionLayoutParams())
+        }
+        if (workspaceApplicationRecords.isEmpty()) {
+            if (!workspaceApplicationLoading && !failed) addWorkspaceEmptyState(emptyMessage)
+        } else {
+            workspaceApplicationRecords.forEach { item -> addWorkspaceApplicationCard(item, path, emptyMessage) }
+        }
+        if (!workspaceApplicationLoading && workspaceApplicationRecords.size < workspaceApplicationTotal) {
+            content.addView(actionButton(R.string.xingdun_load_more) {
+                loadWorkspaceApplications(path, emptyMessage, reset = false)
+            })
+        }
+    }
+
+    private fun addWorkspaceApplicationFilters(path: String, emptyMessage: Int) {
+        val filters = listOf(
+            null to R.string.xingdun_workspace_filter_all,
+            "attendance" to R.string.xingdun_workspace_filter_attendance,
+            "finance" to R.string.xingdun_workspace_filter_finance,
+            "hr" to R.string.xingdun_workspace_filter_hr,
+        )
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = roundedDrawable(0xFFE7E7EA.toInt(), 12f)
+            setPadding(3.dp(), 3.dp(), 3.dp(), 3.dp())
+            filters.forEach { (category, label) ->
+                addView(TextView(context).apply {
+                    setText(label)
+                    textSize = 13f
+                    gravity = Gravity.CENTER
+                    setTextColor(0xFF1C1C1E.toInt())
+                    background = if (workspaceApplicationCategory == category) roundedDrawable(Color.WHITE, 10f) else null
+                    setPadding(4.dp(), 10.dp(), 4.dp(), 10.dp())
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        if (workspaceApplicationCategory != category) {
+                            workspaceApplicationCategory = category
+                            reloadWorkspaceApplications(path, emptyMessage)
+                        }
+                    }
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            }
+        }, workspaceListSectionLayoutParams())
+    }
+
+    private fun addWorkspaceEmptyState(message: Int) {
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(20.dp(), 38.dp(), 20.dp(), 38.dp())
+            addView(TextView(context).apply {
+                text = "□"
+                textSize = 28f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF8A8A8F.toInt())
+            })
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_workspace_no_records_short)
+                textSize = 17f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF1C1C1E.toInt())
+                setPadding(0, 10.dp(), 0, 5.dp())
+            })
+            addView(TextView(context).apply {
+                setText(message)
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF8A8A8F.toInt())
+            })
+        }, workspaceListSectionLayoutParams())
+    }
+
+    private fun addWorkspaceApplicationCard(item: JsonObject, path: String, emptyMessage: Int) {
+        val id = item.int("id") ?: return
+        val statusValue = item.int("status") ?: 0
+        val type = item.string("type").orEmpty()
+        val typeColor = workspaceTypeColor(type)
+        val statusLabel = workspaceStatusLabel(statusValue, item.string("status_text") ?: item.string("status").orEmpty())
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(14.dp(), 14.dp(), 14.dp(), 14.dp())
+        }
+        val header = LinearLayout(this).apply { gravity = Gravity.TOP }
+        header.addView(TextView(this).apply {
+            text = workspaceTypeIcon(type)
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(typeColor)
+            background = roundedDrawable(Color.argb(0x1F, Color.red(typeColor), Color.green(typeColor), Color.blue(typeColor)), 10f)
+        }, LinearLayout.LayoutParams(42.dp(), 42.dp()).apply { marginEnd = 12.dp() })
+        header.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(context).apply {
+                text = item.string("title") ?: getString(R.string.xingdun_workspace_untitled)
+                textSize = 16f
+                setTextColor(0xFF1C1C1E.toInt())
+                maxLines = 2
+            })
+            addView(TextView(context).apply {
+                text = workspaceTypeLabel(type, item.string("type_name"))
+                textSize = 13f
+                setTextColor(0xFF8A8A8F.toInt())
+                setPadding(0, 4.dp(), 0, 0)
+            })
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(TextView(this).apply {
+            text = statusLabel
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(workspaceStatusColor(statusValue))
+            background = roundedDrawable(workspaceStatusColor(statusValue, 0x22), 10f)
+            setPadding(9.dp(), 4.dp(), 9.dp(), 4.dp())
+        })
+        card.addView(header)
+        item.string("reason")?.let { reason ->
+            card.addView(TextView(this).apply {
+                text = reason
+                textSize = 13f
+                setTextColor(0xFF6D6D72.toInt())
+                maxLines = 2
+                setPadding(54.dp(), 8.dp(), 0, 0)
+            })
+        }
+        val businessDetail = when {
+            item.string("start_time") != null -> listOfNotNull(
+                workspaceDisplayDate(item.string("start_time")),
+                workspaceDisplayDate(item.string("end_time")),
+            ).filter(String::isNotBlank).joinToString(" — ")
+            item.string("amount") != null -> getString(R.string.xingdun_workspace_amount_display, item.string("amount"))
+            else -> null
+        }
+        card.addView(TextView(this).apply {
+            text = listOfNotNull(businessDetail, workspaceDisplayDate(item.string("create_time")).takeIf(String::isNotBlank)).joinToString("  ·  ")
+            textSize = 12f
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(54.dp(), 9.dp(), 0, 0)
+        })
+        card.isClickable = true
+        card.isFocusable = true
+        card.setOnClickListener { start(this@XingDunFeatureActivity, MODE_WORKSPACE_DETAIL, id) }
+        if (path == "workspace/mine") {
+            card.setOnLongClickListener {
+                showWorkspaceMineListActions(item, path, emptyMessage)
+                true
+            }
+        } else if (statusValue in 1..2) {
+            card.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(workspaceInlineAction(R.string.xingdun_workspace_reject, false) {
+                    showWorkspaceListRejection(item, path, emptyMessage)
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = 6.dp() })
+                addView(workspaceInlineAction(R.string.xingdun_workspace_approve, true) {
+                    AlertDialog.Builder(this@XingDunFeatureActivity)
+                        .setMessage(R.string.xingdun_workspace_confirm_approve)
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .setPositiveButton(R.string.xingdun_workspace_confirm_approve_action) { _, _ ->
+                            submitWorkspaceListDecision(item, "approve", "", path, emptyMessage)
+                        }
+                        .show()
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 6.dp() })
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = 12.dp()
+            })
+        }
+        content.addView(card, workspaceListSectionLayoutParams())
+    }
+
+    private fun workspaceInlineAction(label: Int, primary: Boolean, action: () -> Unit) = Button(this).apply {
+        setText(label)
+        textSize = 13f
+        isAllCaps = false
+        setTextColor(if (primary) Color.WHITE else 0xFF168F83.toInt())
+        backgroundTintList = ColorStateList.valueOf(if (primary) 0xFF20A88F.toInt() else 0xFFE3F5F0.toInt())
+        setOnClickListener { action() }
+    }
+
+    private fun showWorkspaceMineListActions(item: JsonObject, path: String, emptyMessage: Int) {
+        val statusValue = item.int("status") ?: return
+        val id = item.int("id") ?: return
+        val action = when (statusValue) {
+            1, 2 -> "withdraw"
+            3, 4, 5 -> "delete"
+            else -> return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(item.string("title") ?: getString(R.string.xingdun_workspace_untitled))
+            .setItems(arrayOf(getString(if (action == "withdraw") R.string.xingdun_workspace_withdraw else R.string.xingdun_workspace_delete))) { _, _ ->
+                AlertDialog.Builder(this)
+                    .setMessage(if (action == "withdraw") R.string.xingdun_workspace_confirm_withdraw else R.string.xingdun_workspace_confirm_delete)
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(if (action == "withdraw") R.string.xingdun_workspace_confirm_withdraw_action else R.string.xingdun_workspace_confirm_delete_action) { _, _ ->
+                        submitWorkspaceMineListAction(id, action, path, emptyMessage)
+                    }
+                    .show()
+            }
+            .show()
+    }
+
+    private fun showWorkspaceListRejection(item: JsonObject, path: String, emptyMessage: Int) {
+        val reason = EditText(this).apply {
+            setHint(R.string.xingdun_workspace_rejection_reason)
+            minLines = 3
+            maxLines = 6
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.xingdun_workspace_reject)
+            .setView(reason)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.xingdun_submit) { _, _ ->
+                val value = reason.text.toString().trim()
+                if (value.isBlank()) status.setText(R.string.xingdun_workspace_reject_comment_required)
+                else submitWorkspaceListDecision(item, "reject", value, path, emptyMessage)
+            }
+            .show()
+    }
+
+    private fun submitWorkspaceListDecision(item: JsonObject, action: String, comment: String, path: String, emptyMessage: Int) {
+        val id = item.int("id") ?: return
+        setBusy(true)
+        lifecycleScope.launch {
+            runCatching {
+                XingDunSessionManager.apiClient().postEmpty(
+                    requireSession(), "workspace/handle", mapOf("id" to id, "action" to action, "comment" to comment)
+                )
+            }.onSuccess {
+                setBusy(false)
+                reloadWorkspaceApplications(path, emptyMessage)
+            }.onFailure {
+                setBusy(false)
+                renderWorkspaceApplicationList(path, emptyMessage, failed = true)
+            }
+        }
+    }
+
+    private fun submitWorkspaceMineListAction(id: Int, action: String, path: String, emptyMessage: Int) {
+        setBusy(true)
+        lifecycleScope.launch {
+            runCatching {
+                if (action == "withdraw") XingDunSessionManager.apiClient().postEmpty(
+                    requireSession(), "workspace/withdraw", mapOf("id" to id)
+                ) else XingDunSessionManager.apiClient().deleteEmpty(
+                    requireSession(), "workspace/delete", mapOf("id" to id)
+                )
+            }.onSuccess {
+                setBusy(false)
+                reloadWorkspaceApplications(path, emptyMessage)
+            }.onFailure {
+                setBusy(false)
+                renderWorkspaceApplicationList(path, emptyMessage, failed = true)
+            }
+        }
+    }
+
+    private fun workspaceTypeLabel(type: String, fallback: String? = null): String {
+        val resource = when (type) {
+            "leave" -> R.string.xingdun_workspace_leave
+            "travel" -> R.string.xingdun_workspace_travel
+            "out" -> R.string.xingdun_workspace_out
+            "overtime" -> R.string.xingdun_workspace_overtime
+            "reimburse" -> R.string.xingdun_workspace_reimburse
+            "purchase" -> R.string.xingdun_workspace_purchase
+            "hr_need" -> R.string.xingdun_workspace_hr_need
+            "confirmation" -> R.string.xingdun_workspace_confirmation
+            "resign" -> R.string.xingdun_workspace_resign
+            else -> return fallback?.takeIf(String::isNotBlank) ?: type
+        }
+        return getString(resource)
+    }
+
+    private fun workspaceTypeIcon(type: String): String = when (type) {
+        "travel" -> "✈"
+        "out" -> "↗"
+        "overtime" -> "◴"
+        "reimburse" -> "¥"
+        "purchase" -> "▣"
+        "hr_need" -> "+"
+        "confirmation" -> "✓"
+        "resign" -> "↪"
+        else -> "◷"
+    }
+
+    private fun workspaceTypeColor(type: String): Int = when (type) {
+        "leave" -> 0xFFE05252.toInt()
+        "travel" -> 0xFF3478F6.toInt()
+        "out" -> 0xFF34A853.toInt()
+        "overtime" -> 0xFFE6A117.toInt()
+        "reimburse" -> 0xFF8E5CC7.toInt()
+        "purchase" -> 0xFF00A6B2.toInt()
+        "hr_need" -> 0xFFD84B8A.toInt()
+        "confirmation" -> 0xFF20A88F.toInt()
+        else -> 0xFF8A8A8F.toInt()
+    }
+
+    private fun workspaceStatusLabel(statusValue: Int, fallback: String): String {
+        val resource = when (statusValue) {
+            1, 3 -> R.string.xingdun_workspace_status_submitted
+            2 -> R.string.xingdun_workspace_status_in_review
+            4 -> R.string.xingdun_workspace_status_rejected
+            5 -> R.string.xingdun_workspace_status_withdrawn
+            else -> return fallback
+        }
+        return getString(resource)
+    }
+
+    private fun workspaceStatusColor(statusValue: Int, alpha: Int = 0xFF): Int {
+        val rgb = when (statusValue) {
+            1, 3 -> 0xFF3478F6.toInt()
+            2 -> 0xFFE6A117.toInt()
+            4 -> 0xFFD93025.toInt()
+            else -> 0xFF8A8A8F.toInt()
+        }
+        return Color.argb(alpha, Color.red(rgb), Color.green(rgb), Color.blue(rgb))
+    }
+
+    private fun applyWorkspaceListChrome() {
+        applyNotificationSettingsChrome()
+        status.setTextColor(0xFF8A8A8F.toInt())
+    }
+
+    private fun workspaceListSectionLayoutParams() = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+    ).apply { bottomMargin = 10.dp() }
 
     private fun showWorkspaceDetail() {
         if (itemId <= 0) {
@@ -4324,7 +4711,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                     maxLines = 1
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 addView(TextView(context).apply {
-                    text = favoriteDisplayDate(favorite.string("favorited_at") ?: snapshot.string("sent_at"))
+                    text = localizedDisplayDate(favorite.string("favorited_at") ?: snapshot.string("sent_at"))
                     textSize = 11f
                     setTextColor(0xFF9A9EA5.toInt())
                     maxLines = 1
@@ -4434,10 +4821,26 @@ open class XingDunFeatureActivity : BaseActivity() {
             )
         }
 
-    private fun favoriteDisplayDate(raw: String?): String {
+    private fun localizedDisplayDate(raw: String?): String {
         val value = raw?.trim().orEmpty()
         if (value.isEmpty()) return ""
-        val date = value.toLongOrNull()?.let { number ->
+        val date = parseDisplayDate(value)
+        return date?.let {
+            val locale = resources.configuration.locales[0] ?: Locale.getDefault()
+            DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale).format(it)
+        } ?: value
+    }
+
+    private fun workspaceDisplayDate(raw: String?): String {
+        val value = raw?.trim().orEmpty()
+        if (value.isEmpty()) return ""
+        val date = parseDisplayDate(value) ?: return value
+        val locale = resources.configuration.locales[0] ?: Locale.getDefault()
+        val pattern = if (locale.language == Locale.CHINESE.language) "M/d HH:mm" else "MMM d, HH:mm"
+        return SimpleDateFormat(pattern, locale).format(date)
+    }
+
+    private fun parseDisplayDate(value: String): Date? = value.toLongOrNull()?.let { number ->
             Date(if (number > 10_000_000_000L) number else number * 1_000L)
         } ?: listOf(
             "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
@@ -4446,11 +4849,6 @@ open class XingDunFeatureActivity : BaseActivity() {
         ).firstNotNullOfOrNull { pattern ->
             runCatching { SimpleDateFormat(pattern, Locale.US).parse(value) }.getOrNull()
         }
-        return date?.let {
-            val locale = resources.configuration.locales[0] ?: Locale.getDefault()
-            DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale).format(it)
-        } ?: value
-    }
 
     private fun favoriteAudioDuration(snapshot: JsonObject): Int? {
         val attachment = snapshot.get("attachment") ?: return null
