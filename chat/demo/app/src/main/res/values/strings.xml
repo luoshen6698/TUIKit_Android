@@ -354,6 +354,11 @@
     <string name="xingdun_customer_service">Customer service</string>
     <string name="xingdun_customer_service_agent">Customer-service account</string>
     <string name="xingdun_customer_service_user">Enterprise user</string>
+    <string name="xingdun_customer_service_identity">Customer-service identity</string>
+    <string name="xingdun_enterprise_customer_service">Enterprise customer service</string>
+    <string name="xingdun_customer_service_badge">Customer service</string>
+    <string name="xingdun_customer_service_dashboard_load_failed">Could not load customer-service data. Check your connection and try again.</string>
+    <string name="xingdun_customer_service_group_load_failed">Could not load the customer-service group. Check your connection and try again.</string>
     <string name="xingdun_open_customer_service">Open customer-service chat</string>
     <string name="xingdun_customer_service_unavailable">No customer-service account is available for this user.</string>
     <string name="xingdun_invite_title">Invite colleagues</string>
@@ -485,7 +490,7 @@
     <string name="xingdun_open_group_chat">Open group chat</string>
     <string name="xingdun_group_announcement">Group announcement</string>
     <string name="xingdun_save_announcement">Save announcement</string>
-    <string name="xingdun_announcement_too_long">The announcement must be 300 bytes or fewer.</string>
+    <string name="xingdun_announcement_too_long">The announcement must be 100 characters or fewer.</string>
     <string name="xingdun_enable_mute_all">Enable mute all</string>
     <string name="xingdun_disable_mute_all">Disable mute all</string>
     <string name="xingdun_group_members_count">%1$d members</string>

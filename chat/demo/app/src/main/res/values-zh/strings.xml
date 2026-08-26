@@ -348,6 +348,11 @@
     <string name="xingdun_customer_service">客户服务</string>
     <string name="xingdun_customer_service_agent">客服账号</string>
     <string name="xingdun_customer_service_user">企业用户</string>
+    <string name="xingdun_customer_service_identity">客服身份</string>
+    <string name="xingdun_enterprise_customer_service">企业客服</string>
+    <string name="xingdun_customer_service_badge">客服</string>
+    <string name="xingdun_customer_service_dashboard_load_failed">客服数据加载失败，请检查网络后重试。</string>
+    <string name="xingdun_customer_service_group_load_failed">客服群加载失败，请检查网络后重试。</string>
     <string name="xingdun_open_customer_service">打开客服会话</string>
     <string name="xingdun_customer_service_unavailable">当前用户暂未分配可用客服。</string>
     <string name="xingdun_invite_title">邀请同事</string>
@@ -479,7 +484,7 @@
     <string name="xingdun_open_group_chat">打开群聊</string>
     <string name="xingdun_group_announcement">群公告</string>
     <string name="xingdun_save_announcement">保存公告</string>
-    <string name="xingdun_announcement_too_long">群公告不能超过 300 个 UTF-8 字节。</string>
+    <string name="xingdun_announcement_too_long">群公告不能超过 100 个字符。</string>
     <string name="xingdun_enable_mute_all">开启全员禁言</string>
     <string name="xingdun_disable_mute_all">关闭全员禁言</string>
     <string name="xingdun_group_members_count">%1$d 名成员</string>

@@ -156,6 +156,8 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var favoriteTouchStartY = 0f
     private var accountSecurityTouchStartY = 0f
     private var storageTouchStartY = 0f
+    private var customerServiceTouchStartY = 0f
+    private var customerServiceLoading = false
     private var favoriteListContainer: LinearLayout? = null
     private val favoriteAudioPlayer: AudioPlayer by lazy { AudioPlayer.create() }
     private var favoriteAudioURL: String? = null
@@ -591,6 +593,23 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showCustomerService() {
+        applyCustomerServiceChrome()
+        scrollView.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> customerServiceTouchStartY = event.y
+                MotionEvent.ACTION_UP -> {
+                    if (!customerServiceLoading && scrollView.scrollY == 0 &&
+                        event.y - customerServiceTouchStartY > 120.dp()
+                    ) {
+                        content.removeAllViews()
+                        showCustomerService()
+                    }
+                }
+            }
+            false
+        }
+        if (customerServiceLoading) return
+        customerServiceLoading = true
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
@@ -606,43 +625,61 @@ open class XingDunFeatureActivity : BaseActivity() {
                 ) else JsonArray()
                 Triple(identity, users, groups)
             }.onSuccess { (identity, users, groups) ->
+                customerServiceLoading = false
                 setBusy(false)
-                addCard(
-                    getString(R.string.xingdun_customer_service),
-                    if (identity.boolean("is_cs")) getString(R.string.xingdun_customer_service_agent)
-                    else getString(R.string.xingdun_customer_service_user)
-                )
+                addCustomerServiceSectionHeader(R.string.xingdun_customer_service_identity)
                 if (identity.boolean("is_cs")) {
-                    addCard(getString(R.string.xingdun_bound_users, users.size()), "")
+                    val displayName = identity.getAsJsonObject("cs_info")?.string("realname")
+                        ?: getString(R.string.xingdun_enterprise_customer_service)
+                    addCustomerServiceIdentityRow(displayName, true)
+                    addCustomerServiceSectionHeader(getString(R.string.xingdun_bound_users, users.size()))
                     if (users.isEmpty) addMessage(R.string.xingdun_customer_service_no_users)
                     users.forEach { element ->
                         val user = element.asJsonObject.getAsJsonObject("user") ?: JsonObject()
                         val timUserID = user.string("tim_user_id").orEmpty()
-                        addCard(
+                        addCustomerServiceRow(
                             user.string("nickname") ?: timUserID,
-                            user.string("custom_id") ?: timUserID
-                        ) {
-                            if (timUserID.isNotBlank()) showCustomerServiceUserActions(timUserID)
-                        }
+                            user.string("custom_id") ?: timUserID,
+                            user.string("avatar"),
+                            false,
+                            onClick = {
+                                if (timUserID.isNotBlank()) ChatActivity.start(
+                                    this@XingDunFeatureActivity,
+                                    "c2c_$timUserID"
+                                )
+                            },
+                            onLongClick = {
+                                if (timUserID.isNotBlank()) loadCustomerServiceSessionInfo(timUserID)
+                            }
+                        )
                     }
-                    addCard(getString(R.string.xingdun_customer_service_groups, groups.size()), "")
+                    addCustomerServiceSectionHeader(getString(R.string.xingdun_customer_service_groups, groups.size()))
                     if (groups.isEmpty) addMessage(R.string.xingdun_customer_service_no_groups)
                     groups.forEach { element ->
                         val group = element.asJsonObject
                         val groupID = group.string("group_id").orEmpty()
-                        addCard(
+                        addCustomerServiceRow(
                             group.string("name") ?: groupID,
                             getString(
                                 R.string.xingdun_customer_service_group_summary,
                                 group.int("member_count") ?: 0,
                                 if (group.boolean("mute_all")) getString(R.string.xingdun_muted) else getString(R.string.xingdun_not_muted)
-                            )
-                        ) {
-                            if (groupID.isNotBlank()) start(this@XingDunFeatureActivity, MODE_CUSTOMER_SERVICE_GROUP, groupID)
-                        }
+                            ),
+                            group.string("avatar"),
+                            true,
+                            group.boolean("mute_all"),
+                            onClick = {
+                                if (groupID.isNotBlank()) start(
+                                    this@XingDunFeatureActivity,
+                                    MODE_CUSTOMER_SERVICE_GROUP,
+                                    groupID
+                                )
+                            }
+                        )
                     }
                     return@onSuccess
                 }
+                addCustomerServiceIdentityRow(getString(R.string.xingdun_customer_service_user), false)
                 val official = identity.string("official_cs_tim_user_id")
                 val assigned = identity.array("customer_services").firstOrNull()?.asJsonObject?.string("tim_user_id")
                 val target = official?.takeIf(String::isNotBlank) ?: assigned?.takeIf(String::isNotBlank)
@@ -653,19 +690,14 @@ open class XingDunFeatureActivity : BaseActivity() {
                 } else {
                     addMessage(R.string.xingdun_customer_service_unavailable)
                 }
-            }.onFailure(::showFailure)
-        }
-    }
-
-    private fun showCustomerServiceUserActions(timUserID: String) {
-        AlertDialog.Builder(this)
-            .setTitle(timUserID)
-            .setItems(
-                arrayOf(getString(R.string.xingdun_open_chat), getString(R.string.xingdun_customer_service_session_info))
-            ) { _, which ->
-                if (which == 0) ChatActivity.start(this, "c2c_$timUserID") else loadCustomerServiceSessionInfo(timUserID)
+            }.onFailure {
+                customerServiceLoading = false
+                renderCustomerServiceFailure(R.string.xingdun_customer_service_dashboard_load_failed) {
+                    content.removeAllViews()
+                    showCustomerService()
+                }
             }
-            .show()
+        }
     }
 
     private fun loadCustomerServiceSessionInfo(timUserID: String) {
@@ -698,8 +730,9 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showCustomerServiceGroup() {
+        applyCustomerServiceChrome()
         if (targetID.isBlank()) {
-            showFailure(IllegalArgumentException(getString(R.string.xingdun_invalid_group)))
+            renderCustomerServiceFailure(R.string.xingdun_invalid_group)
             return
         }
         setBusy(true)
@@ -731,7 +764,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 content.addView(announcement)
                 content.addView(actionButton(R.string.xingdun_save_announcement) {
                     val value = announcement.text.toString().trim()
-                    if (value.toByteArray().size > 300) status.setText(R.string.xingdun_announcement_too_long)
+                    if (value.codePointCount(0, value.length) > 100) status.setText(R.string.xingdun_announcement_too_long)
                     else submitCustomerServiceAction(
                         "cs/updateGroupAnnouncement",
                         mapOf("team_id" to targetID, "announcement" to value),
@@ -762,26 +795,26 @@ open class XingDunFeatureActivity : BaseActivity() {
                         if (userID.isNotBlank()) showCustomerServiceMemberActions(member)
                     }
                 }
-            }.onFailure(::showFailure)
+            }.onFailure {
+                renderCustomerServiceFailure(R.string.xingdun_customer_service_group_load_failed) {
+                    content.removeAllViews()
+                    showCustomerServiceGroup()
+                }
+            }
         }
     }
 
     private fun showCustomerServiceMemberActions(member: JsonObject) {
         val userID = member.string("user_id").orEmpty()
         val role = member.string("role").orEmpty()
-        if (userID.isBlank() || role == "owner") return
+        val currentUserID = XingDunSessionManager.currentSession()?.timUserId.orEmpty()
+        if (userID.isBlank() || role == "owner" || userID == currentUserID) return
         val isMuted = member.boolean("is_muted")
         val isAdministrator = role == "administrator"
-        val labels = arrayOf(
-            getString(if (isMuted) R.string.xingdun_unmute_member else R.string.xingdun_mute_member),
-            getString(if (isAdministrator) R.string.xingdun_remove_administrator else R.string.xingdun_set_administrator),
-            getString(R.string.xingdun_remove_member)
-        )
-        AlertDialog.Builder(this)
-            .setTitle(member.string("nickname") ?: userID)
-            .setItems(labels) { _, which ->
-                when (which) {
-                    0 -> submitCustomerServiceAction(
+        val actions = buildList<Pair<String, () -> Unit>> {
+            if (role == "member") add(
+                getString(if (isMuted) R.string.xingdun_unmute_member else R.string.xingdun_mute_member) to {
+                    submitCustomerServiceAction(
                         "cs/muteGroupMember",
                         mapOf(
                             "team_id" to targetID,
@@ -792,7 +825,11 @@ open class XingDunFeatureActivity : BaseActivity() {
                         R.string.xingdun_saved,
                         refresh = true
                     )
-                    1 -> submitCustomerServiceAction(
+                }
+            )
+            add(
+                getString(if (isAdministrator) R.string.xingdun_remove_administrator else R.string.xingdun_set_administrator) to {
+                    submitCustomerServiceAction(
                         "cs/setGroupAdministrator",
                         mapOf(
                             "team_id" to targetID,
@@ -802,21 +839,152 @@ open class XingDunFeatureActivity : BaseActivity() {
                         R.string.xingdun_saved,
                         refresh = true
                     )
-                    2 -> AlertDialog.Builder(this)
-                        .setMessage(R.string.xingdun_confirm_remove_member)
-                        .setNegativeButton(android.R.string.cancel, null)
-                        .setPositiveButton(R.string.xingdun_remove_member) { _, _ ->
-                            submitCustomerServiceAction(
-                                "cs/removeGroupMember",
-                                mapOf("team_id" to targetID, "member_tim_user_id" to userID),
-                                R.string.xingdun_saved,
-                                refresh = true
-                            )
-                        }
-                        .show()
                 }
-            }
+            )
+            add(getString(R.string.xingdun_remove_member) to {
+                AlertDialog.Builder(this@XingDunFeatureActivity)
+                    .setMessage(R.string.xingdun_confirm_remove_member)
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(R.string.xingdun_remove_member) { _, _ ->
+                        submitCustomerServiceAction(
+                            "cs/removeGroupMember",
+                            mapOf("team_id" to targetID, "member_tim_user_id" to userID),
+                            R.string.xingdun_saved,
+                            refresh = true
+                        )
+                    }
+                    .show()
+            })
+        }
+        AlertDialog.Builder(this)
+            .setTitle(member.string("nickname") ?: userID)
+            .setItems(actions.map(Pair<String, () -> Unit>::first).toTypedArray()) { _, which -> actions[which].second() }
             .show()
+    }
+
+    private fun applyCustomerServiceChrome() {
+        applyNotificationSettingsChrome()
+        status.setTextColor(0xFF8A8A8F.toInt())
+    }
+
+    private fun addCustomerServiceSectionHeader(title: Int) =
+        addCustomerServiceSectionHeader(getString(title))
+
+    private fun addCustomerServiceSectionHeader(title: String) {
+        content.addView(TextView(this).apply {
+            text = title
+            textSize = 14f
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(14.dp(), 12.dp(), 8.dp(), 8.dp())
+        })
+    }
+
+    private fun addCustomerServiceIdentityRow(displayName: String, isAgent: Boolean) {
+        content.addView(LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(16.dp(), 14.dp(), 16.dp(), 14.dp())
+            addView(TextView(context).apply {
+                text = displayName
+                textSize = 16f
+                setTextColor(0xFF1C1C1E.toInt())
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(context).apply {
+                setText(if (isAgent) R.string.xingdun_customer_service_badge else R.string.xingdun_customer_service_user)
+                textSize = 13f
+                setTextColor(if (isAgent) 0xFF168F83.toInt() else 0xFF8A8A8F.toInt())
+                background = roundedDrawable(if (isAgent) 0xFFE3F5F0.toInt() else 0xFFF0F0F2.toInt(), 10f)
+                setPadding(10.dp(), 4.dp(), 10.dp(), 4.dp())
+            })
+        }, customerServiceSectionLayoutParams())
+    }
+
+    private fun addCustomerServiceRow(
+        title: String,
+        detail: String,
+        avatarURL: String?,
+        group: Boolean,
+        muted: Boolean = false,
+        onClick: () -> Unit,
+        onLongClick: (() -> Unit)? = null,
+    ) {
+        val avatarFrame = FrameLayout(this)
+        val fallback = TextView(this).apply {
+            text = title.trim().take(1).uppercase(Locale.getDefault())
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF168F83.toInt())
+            background = roundedDrawable(0xFFE3F5F0.toInt(), if (group) 12f else 22f)
+        }
+        avatarFrame.addView(fallback, FrameLayout.LayoutParams(44.dp(), 44.dp()))
+        if (!avatarURL.isNullOrBlank()) {
+            val image = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                background = roundedDrawable(0xFFE3F5F0.toInt(), if (group) 12f else 22f)
+                clipToOutline = true
+            }
+            avatarFrame.addView(image, FrameLayout.LayoutParams(44.dp(), 44.dp()))
+            Glide.with(this).load(avatarURL).into(image)
+        }
+        content.addView(LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(14.dp(), 12.dp(), 10.dp(), 12.dp())
+            addView(avatarFrame, LinearLayout.LayoutParams(44.dp(), 44.dp()).apply { marginEnd = 12.dp() })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(context).apply {
+                    text = title
+                    textSize = 16f
+                    setTextColor(0xFF1C1C1E.toInt())
+                    maxLines = 1
+                })
+                addView(TextView(context).apply {
+                    text = detail
+                    textSize = 13f
+                    setTextColor(0xFF8A8A8F.toInt())
+                    setPadding(0, 4.dp(), 0, 0)
+                    maxLines = 1
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            if (muted) addView(TextView(context).apply {
+                text = "🔇"
+                textSize = 16f
+                contentDescription = getString(R.string.xingdun_muted)
+            })
+            addView(TextView(context).apply {
+                text = "›"
+                textSize = 28f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF8A8A8F.toInt())
+            }, LinearLayout.LayoutParams(28.dp(), 44.dp()))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+            if (onLongClick != null) setOnLongClickListener { onLongClick(); true }
+        }, customerServiceSectionLayoutParams())
+    }
+
+    private fun customerServiceSectionLayoutParams() = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+    ).apply { bottomMargin = 8.dp() }
+
+    private fun renderCustomerServiceFailure(message: Int, retry: (() -> Unit)? = null) {
+        setBusy(false)
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(20.dp(), 24.dp(), 20.dp(), 24.dp())
+            addView(TextView(context).apply {
+                setText(message)
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF8A8A8F.toInt())
+            })
+            if (retry != null) addView(actionButton(R.string.xingdun_retry, retry))
+        }, customerServiceSectionLayoutParams())
     }
 
     private fun submitCustomerServiceAction(path: String, body: Any, successMessage: Int, refresh: Boolean = false) {
