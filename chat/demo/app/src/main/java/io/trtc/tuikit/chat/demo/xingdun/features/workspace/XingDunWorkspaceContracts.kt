@@ -35,9 +35,9 @@ internal object XingDunWorkspaceContracts {
             requiresAmount = json.boolean("requires_amount"),
             available = json.optionalBoolean("available") ?: json.optionalBoolean("enabled") ?: true,
             unavailableReason = json.string("unavailable_reason"),
-            approverName = json.getAsJsonObject("approver")?.string("name")
-                ?: json.getAsJsonObject("approver")?.string("nickname")
-                ?: json.getAsJsonObject("approver")?.string("tim_user_id"),
+            approverName = json.objectValue("approver")?.string("name")
+                ?: json.objectValue("approver")?.string("nickname")
+                ?: json.objectValue("approver")?.string("tim_user_id"),
             sortOrder = json.int("sort_order") ?: Int.MAX_VALUE
         )
     }.sortedWith(compareBy(XingDunWorkspaceType::category, XingDunWorkspaceType::sortOrder, XingDunWorkspaceType::name))
@@ -52,6 +52,9 @@ internal object XingDunWorkspaceContracts {
 
     private fun JsonObject.int(name: String): Int? =
         get(name)?.takeUnless(JsonElement::isJsonNull)?.let { runCatching { it.asInt }.getOrNull() }
+
+    private fun JsonObject.objectValue(name: String): JsonObject? =
+        get(name)?.takeIf(JsonElement::isJsonObject)?.asJsonObject
 }
 
 internal enum class XingDunWorkspaceSubmissionError { TITLE, REASON, TIME, AMOUNT }

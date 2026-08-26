@@ -12,7 +12,7 @@ class XingDunWorkspaceContractsTest {
         val payload = JsonParser.parseString(
             """[
               {"type":"leave","category":"attendance","name":"Leave","requires_time":true,"available":true,"sort_order":2,"approver":{"name":"Alice"}},
-              {"type":"reimburse","category":"finance","name":"Reimburse","requires_amount":true,"enabled":false,"unavailable_reason":"No approver","sort_order":1},
+              {"type":"reimburse","category":"finance","name":"Reimburse","requires_amount":true,"enabled":false,"unavailable_reason":"No approver","sort_order":1,"approver":null},
               {"type":"unknown","category":"other","name":"Ignore"}
             ]"""
         ).asJsonArray
