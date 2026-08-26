@@ -155,6 +155,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var favoriteLoading = false
     private var favoriteTouchStartY = 0f
     private var accountSecurityTouchStartY = 0f
+    private var storageTouchStartY = 0f
     private var favoriteListContainer: LinearLayout? = null
     private val favoriteAudioPlayer: AudioPlayer by lazy { AudioPlayer.create() }
     private var favoriteAudioURL: String? = null
@@ -2920,6 +2921,18 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun showStorageManagement() {
         applyStorageManagementChrome()
+        scrollView.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> storageTouchStartY = event.y
+                MotionEvent.ACTION_UP -> {
+                    if (scrollView.scrollY == 0 && event.y - storageTouchStartY > 120.dp()) {
+                        content.removeAllViews()
+                        showStorageManagement()
+                    }
+                }
+            }
+            false
+        }
         setBusy(true)
         lifecycleScope.launch {
             runCatching { XingDunStorageManager.usage(this@XingDunFeatureActivity) }
@@ -2934,7 +2947,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
     }
 
-    private fun renderStorageLoadFailure(error: Throwable) {
+    private fun renderStorageLoadFailure(@Suppress("UNUSED_PARAMETER") error: Throwable) {
         content.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -2947,7 +2960,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 setTextColor(0xFFD93025.toInt())
             })
             addView(TextView(context).apply {
-                text = error.localizedMessage ?: getString(R.string.xingdun_action_failed)
+                setText(R.string.xingdun_storage_retry_hint)
                 textSize = 13f
                 gravity = Gravity.CENTER
                 setTextColor(0xFF8A8A8F.toInt())
