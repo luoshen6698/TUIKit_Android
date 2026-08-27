@@ -9,6 +9,7 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketStatusLoader
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunAutoDeleteRepository
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
 
@@ -66,6 +67,7 @@ internal object XingDunTenantSessionCoordinator {
 
             XingDunRouter.clearPendingRoute()
             XingDunRedpacketStatusLoader.clearTenantCache()
+            XingDunAutoDeleteRepository.clearTenantCache()
             XingDunForegroundNotificationManager.resetTenantState()
             MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, "")
             if (clearEnterprise) {

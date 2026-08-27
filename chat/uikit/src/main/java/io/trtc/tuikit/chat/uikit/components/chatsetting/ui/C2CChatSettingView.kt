@@ -44,6 +44,8 @@ class C2CChatSettingView @JvmOverloads constructor(
     private var onSendMessageClick: (() -> Unit)? = null
     private var onVoiceCallClick: (() -> Unit)? = null
     private var onVideoCallClick: (() -> Unit)? = null
+    private var onAutoDeleteClick: (() -> Unit)? = null
+    private var autoDeleteTitle: String? = null
     private var onContactDeleted: (() -> Unit)? = null
 
     private var viewModel: C2CChatSettingViewModel? = null
@@ -82,11 +84,15 @@ class C2CChatSettingView @JvmOverloads constructor(
         onSendMessageClick: (() -> Unit)? = null,
         onVoiceCallClick: (() -> Unit)? = null,
         onVideoCallClick: (() -> Unit)? = null,
+        autoDeleteTitle: String? = null,
+        onAutoDeleteClick: (() -> Unit)? = null,
         onContactDeleted: (() -> Unit)? = null
     ) {
         this.onSendMessageClick = onSendMessageClick
         this.onVoiceCallClick = onVoiceCallClick
         this.onVideoCallClick = onVideoCallClick
+        this.autoDeleteTitle = autoDeleteTitle
+        this.onAutoDeleteClick = onAutoDeleteClick
         this.onContactDeleted = onContactDeleted
 
         val owner = context.findViewModelStoreOwner() ?: return
@@ -223,6 +229,15 @@ class C2CChatSettingView @JvmOverloads constructor(
             }
         }
         contentLayout.addView(chatBackgroundRow)
+
+        if (onAutoDeleteClick != null && !autoDeleteTitle.isNullOrBlank()) {
+            addSpacer(contentLayout)
+            contentLayout.addView(SettingRowNavigate(context).apply {
+                setTitle(autoDeleteTitle.orEmpty())
+                setShowArrow(true)
+                setOnClickListener { onAutoDeleteClick?.invoke() }
+            })
+        }
 
         addSpacer(contentLayout)
 

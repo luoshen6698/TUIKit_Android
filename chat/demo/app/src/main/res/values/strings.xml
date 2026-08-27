@@ -1117,6 +1117,25 @@
     <string name="xingdun_group_nickname_save_failed">Unable to save your group name. Please try again.</string>
     <string name="xingdun_group_nickname_saved">Group name saved.</string>
     <string name="xingdun_group_nickname_preview_value">Project Lead</string>
+    <string name="xingdun_auto_delete_title">Message Auto-Delete</string>
+    <string name="xingdun_auto_delete_section">Auto-Delete Time</string>
+    <string name="xingdun_auto_delete_off">Off</string>
+    <string name="xingdun_auto_delete_minutes_2">2 minutes</string>
+    <string name="xingdun_auto_delete_hour_1">1 hour</string>
+    <string name="xingdun_auto_delete_day_1">1 day</string>
+    <string name="xingdun_auto_delete_days_7">7 days</string>
+    <string name="xingdun_auto_delete_days_30">30 days</string>
+    <string name="xingdun_auto_delete_days_90">90 days</string>
+    <string name="xingdun_auto_delete_year_1">1 year</string>
+    <string name="xingdun_auto_delete_seconds">%1$d seconds</string>
+    <string name="xingdun_auto_delete_selected">Selected</string>
+    <string name="xingdun_auto_delete_retry">Retry</string>
+    <string name="xingdun_auto_delete_load_failed">Unable to load the auto-delete setting. Please try again.</string>
+    <string name="xingdun_auto_delete_updating">Updating auto-delete setting</string>
+    <string name="xingdun_auto_delete_update_failed">Unable to update the setting. Confirm your group management permission and try again.</string>
+    <string name="xingdun_auto_delete_updated">Message auto-delete updated.</string>
+    <string name="xingdun_auto_delete_disabled">Message auto-delete turned off.</string>
+    <string name="xingdun_auto_delete_invalid_conversation">This conversation is unavailable.</string>
     <string-array name="xingdun_report_reason_values" translatable="false">
         <item>spam</item><item>harassment</item><item>fraud</item><item>violence</item><item>porn</item><item>other</item>
     </string-array>

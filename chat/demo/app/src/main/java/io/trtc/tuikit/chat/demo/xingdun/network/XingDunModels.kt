@@ -60,6 +60,19 @@ data class XingDunFeatures(
     val remoteLanguagePack: Boolean = false
 )
 
+/** Tenant-scoped shared message retention configuration. */
+data class XingDunAutoDeleteConfiguration(
+    val conversationId: String = "",
+    val syncConversationId: String? = null,
+    val conversationType: String? = null,
+    val ttlSeconds: Int = 0,
+    val enabled: Boolean = false,
+    val version: Int = 0,
+    val updatedAt: String? = null,
+    val updatedBy: String? = null,
+    val allowedTtlSeconds: List<Int> = emptyList()
+)
+
 data class XingDunPrivacy(
     val privacyUrl: String = "",
     val userAgreementUrl: String = ""

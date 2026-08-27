@@ -54,6 +54,9 @@ class GroupChatSettingView @JvmOverloads constructor(
     private var onGroupManagementClick: (() -> Unit)? = null
     private var onTransferOwnerClick: (() -> Unit)? = null
     private var onGroupNicknameClick: (() -> Unit)? = null
+    private var onAutoDeleteClick: (() -> Unit)? = null
+    private var autoDeleteTitle: String? = null
+    private var isAssignedCustomerService = false
     private var onGroupDeleted: (() -> Unit)? = null
 
     private var viewModel: GroupChatSettingViewModel? = null
@@ -84,6 +87,8 @@ class GroupChatSettingView @JvmOverloads constructor(
         onGroupManagementClick: (() -> Unit)? = null,
         onTransferOwnerClick: (() -> Unit)? = null,
         onGroupNicknameClick: (() -> Unit)? = null,
+        autoDeleteTitle: String? = null,
+        onAutoDeleteClick: (() -> Unit)? = null,
         onGroupDeleted: (() -> Unit)? = null
     ) {
         this.onSendMessageClick = onSendMessageClick
@@ -95,6 +100,8 @@ class GroupChatSettingView @JvmOverloads constructor(
         this.onGroupManagementClick = onGroupManagementClick
         this.onTransferOwnerClick = onTransferOwnerClick
         this.onGroupNicknameClick = onGroupNicknameClick
+        this.autoDeleteTitle = autoDeleteTitle
+        this.onAutoDeleteClick = onAutoDeleteClick
         this.onGroupDeleted = onGroupDeleted
 
         val owner = context.findViewModelStoreOwner() ?: return
@@ -156,6 +163,9 @@ class GroupChatSettingView @JvmOverloads constructor(
             onOpenGroupAnnouncement = onGroupAnnouncementClick,
             onOpenGroupQRCode = onGroupQRCodeClick,
             onOpenGroupNickname = onGroupNicknameClick,
+            autoDeleteTitle = autoDeleteTitle,
+            onOpenAutoDelete = onAutoDeleteClick,
+            isAssignedCustomerServiceProvider = { isAssignedCustomerService },
             onShowJoinMethod = ::showJoinMethodActionSheet,
             onShowInviteMethod = ::showInviteMethodActionSheet,
             onShowChatBackgroundPicker = ::showChatBackgroundPicker
@@ -196,6 +206,12 @@ class GroupChatSettingView @JvmOverloads constructor(
 
     fun refreshSelfNameCard() {
         viewModel?.refreshSelfNameCard()
+    }
+
+    fun setAssignedCustomerService(value: Boolean) {
+        if (isAssignedCustomerService == value) return
+        isAssignedCustomerService = value
+        refreshViewState()
     }
 
     private fun createSectionContainer(): LinearLayout {

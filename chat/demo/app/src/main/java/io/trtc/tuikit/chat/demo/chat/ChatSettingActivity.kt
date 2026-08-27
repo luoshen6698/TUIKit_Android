@@ -29,6 +29,9 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupManagementActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMembersActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupTransferOwnerActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupNicknameActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunAutoDeleteActivity
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.app.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -82,6 +85,7 @@ class ChatSettingActivity : BaseActivity() {
         val userID = intent.getStringExtra(EXTRA_USER_ID)
         val groupID = intent.getStringExtra(EXTRA_GROUP_ID)
         val needNavigateToChat = intent.getBooleanExtra(EXTRA_NEED_NAVIGATE_TO_CHAT, false)
+        val autoDeleteEnabled = XingDunSessionManager.currentSession()?.features?.autoDelete == true
 
         val rootContainer = findViewById<LinearLayout>(R.id.demo_chatSettingRootContainer)
         val headerContainer = findViewById<LinearLayout>(R.id.demo_chatHeaderContainer)
@@ -116,6 +120,12 @@ class ChatSettingActivity : BaseActivity() {
                         ChatActivity.start(this, "c2c_$userID")
                     }
                     finish()
+                },
+                autoDeleteTitle = getString(R.string.xingdun_auto_delete_title).takeIf { autoDeleteEnabled },
+                onAutoDeleteClick = if (autoDeleteEnabled) {
+                    { XingDunAutoDeleteActivity.start(this, "c2c_$userID", canUpdate = true) }
+                } else {
+                    null
                 },
                 onContactDeleted = {
                     EventBus.post(Event.ContactDeleted(userID))
@@ -159,6 +169,12 @@ class ChatSettingActivity : BaseActivity() {
                 onGroupNicknameClick = {
                     XingDunGroupNicknameActivity.start(this, groupID)
                 },
+                autoDeleteTitle = getString(R.string.xingdun_auto_delete_title).takeIf { autoDeleteEnabled },
+                onAutoDeleteClick = if (autoDeleteEnabled) {
+                    { XingDunAutoDeleteActivity.start(this, "group_$groupID", canUpdate = true) }
+                } else {
+                    null
+                },
                 onGroupDeleted = {
                     EventBus.post(Event.GroupDeleted(groupID))
                     finish()
@@ -174,6 +190,21 @@ class ChatSettingActivity : BaseActivity() {
         headerDivider.setBackgroundColor(currentColors.strokeColorPrimary)
 
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        if (autoDeleteEnabled && !groupID.isNullOrEmpty()) {
+            activityScope?.launch {
+                val session = XingDunSessionManager.currentSession() ?: return@launch
+                runCatching {
+                    XingDunSessionManager.apiClient().get<XingDunGroupDetail>(
+                        session,
+                        "team/detail",
+                        mapOf("team_id" to groupID),
+                        XingDunGroupDetail::class.java,
+                    )
+                }.onSuccess { detail ->
+                    groupSettingView?.setAssignedCustomerService(detail.currentUserIsAssignedCs)
+                }
+            }
+        }
         activityScope?.launch {
             themeStore.themeState.collectLatest { state ->
                 val colors = state.currentTheme.tokens.color

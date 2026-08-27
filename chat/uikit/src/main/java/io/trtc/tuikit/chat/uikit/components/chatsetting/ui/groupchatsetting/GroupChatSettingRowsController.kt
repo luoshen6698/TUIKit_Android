@@ -8,6 +8,7 @@ import io.trtc.tuikit.chat.uikit.components.chatsetting.ui.SettingRowToggle
 import io.trtc.tuikit.chat.uikit.components.chatsetting.ui.TextInputDialog
 import io.trtc.tuikit.chat.uikit.components.chatsetting.viewmodel.GroupChatSettingViewModel
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
+import io.trtc.tuikit.atomicxcore.api.group.GroupMemberRole
 
 internal class GroupChatSettingRowsController(
     private val context: Context,
@@ -18,6 +19,9 @@ internal class GroupChatSettingRowsController(
     private val onOpenGroupAnnouncement: (() -> Unit)?,
     private val onOpenGroupQRCode: (() -> Unit)?,
     private val onOpenGroupNickname: (() -> Unit)?,
+    private val autoDeleteTitle: String?,
+    private val onOpenAutoDelete: (() -> Unit)?,
+    private val isAssignedCustomerServiceProvider: () -> Boolean,
     private val onShowJoinMethod: (GroupChatSettingViewModel) -> Unit,
     private val onShowInviteMethod: (GroupChatSettingViewModel) -> Unit,
     private val onShowChatBackgroundPicker: (GroupChatSettingViewModel) -> Unit
@@ -38,6 +42,7 @@ internal class GroupChatSettingRowsController(
     private lateinit var inviteMethodRow: SettingRowNavigate
     private lateinit var myAliasRow: SettingRowNavigate
     private lateinit var groupManageRow: SettingRowNavigate
+    private lateinit var autoDeleteRow: SettingRowNavigate
     private lateinit var chatBackgroundRow: SettingRowNavigate
     private lateinit var doNotDisturbRow: SettingRowToggle
     private lateinit var pinRow: SettingRowToggle
@@ -55,6 +60,10 @@ internal class GroupChatSettingRowsController(
         }
         groupManageRow = SettingRowNavigate(context).apply {
             setTitle(context.getString(R.string.chat_setting_group_management))
+            setShowArrow(true)
+        }
+        autoDeleteRow = SettingRowNavigate(context).apply {
+            setTitle(autoDeleteTitle.orEmpty())
             setShowArrow(true)
         }
         groupTypeRow = SettingRowNavigate(context).apply {
@@ -155,6 +164,17 @@ internal class GroupChatSettingRowsController(
             groupManageRow.isClickable = false
             groupManageRow.setOnClickListener(null)
         }
+
+        val canManageAutoDelete = state.selfRole == GroupMemberRole.OWNER ||
+            state.selfRole == GroupMemberRole.ADMIN ||
+            isAssignedCustomerServiceProvider()
+        autoDeleteRow.visibility = if (canManageAutoDelete && onOpenAutoDelete != null && !autoDeleteTitle.isNullOrBlank()) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        autoDeleteRow.isClickable = autoDeleteRow.visibility == View.VISIBLE
+        autoDeleteRow.setOnClickListener { onOpenAutoDelete?.invoke() }
 
         groupTypeRow.setValue(
             context.getString(GroupChatSettingTextMapper.groupTypeTextRes(state.groupType))
@@ -258,7 +278,7 @@ internal class GroupChatSettingRowsController(
     private fun rebuildSettingsSection() {
         rebuildSection(
             settingsSection,
-            listOf(groupNoticeRow, groupQRCodeRow, groupManageRow, groupTypeRow, joinMethodRow, inviteMethodRow)
+            listOf(groupNoticeRow, groupQRCodeRow, groupManageRow, autoDeleteRow, groupTypeRow, joinMethodRow, inviteMethodRow)
         )
     }
 }
