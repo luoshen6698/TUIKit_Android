@@ -22,6 +22,8 @@ internal class GroupChatSettingRowsController(
     private val autoDeleteTitle: String?,
     private val onOpenAutoDelete: (() -> Unit)?,
     private val isAssignedCustomerServiceProvider: () -> Boolean,
+    private val pinnedMessagesTitle: String?,
+    private val onOpenPinnedMessages: (() -> Unit)?,
     private val onShowJoinMethod: (GroupChatSettingViewModel) -> Unit,
     private val onShowInviteMethod: (GroupChatSettingViewModel) -> Unit,
     private val onShowChatBackgroundPicker: (GroupChatSettingViewModel) -> Unit
@@ -43,6 +45,7 @@ internal class GroupChatSettingRowsController(
     private lateinit var myAliasRow: SettingRowNavigate
     private lateinit var groupManageRow: SettingRowNavigate
     private lateinit var autoDeleteRow: SettingRowNavigate
+    private lateinit var pinnedMessagesRow: SettingRowNavigate
     private lateinit var chatBackgroundRow: SettingRowNavigate
     private lateinit var doNotDisturbRow: SettingRowToggle
     private lateinit var pinRow: SettingRowToggle
@@ -65,6 +68,12 @@ internal class GroupChatSettingRowsController(
         autoDeleteRow = SettingRowNavigate(context).apply {
             setTitle(autoDeleteTitle.orEmpty())
             setShowArrow(true)
+        }
+        pinnedMessagesRow = SettingRowNavigate(context).apply {
+            setTitle(pinnedMessagesTitle.orEmpty())
+            setShowArrow(true)
+            visibility = if (onOpenPinnedMessages != null && !pinnedMessagesTitle.isNullOrBlank()) View.VISIBLE else View.GONE
+            setOnClickListener { onOpenPinnedMessages?.invoke() }
         }
         groupTypeRow = SettingRowNavigate(context).apply {
             setTitle(context.getString(R.string.chat_setting_group_type))
@@ -176,6 +185,14 @@ internal class GroupChatSettingRowsController(
         autoDeleteRow.isClickable = autoDeleteRow.visibility == View.VISIBLE
         autoDeleteRow.setOnClickListener { onOpenAutoDelete?.invoke() }
 
+        pinnedMessagesRow.visibility = if (onOpenPinnedMessages != null && !pinnedMessagesTitle.isNullOrBlank()) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        pinnedMessagesRow.isClickable = pinnedMessagesRow.visibility == View.VISIBLE
+        pinnedMessagesRow.setOnClickListener { onOpenPinnedMessages?.invoke() }
+
         groupTypeRow.setValue(
             context.getString(GroupChatSettingTextMapper.groupTypeTextRes(state.groupType))
         )
@@ -278,7 +295,7 @@ internal class GroupChatSettingRowsController(
     private fun rebuildSettingsSection() {
         rebuildSection(
             settingsSection,
-            listOf(groupNoticeRow, groupQRCodeRow, groupManageRow, autoDeleteRow, groupTypeRow, joinMethodRow, inviteMethodRow)
+            listOf(groupNoticeRow, groupQRCodeRow, groupManageRow, pinnedMessagesRow, autoDeleteRow, groupTypeRow, joinMethodRow, inviteMethodRow)
         )
     }
 }

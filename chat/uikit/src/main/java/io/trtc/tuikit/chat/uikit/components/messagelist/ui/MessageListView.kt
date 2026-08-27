@@ -108,6 +108,41 @@ class MessageListView @JvmOverloads constructor(
         return ::viewModel.isInitialized && viewModel.isMultiSelectMode.value
     }
 
+    fun locateMessageByID(
+        messageID: String,
+        maxOlderLoads: Int = 5,
+        completion: (Boolean) -> Unit = {},
+    ) {
+        if (messageID.isBlank()) {
+            completion(false)
+            return
+        }
+        if (!::viewModel.isInitialized) {
+            post { locateMessageByID(messageID, maxOlderLoads, completion) }
+            return
+        }
+        if (viewModel.messageList.value.any { it.msgID == messageID }) {
+            locateCoordinator.requestLocateMessage(messageID)
+            completion(true)
+            return
+        }
+        if (maxOlderLoads <= 0 || !viewModel.hasMoreOlderMessage.value) {
+            completion(false)
+            return
+        }
+        viewModel.loadOlderMessagesForLocate(
+            object : CompletionHandler {
+                override fun onSuccess() {
+                    locateMessageByID(messageID, maxOlderLoads - 1, completion)
+                }
+
+                override fun onFailure(code: Int, desc: String) {
+                    completion(false)
+                }
+            }
+        )
+    }
+
     private var config: MessageListConfigProtocol = ChatMessageListConfig()
     private val themeStore = ThemeStore.shared(context)
     private val chatBackgroundStore by lazy { MmkvChatBackgroundStore(context) }
@@ -1370,4 +1405,3 @@ class MessageListView @JvmOverloads constructor(
         }
     }
 }
-

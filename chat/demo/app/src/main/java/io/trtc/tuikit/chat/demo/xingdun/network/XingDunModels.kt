@@ -73,6 +73,34 @@ data class XingDunAutoDeleteConfiguration(
     val allowedTtlSeconds: List<Int> = emptyList()
 )
 
+/** Tenant-scoped group pin returned by `/message/pin`, `/message/unpin`, and `/message/pins`. */
+data class XingDunPinnedMessage(
+    val messageId: String = "",
+    val conversationId: String = "",
+    val isPinned: Boolean = false,
+    val version: Int = 0,
+    val operator: String? = null,
+    val operatorNickname: String? = null,
+    val updatedAt: String? = null,
+    val message: XingDunPinnedMessageSnapshot? = null,
+    val messageSequence: Long? = null,
+)
+
+data class XingDunPinnedMessageSnapshot(
+    val messageId: String? = null,
+    val sender: String? = null,
+    val senderNickname: String? = null,
+    val messageType: String? = null,
+    val text: String? = null,
+)
+
+data class XingDunPinnedMessagePage(
+    val items: List<XingDunPinnedMessage> = emptyList(),
+    val page: Int = 1,
+    val pageSize: Int = 100,
+    val total: Int = 0,
+)
+
 data class XingDunPrivacy(
     val privacyUrl: String = "",
     val userAgreementUrl: String = ""

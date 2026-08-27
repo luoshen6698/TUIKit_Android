@@ -43,6 +43,52 @@
             android:src="@drawable/demo_ic_security_close" />
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/demo_pinnedMessageBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="18dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="10dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/demo_pinnedMessageIcon"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            android:src="@drawable/xingdun_ic_pin" />
+
+        <TextView
+            android:id="@+id/demo_pinnedMessageSummary"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/demo_pinnedMessageCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/demo_pinnedMessageChevron"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="4dp"
+            android:contentDescription="@string/xingdun_pinned_banner_view"
+            android:src="@drawable/demo_ic_arrow_right" />
+    </LinearLayout>
+
     <FrameLayout
         android:id="@+id/demo_chatPageContainer"
         android:layout_width="match_parent"

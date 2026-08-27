@@ -16,6 +16,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.doOnPreDraw
@@ -39,10 +40,22 @@ import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessagePresentation
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessageParser
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagePolicy
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessageRepository
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagesActivity
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessage
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessagePage
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.messageinput.config.ChatMessageInputConfig
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.ChatMessageListConfig
+import io.trtc.tuikit.chat.uikit.components.messagelist.model.MessageActionIDs
+import io.trtc.tuikit.chat.uikit.components.messagelist.model.MessageCustomAction
+import io.trtc.tuikit.chat.uikit.components.messagelist.utils.MessageListMessageSummaryFormatter
+import io.trtc.tuikit.chat.uikit.components.messagelist.utils.senderDisplayName
 import io.trtc.tuikit.chat.uikit.pages.ChatPageView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -79,16 +92,34 @@ class ChatActivity : BaseActivity() {
     private lateinit var securityWarningIcon: ImageView
     private lateinit var securityWarningText: TextView
     private lateinit var securityWarningClose: ImageView
+    private lateinit var pinnedMessageBar: LinearLayout
+    private lateinit var pinnedMessageIcon: ImageView
+    private lateinit var pinnedMessageSummary: TextView
+    private lateinit var pinnedMessageCount: TextView
+    private lateinit var pinnedMessageChevron: ImageView
 
     private var isPeerTyping = false
     private var latestChatTitle: String = ""
+    private lateinit var conversationID: String
+    private var messagePinEnabled = false
+    private var canManagePinnedMessages = false
+    private var pinnedPage = XingDunPinnedMessagePage()
+
+    private val pinnedRepositoryListener: (String) -> Unit = { changedID ->
+        if (::conversationID.isInitialized && changedID == conversationID) {
+            runOnUiThread { loadPinnedMessages(force = true) }
+        }
+    }
 
     companion object {
         private const val EXTRA_CONVERSATION_ID = "conversationID"
         private const val EXTRA_LOCATE_MESSAGE = "locateMessage"
+        private const val EXTRA_LOCATE_MESSAGE_ID = "locateMessageID"
+        private const val EXTRA_LOCATE_PIN_VERSION = "locatePinnedMessageVersion"
         private const val C2C_CONVERSATION_ID_PREFIX = "c2c_"
         private const val GROUP_CONVERSATION_ID_PREFIX = "group_"
         private const val UNREAD_BADGE_DEBOUNCE_MS = 300L
+        private const val PIN_ACTION_ID = "xingdun.message.pin"
 
         fun start(context: Context, conversationID: String) {
             start(context, conversationID, null)
@@ -105,6 +136,15 @@ class ChatActivity : BaseActivity() {
                 }
             })
         }
+
+        fun startForMessageID(context: Context, conversationID: String, messageID: String, pinVersion: Int = 0) {
+            context.startActivity(Intent(context, ChatActivity::class.java).apply {
+                if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra(EXTRA_CONVERSATION_ID, conversationID)
+                putExtra(EXTRA_LOCATE_MESSAGE_ID, messageID)
+                putExtra(EXTRA_LOCATE_PIN_VERSION, pinVersion)
+            })
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -114,12 +154,14 @@ class ChatActivity : BaseActivity() {
         }
         setContentView(R.layout.demo_activity_chat)
 
-        val conversationID = intent?.getStringExtra(EXTRA_CONVERSATION_ID) ?: run {
+        conversationID = intent?.getStringExtra(EXTRA_CONVERSATION_ID) ?: run {
             finish()
             return
         }
         @Suppress("DEPRECATION")
         val locateMessage = intent?.getParcelableExtra<MessageInfo>(EXTRA_LOCATE_MESSAGE)
+        val locateMessageID = intent?.getStringExtra(EXTRA_LOCATE_MESSAGE_ID)
+        val locatePinVersion = intent?.getIntExtra(EXTRA_LOCATE_PIN_VERSION, 0) ?: 0
 
         rootContainer = findViewById(R.id.demo_chatRootContainer)
         headerContainer = findViewById(R.id.demo_chatHeaderContainer)
@@ -138,6 +180,14 @@ class ChatActivity : BaseActivity() {
         securityWarningIcon = findViewById(R.id.demo_securityWarningIcon)
         securityWarningText = findViewById(R.id.demo_securityWarningText)
         securityWarningClose = findViewById(R.id.demo_securityWarningClose)
+        pinnedMessageBar = findViewById(R.id.demo_pinnedMessageBar)
+        pinnedMessageIcon = findViewById(R.id.demo_pinnedMessageIcon)
+        pinnedMessageSummary = findViewById(R.id.demo_pinnedMessageSummary)
+        pinnedMessageCount = findViewById(R.id.demo_pinnedMessageCount)
+        pinnedMessageChevron = findViewById(R.id.demo_pinnedMessageChevron)
+        messagePinEnabled = XingDunSessionManager.currentSession()?.features?.messagePin == true
+        canManagePinnedMessages = conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)
+        pinnedMessageBar.setOnClickListener { XingDunPinnedMessagesActivity.start(this, conversationID) }
         securityWarningText.setOnClickListener { openSecurityReport(conversationID) }
         securityWarningIcon.setOnClickListener { openSecurityReport(conversationID) }
         securityWarningClose.setOnClickListener { chatSecurityBar.visibility = View.GONE }
@@ -166,6 +216,7 @@ class ChatActivity : BaseActivity() {
             isSupportListenFromHere = false,
         )
         XingDunCustomMessagePresentation.configure(messageListConfig)
+        configurePinnedMessageAction(messageListConfig)
         val isC2CConversation = conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)
         val messageInputConfig = ChatMessageInputConfig(
             isShowAudioCall = isC2CConversation,
@@ -194,12 +245,37 @@ class ChatActivity : BaseActivity() {
                 }
             }
         )
+        if (!locateMessageID.isNullOrBlank()) {
+            chatPageView.post {
+                chatPageView.locateMessageByID(locateMessageID) { located ->
+                    if (located && locatePinVersion > 0) {
+                        XingDunPinnedMessageRepository.markRead(
+                            this,
+                            XingDunPinnedMessage(
+                                messageId = locateMessageID,
+                                conversationId = conversationID,
+                                isPinned = true,
+                                version = locatePinVersion,
+                            ),
+                        )
+                    } else if (!located) {
+                        Toast.makeText(this, R.string.xingdun_pinned_locate_failed, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
         btnMultiSelectCancel.setOnClickListener {
             chatPageView.exitMultiSelectMode()
         }
         applyColors(themeStore.themeState.value.currentTheme.tokens.color)
 
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+        if (messagePinEnabled) {
+            XingDunPinnedMessageRepository.addListener(pinnedRepositoryListener)
+            loadPinnedMessages()
+            loadPinnedMessagePermission()
+        }
 
         activityScope?.launch {
             themeStore.themeState.collectLatest { state ->
@@ -271,6 +347,143 @@ class ChatActivity : BaseActivity() {
         activityScope?.launch {
             observeTotalUnreadCount(conversationListStore)
         }
+    }
+
+    private fun configurePinnedMessageAction(config: ChatMessageListConfig) {
+        if (!messagePinEnabled) return
+        config.customizeActions {
+            val message = editorContext.message
+            val messageID = message.msgID.takeIf(String::isNotBlank) ?: return@customizeActions
+            if (XingDunCustomMessageParser.parse(message)?.isControl == true) return@customizeActions
+            if (!canManagePinnedMessages) return@customizeActions
+            val isPinned = XingDunPinnedMessageRepository.isPinned(
+                this@ChatActivity,
+                conversationID,
+                messageID,
+            )
+            val action = MessageCustomAction(
+                ID = PIN_ACTION_ID,
+                title = getString(if (isPinned) R.string.xingdun_pinned_action_unpin else R.string.xingdun_pinned_action_pin),
+                iconResID = R.drawable.xingdun_ic_pin,
+                action = { handlePinnedMessageAction(it) },
+            )
+            if (!insertBefore(MessageActionIDs.DELETE, action)) add(action)
+        }
+    }
+
+    private fun handlePinnedMessageAction(message: MessageInfo) {
+        val messageID = message.msgID.takeIf(String::isNotBlank) ?: return
+        val currentlyPinned = XingDunPinnedMessageRepository.isPinned(this, conversationID, messageID)
+        val summary = MessageListMessageSummaryFormatter().format(this, message, conversationID)
+        if (conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)) {
+            val pinned = XingDunPinnedMessageRepository.toggleDirect(
+                this,
+                conversationID,
+                messageID,
+                message.sequence,
+                message.from.userID,
+                message.senderDisplayName,
+                message.messageType.name,
+                summary,
+            )
+            Toast.makeText(
+                this,
+                if (pinned) R.string.xingdun_pinned_pinned else R.string.xingdun_pinned_unpinned,
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        if (!canManagePinnedMessages) return
+        activityScope?.launch {
+            val result = runCatching {
+                if (currentlyPinned) {
+                    XingDunPinnedMessageRepository.unpinGroup(conversationID, messageID)
+                } else {
+                    XingDunPinnedMessageRepository.pinGroup(
+                        conversationID,
+                        messageID,
+                        conversationID.removePrefix(GROUP_CONVERSATION_ID_PREFIX),
+                        message.sequence,
+                    )
+                }
+            }
+            Toast.makeText(
+                this@ChatActivity,
+                result.fold(
+                    onSuccess = {
+                        if (currentlyPinned) R.string.xingdun_pinned_unpinned else R.string.xingdun_pinned_pinned
+                    },
+                    onFailure = { R.string.xingdun_pinned_update_failed },
+                ),
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+
+    private fun loadPinnedMessages(force: Boolean = false) {
+        if (!messagePinEnabled || activityScope == null) return
+        XingDunPinnedMessageRepository.cached(conversationID)?.let {
+            pinnedPage = it
+            renderPinnedMessageBar()
+        }
+        activityScope?.launch {
+            runCatching { XingDunPinnedMessageRepository.load(this@ChatActivity, conversationID, force) }
+                .onSuccess {
+                    pinnedPage = it
+                    renderPinnedMessageBar()
+                }
+                .onFailure {
+                    if (pinnedPage.items.isEmpty()) pinnedMessageBar.visibility = View.GONE
+                }
+        }
+    }
+
+    private fun loadPinnedMessagePermission() {
+        if (!conversationID.startsWith(GROUP_CONVERSATION_ID_PREFIX)) return
+        activityScope?.launch {
+            val result = runCatching {
+                val session = XingDunSessionManager.currentSession() ?: error("Missing session")
+                XingDunSessionManager.apiClient().get<XingDunGroupDetail>(
+                    session,
+                    "team/detail",
+                    mapOf("team_id" to conversationID.removePrefix(GROUP_CONVERSATION_ID_PREFIX)),
+                    XingDunGroupDetail::class.java,
+                )
+            }
+            result.onSuccess {
+                canManagePinnedMessages = XingDunPinnedMessagePolicy.canManage(
+                    it.currentUserRole,
+                    it.currentUserIsAssignedCs,
+                    it.pinMessageMode,
+                )
+            }
+        }
+    }
+
+    private fun renderPinnedMessageBar() {
+        val pins = XingDunPinnedMessageRepository.unreadPins(this, conversationID, pinnedPage.items)
+        val latest = pins.firstOrNull()
+        if (latest == null) {
+            pinnedMessageBar.visibility = View.GONE
+            return
+        }
+        pinnedMessageSummary.text = pinnedSummary(latest)
+        pinnedMessageCount.text = getString(R.string.xingdun_pinned_banner_count, pins.size)
+        pinnedMessageBar.visibility = View.VISIBLE
+    }
+
+    private fun pinnedSummary(pin: XingDunPinnedMessage): String {
+        pin.message?.text?.trim()?.takeIf(String::isNotEmpty)?.let { return it }
+        return getString(
+            when (XingDunPinnedMessagePolicy.summaryType(pin.message?.messageType)) {
+                XingDunPinnedMessagePolicy.SummaryType.IMAGE -> R.string.xingdun_pinned_summary_image
+                XingDunPinnedMessagePolicy.SummaryType.AUDIO -> R.string.xingdun_pinned_summary_audio
+                XingDunPinnedMessagePolicy.SummaryType.VIDEO -> R.string.xingdun_pinned_summary_video
+                XingDunPinnedMessagePolicy.SummaryType.FILE -> R.string.xingdun_pinned_summary_file
+                XingDunPinnedMessagePolicy.SummaryType.CUSTOM -> R.string.xingdun_pinned_summary_custom
+                XingDunPinnedMessagePolicy.SummaryType.MESSAGE -> R.string.xingdun_pinned_summary_message
+            },
+        )
     }
 
     @OptIn(FlowPreview::class)
@@ -393,11 +606,18 @@ class ChatActivity : BaseActivity() {
         securityWarningIcon.imageTintList = ColorStateList.valueOf(colors.textColorWarning)
         securityWarningText.setTextColor(colors.textColorWarning)
         securityWarningClose.imageTintList = ColorStateList.valueOf(colors.textColorWarning)
+        pinnedMessageBar.setBackgroundColor(colors.bgColorInput)
+        pinnedMessageIcon.imageTintList = ColorStateList.valueOf(colors.textColorLink)
+        pinnedMessageSummary.setTextColor(colors.textColorPrimary)
+        pinnedMessageCount.setTextColor(colors.textColorLink)
+        pinnedMessageChevron.imageTintList = ColorStateList.valueOf(colors.textColorSecondary)
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        if (messagePinEnabled) XingDunPinnedMessageRepository.removeListener(pinnedRepositoryListener)
         activityScope?.cancel()
         activityScope = null
+        super.onDestroy()
     }
+
 }

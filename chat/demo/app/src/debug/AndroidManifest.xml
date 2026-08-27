@@ -110,6 +110,16 @@
             android:screenOrientation="portrait"
             android:theme="@style/Chat_UIKit_Theme" />
         <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagesPreviewActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme" />
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagesEnglishPreviewActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme" />
+        <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnglishLaunchActivity"
             android:exported="true"
             android:theme="@style/Chat_UIKit_Theme"

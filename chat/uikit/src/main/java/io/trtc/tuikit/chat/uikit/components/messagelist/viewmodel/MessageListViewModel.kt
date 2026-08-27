@@ -398,6 +398,10 @@ class MessageListViewModel(
         pagingController.loadMoreMessages(direction, completion)
     }
 
+    internal fun loadOlderMessagesForLocate(completion: CompletionHandler? = null) {
+        loadMoreMessages(MessageLoadDirection.OLDER, completion)
+    }
+
     fun getMessageTimeString(index: Int): String? {
         return timeGroupingPolicy.timeStringForMessageAt(index, messageList.value)
     }
@@ -1348,5 +1352,4 @@ internal object AuxiliaryTextProcessingStatePolicy {
         )
     }
 }
-
 

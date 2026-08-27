@@ -1136,6 +1136,34 @@
     <string name="xingdun_auto_delete_updated">Message auto-delete updated.</string>
     <string name="xingdun_auto_delete_disabled">Message auto-delete turned off.</string>
     <string name="xingdun_auto_delete_invalid_conversation">This conversation is unavailable.</string>
+    <string name="xingdun_pinned_messages_title">Pinned Messages</string>
+    <string name="xingdun_pinned_messages_entry">Pinned Messages</string>
+    <string name="xingdun_pinned_empty_title">No pinned messages yet</string>
+    <string name="xingdun_pinned_empty_message">The owner, administrators, or assigned customer service can pin important group messages.</string>
+    <string name="xingdun_pinned_retry">Retry</string>
+    <string name="xingdun_pinned_load_failed">Unable to load pinned messages. Please try again.</string>
+    <string name="xingdun_pinned_unpin">Unpin</string>
+    <string name="xingdun_pinned_unpin_confirm_title">Unpin Message</string>
+    <string name="xingdun_pinned_unpin_confirm_message">Remove this message from the pinned list?</string>
+    <string name="xingdun_pinned_unpinned">Message unpinned.</string>
+    <string name="xingdun_pinned_unpin_failed">Unable to unpin the message. Please try again.</string>
+    <string name="xingdun_pinned_locate_failed">The original message could not be located.</string>
+    <string name="xingdun_pinned_locate_preview">Original message positioning is available in a signed-in chat.</string>
+    <string name="xingdun_pinned_invalid_conversation">This conversation is unavailable.</string>
+    <string name="xingdun_pinned_group_member">Group member</string>
+    <string name="xingdun_pinned_action_description">%1$s pinned a message from %2$s</string>
+    <string name="xingdun_pinned_summary_image">[Image]</string>
+    <string name="xingdun_pinned_summary_audio">[Voice]</string>
+    <string name="xingdun_pinned_summary_video">[Video]</string>
+    <string name="xingdun_pinned_summary_file">[File]</string>
+    <string name="xingdun_pinned_summary_custom">[Unsupported message]</string>
+    <string name="xingdun_pinned_summary_message">[Message]</string>
+    <string name="xingdun_pinned_banner_count">%1$d messages</string>
+    <string name="xingdun_pinned_banner_view">View</string>
+    <string name="xingdun_pinned_action_pin">Pin</string>
+    <string name="xingdun_pinned_action_unpin">Unpin</string>
+    <string name="xingdun_pinned_pinned">Message pinned.</string>
+    <string name="xingdun_pinned_update_failed">Unable to update the pinned message. Please try again.</string>
     <string-array name="xingdun_report_reason_values" translatable="false">
         <item>spam</item><item>harassment</item><item>fraud</item><item>violence</item><item>porn</item><item>other</item>
     </string-array>

@@ -30,6 +30,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMembersActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupTransferOwnerActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupNicknameActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunAutoDeleteActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagesActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.app.R
@@ -86,6 +87,7 @@ class ChatSettingActivity : BaseActivity() {
         val groupID = intent.getStringExtra(EXTRA_GROUP_ID)
         val needNavigateToChat = intent.getBooleanExtra(EXTRA_NEED_NAVIGATE_TO_CHAT, false)
         val autoDeleteEnabled = XingDunSessionManager.currentSession()?.features?.autoDelete == true
+        val messagePinEnabled = XingDunSessionManager.currentSession()?.features?.messagePin == true
 
         val rootContainer = findViewById<LinearLayout>(R.id.demo_chatSettingRootContainer)
         val headerContainer = findViewById<LinearLayout>(R.id.demo_chatHeaderContainer)
@@ -172,6 +174,12 @@ class ChatSettingActivity : BaseActivity() {
                 autoDeleteTitle = getString(R.string.xingdun_auto_delete_title).takeIf { autoDeleteEnabled },
                 onAutoDeleteClick = if (autoDeleteEnabled) {
                     { XingDunAutoDeleteActivity.start(this, "group_$groupID", canUpdate = true) }
+                } else {
+                    null
+                },
+                pinnedMessagesTitle = getString(R.string.xingdun_pinned_messages_entry).takeIf { messagePinEnabled },
+                onPinnedMessagesClick = if (messagePinEnabled) {
+                    { XingDunPinnedMessagesActivity.start(this, "group_$groupID") }
                 } else {
                     null
                 },

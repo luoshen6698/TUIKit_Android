@@ -56,6 +56,8 @@ class GroupChatSettingView @JvmOverloads constructor(
     private var onGroupNicknameClick: (() -> Unit)? = null
     private var onAutoDeleteClick: (() -> Unit)? = null
     private var autoDeleteTitle: String? = null
+    private var onPinnedMessagesClick: (() -> Unit)? = null
+    private var pinnedMessagesTitle: String? = null
     private var isAssignedCustomerService = false
     private var onGroupDeleted: (() -> Unit)? = null
 
@@ -89,6 +91,8 @@ class GroupChatSettingView @JvmOverloads constructor(
         onGroupNicknameClick: (() -> Unit)? = null,
         autoDeleteTitle: String? = null,
         onAutoDeleteClick: (() -> Unit)? = null,
+        pinnedMessagesTitle: String? = null,
+        onPinnedMessagesClick: (() -> Unit)? = null,
         onGroupDeleted: (() -> Unit)? = null
     ) {
         this.onSendMessageClick = onSendMessageClick
@@ -102,6 +106,8 @@ class GroupChatSettingView @JvmOverloads constructor(
         this.onGroupNicknameClick = onGroupNicknameClick
         this.autoDeleteTitle = autoDeleteTitle
         this.onAutoDeleteClick = onAutoDeleteClick
+        this.pinnedMessagesTitle = pinnedMessagesTitle
+        this.onPinnedMessagesClick = onPinnedMessagesClick
         this.onGroupDeleted = onGroupDeleted
 
         val owner = context.findViewModelStoreOwner() ?: return
@@ -166,6 +172,8 @@ class GroupChatSettingView @JvmOverloads constructor(
             autoDeleteTitle = autoDeleteTitle,
             onOpenAutoDelete = onAutoDeleteClick,
             isAssignedCustomerServiceProvider = { isAssignedCustomerService },
+            pinnedMessagesTitle = pinnedMessagesTitle,
+            onOpenPinnedMessages = onPinnedMessagesClick,
             onShowJoinMethod = ::showJoinMethodActionSheet,
             onShowInviteMethod = ::showInviteMethodActionSheet,
             onShowChatBackgroundPicker = ::showChatBackgroundPicker

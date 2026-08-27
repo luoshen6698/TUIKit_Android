@@ -58,8 +58,11 @@ internal object XingDunForegroundNotificationManager {
             val conversationID = conversationID(message) ?: return
             if (message.elemType == V2TIMMessage.V2TIM_ELEM_TYPE_CUSTOM) {
                 val data = message.customElem?.data?.toString(Charsets.UTF_8)
-                XingDunCustomMessageParser.parse(data)?.takeIf { it.type == "auto_delete_config" }?.let {
-                    XingDunAutoDeleteRepository.applyRemote(conversationID, it.values)
+                XingDunCustomMessageParser.parse(data)?.let {
+                    when (it.type) {
+                        "auto_delete_config" -> XingDunAutoDeleteRepository.applyRemote(conversationID, it.values)
+                        "pin_message" -> XingDunPinnedMessageRepository.applyRemote(conversationID, it.values)
+                    }
                 }
             }
             val supported = isSupportedMessage(message)

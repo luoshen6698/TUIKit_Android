@@ -143,4 +143,8 @@ class ChatPageView @JvmOverloads constructor(
     fun isInMultiSelectMode(): Boolean {
         return messageListView.isInMultiSelectMode()
     }
+
+    fun locateMessageByID(messageID: String, completion: (Boolean) -> Unit = {}) {
+        messageListView.locateMessageByID(messageID, completion = completion)
+    }
 }

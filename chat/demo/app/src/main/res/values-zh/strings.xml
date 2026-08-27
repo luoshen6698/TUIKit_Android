@@ -1130,6 +1130,34 @@
     <string name="xingdun_auto_delete_updated">消息自动删除设置已更新。</string>
     <string name="xingdun_auto_delete_disabled">消息自动删除已关闭。</string>
     <string name="xingdun_auto_delete_invalid_conversation">当前会话不可用。</string>
+    <string name="xingdun_pinned_messages_title">置顶消息</string>
+    <string name="xingdun_pinned_messages_entry">Pin 消息</string>
+    <string name="xingdun_pinned_empty_title">暂无置顶消息</string>
+    <string name="xingdun_pinned_empty_message">群主、管理员或客服可以在聊天中置顶重要消息。</string>
+    <string name="xingdun_pinned_retry">重试</string>
+    <string name="xingdun_pinned_load_failed">置顶消息加载失败，请稍后重试。</string>
+    <string name="xingdun_pinned_unpin">取消置顶</string>
+    <string name="xingdun_pinned_unpin_confirm_title">取消置顶</string>
+    <string name="xingdun_pinned_unpin_confirm_message">要将这条消息从置顶列表中移除吗？</string>
+    <string name="xingdun_pinned_unpinned">已取消置顶。</string>
+    <string name="xingdun_pinned_unpin_failed">取消置顶失败，请稍后重试。</string>
+    <string name="xingdun_pinned_locate_failed">无法定位原消息。</string>
+    <string name="xingdun_pinned_locate_preview">登录后的聊天中可定位原消息。</string>
+    <string name="xingdun_pinned_invalid_conversation">当前会话不可用。</string>
+    <string name="xingdun_pinned_group_member">群成员</string>
+    <string name="xingdun_pinned_action_description">%1$s置顶了%2$s的消息</string>
+    <string name="xingdun_pinned_summary_image">[图片]</string>
+    <string name="xingdun_pinned_summary_audio">[语音]</string>
+    <string name="xingdun_pinned_summary_video">[视频]</string>
+    <string name="xingdun_pinned_summary_file">[文件]</string>
+    <string name="xingdun_pinned_summary_custom">[暂不支持的消息]</string>
+    <string name="xingdun_pinned_summary_message">[消息]</string>
+    <string name="xingdun_pinned_banner_count">%1$d 条</string>
+    <string name="xingdun_pinned_banner_view">查看</string>
+    <string name="xingdun_pinned_action_pin">置顶</string>
+    <string name="xingdun_pinned_action_unpin">取消置顶</string>
+    <string name="xingdun_pinned_pinned">消息已置顶。</string>
+    <string name="xingdun_pinned_update_failed">置顶消息更新失败，请稍后重试。</string>
     <string-array name="xingdun_report_reason_labels">
         <item>垃圾广告</item><item>骚扰辱骂</item><item>欺诈诈骗</item><item>暴力违法</item><item>色情低俗</item><item>其他问题</item>
     </string-array>
