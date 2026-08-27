@@ -169,6 +169,10 @@ data class XingDunGroupDetail(
             currentUserRole == "administrator" ||
             updateTeamMode == MODE_ALL
 
+    /** Matches the iOS group-announcement screen: members can view, owners/admins can save. */
+    val canEditAnnouncement: Boolean
+        get() = currentUserRole == "owner" || currentUserRole == "administrator"
+
     private companion object {
         const val MODE_ALL = 1
     }

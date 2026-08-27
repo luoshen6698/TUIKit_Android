@@ -48,6 +48,7 @@ class GroupChatSettingView @JvmOverloads constructor(
     private var onSendMessageClick: (() -> Unit)? = null
     private var onGroupMemberClick: ((GroupMember) -> Unit)? = null
     private var onGroupInfoClick: (() -> Unit)? = null
+    private var onGroupAnnouncementClick: (() -> Unit)? = null
     private var onGroupQRCodeClick: (() -> Unit)? = null
     private var onGroupDeleted: (() -> Unit)? = null
 
@@ -73,12 +74,14 @@ class GroupChatSettingView @JvmOverloads constructor(
         onSendMessageClick: (() -> Unit)? = null,
         onGroupMemberClick: ((GroupMember) -> Unit)? = null,
         onGroupInfoClick: (() -> Unit)? = null,
+        onGroupAnnouncementClick: (() -> Unit)? = null,
         onGroupQRCodeClick: (() -> Unit)? = null,
         onGroupDeleted: (() -> Unit)? = null
     ) {
         this.onSendMessageClick = onSendMessageClick
         this.onGroupMemberClick = onGroupMemberClick
         this.onGroupInfoClick = onGroupInfoClick
+        this.onGroupAnnouncementClick = onGroupAnnouncementClick
         this.onGroupQRCodeClick = onGroupQRCodeClick
         this.onGroupDeleted = onGroupDeleted
 
@@ -136,6 +139,7 @@ class GroupChatSettingView @JvmOverloads constructor(
             createSectionContainer = ::createSectionContainer,
             rebuildSection = ::rebuildSection,
             onOpenGroupManagement = ::showGroupManagement,
+            onOpenGroupAnnouncement = onGroupAnnouncementClick,
             onOpenGroupQRCode = onGroupQRCodeClick,
             onShowJoinMethod = ::showJoinMethodActionSheet,
             onShowInviteMethod = ::showInviteMethodActionSheet,

@@ -15,6 +15,7 @@ internal class GroupChatSettingRowsController(
     private val createSectionContainer: () -> LinearLayout,
     private val rebuildSection: (LinearLayout, List<View>) -> Unit,
     private val onOpenGroupManagement: (GroupChatSettingViewModel) -> Unit,
+    private val onOpenGroupAnnouncement: (() -> Unit)?,
     private val onOpenGroupQRCode: (() -> Unit)?,
     private val onShowJoinMethod: (GroupChatSettingViewModel) -> Unit,
     private val onShowInviteMethod: (GroupChatSettingViewModel) -> Unit,
@@ -103,29 +104,36 @@ internal class GroupChatSettingRowsController(
         groupNoticeRow.setValue(
             state.notification.ifEmpty { context.getString(R.string.chat_setting_no_group_notice) }
         )
-        groupNoticeRow.setShowArrow(false)
-        groupNoticeRow.setCustomAccessory(
-            if (permissions.canEditGroupNotice) R.drawable.chat_setting_group_name_edit_icon else null
-        )
-        if (permissions.canEditGroupNotice) {
+        if (onOpenGroupAnnouncement != null) {
+            groupNoticeRow.setShowArrow(true)
+            groupNoticeRow.setCustomAccessory(null)
             groupNoticeRow.isClickable = true
-            groupNoticeRow.setOnClickListener {
-                TextInputDialog(
-                    context = context,
-                    title = context.getString(R.string.chat_setting_group_notice),
-                    initialText = state.notification,
-                    maxLength = 300,
-                    multiline = true,
-                    onConfirm = { value ->
-                        if (value != state.notification) {
-                            viewModel.setGroupNotice(value)
-                        }
-                    }
-                ).show()
-            }
+            groupNoticeRow.setOnClickListener { onOpenGroupAnnouncement.invoke() }
         } else {
-            groupNoticeRow.isClickable = false
-            groupNoticeRow.setOnClickListener(null)
+            groupNoticeRow.setShowArrow(false)
+            groupNoticeRow.setCustomAccessory(
+                if (permissions.canEditGroupNotice) R.drawable.chat_setting_group_name_edit_icon else null
+            )
+            if (permissions.canEditGroupNotice) {
+                groupNoticeRow.isClickable = true
+                groupNoticeRow.setOnClickListener {
+                    TextInputDialog(
+                        context = context,
+                        title = context.getString(R.string.chat_setting_group_notice),
+                        initialText = state.notification,
+                        maxLength = 300,
+                        multiline = true,
+                        onConfirm = { value ->
+                            if (value != state.notification) {
+                                viewModel.setGroupNotice(value)
+                            }
+                        }
+                    ).show()
+                }
+            } else {
+                groupNoticeRow.isClickable = false
+                groupNoticeRow.setOnClickListener(null)
+            }
         }
 
         groupQRCodeRow.visibility = if (onOpenGroupQRCode == null) View.GONE else View.VISIBLE

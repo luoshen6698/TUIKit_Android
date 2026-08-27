@@ -23,6 +23,7 @@ import io.trtc.tuikit.atomicxcore.api.contact.GetContactInfoCompletionHandler
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupInfoActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupAnnouncementActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupQRCodeActivity
 import io.trtc.tuikit.chat.app.R
 import kotlinx.coroutines.CoroutineScope
@@ -133,6 +134,9 @@ class ChatSettingActivity : BaseActivity() {
                 },
                 onGroupInfoClick = {
                     XingDunGroupInfoActivity.start(this, groupID)
+                },
+                onGroupAnnouncementClick = {
+                    XingDunGroupAnnouncementActivity.start(this, groupID)
                 },
                 onGroupQRCodeClick = {
                     XingDunGroupQRCodeActivity.start(this, groupID)

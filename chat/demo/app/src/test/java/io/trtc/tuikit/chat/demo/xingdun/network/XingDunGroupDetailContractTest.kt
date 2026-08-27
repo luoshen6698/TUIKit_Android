@@ -39,4 +39,13 @@ class XingDunGroupDetailContractTest {
         assertTrue(member.copy(currentUserRole = "owner").canEditGroupInfo)
         assertTrue(member.copy(currentUserIsAssignedCs = true).canEditGroupInfo)
     }
+
+    @Test
+    fun announcementEditPermissionMatchesIOSOwnerAndAdministratorRule() {
+        val member = XingDunGroupDetail(currentUserRole = "member", updateTeamMode = 1)
+        assertFalse(member.canEditAnnouncement)
+        assertFalse(member.copy(currentUserIsAssignedCs = true).canEditAnnouncement)
+        assertTrue(member.copy(currentUserRole = "administrator").canEditAnnouncement)
+        assertTrue(member.copy(currentUserRole = "owner").canEditAnnouncement)
+    }
 }

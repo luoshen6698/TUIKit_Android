@@ -517,6 +517,14 @@
     <string name="xingdun_open_chat">Open chat</string>
     <string name="xingdun_open_group_chat">Open group chat</string>
     <string name="xingdun_group_announcement">Group announcement</string>
+    <string name="xingdun_group_announcement_loading">Loading group details</string>
+    <string name="xingdun_group_announcement_load_failed">Could not load group details</string>
+    <string name="xingdun_group_announcement_empty">No group announcement</string>
+    <string name="xingdun_group_announcement_save">Save</string>
+    <string name="xingdun_group_announcement_count">%1$d/%2$d</string>
+    <string name="xingdun_group_announcement_too_long">The group announcement must be 300 UTF-8 bytes or fewer.</string>
+    <string name="xingdun_group_announcement_saved">Group announcement saved.</string>
+    <string name="xingdun_group_announcement_preview">Welcome to the project group. Discuss project progress here and follow the enterprise information-security policy.</string>
     <string name="xingdun_group_qr_title">Group QR Code</string>
     <string name="xingdun_group_qr_loading">Loading group QR code</string>
     <string name="xingdun_group_qr_load_failed">Could not load group QR code</string>

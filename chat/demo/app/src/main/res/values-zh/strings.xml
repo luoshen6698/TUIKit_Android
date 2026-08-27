@@ -511,6 +511,14 @@
     <string name="xingdun_open_chat">打开会话</string>
     <string name="xingdun_open_group_chat">打开群聊</string>
     <string name="xingdun_group_announcement">群公告</string>
+    <string name="xingdun_group_announcement_loading">正在加载群资料</string>
+    <string name="xingdun_group_announcement_load_failed">群资料加载失败</string>
+    <string name="xingdun_group_announcement_empty">暂无群公告</string>
+    <string name="xingdun_group_announcement_save">保存</string>
+    <string name="xingdun_group_announcement_count">%1$d/%2$d</string>
+    <string name="xingdun_group_announcement_too_long">群公告不能超过 300 个 UTF-8 字节。</string>
+    <string name="xingdun_group_announcement_saved">群公告已保存。</string>
+    <string name="xingdun_group_announcement_preview">欢迎加入项目协作群。请在群内沟通项目进展，并遵守企业信息安全规范。</string>
     <string name="xingdun_group_qr_title">群二维码</string>
     <string name="xingdun_group_qr_loading">正在加载群二维码</string>
     <string name="xingdun_group_qr_load_failed">群二维码加载失败</string>
