@@ -419,6 +419,7 @@
     <string name="xingdun_report_target_user">User</string>
     <string name="xingdun_report_target_team">Group chat</string>
     <string name="xingdun_report_target_message">Chat message</string>
+    <string name="xingdun_report_target_post">Post</string>
     <string name="xingdun_report_target_message_short">Message</string>
     <string name="xingdun_report_status_pending">Pending</string>
     <string name="xingdun_report_status_processing">Processing</string>

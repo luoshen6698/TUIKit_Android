@@ -413,6 +413,7 @@
     <string name="xingdun_report_target_user">用户</string>
     <string name="xingdun_report_target_team">群聊</string>
     <string name="xingdun_report_target_message">聊天消息</string>
+    <string name="xingdun_report_target_post">动态内容</string>
     <string name="xingdun_report_target_message_short">消息</string>
     <string name="xingdun_report_status_pending">待处理</string>
     <string name="xingdun_report_status_processing">处理中</string>

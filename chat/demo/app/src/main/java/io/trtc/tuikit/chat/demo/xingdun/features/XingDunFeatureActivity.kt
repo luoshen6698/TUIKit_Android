@@ -152,6 +152,10 @@ open class XingDunFeatureActivity : BaseActivity() {
     private val targetType: String by lazy { intent.getStringExtra(EXTRA_TARGET_TYPE).orEmpty() }
     private val targetDisplayName: String by lazy { intent.getStringExtra(EXTRA_TARGET_DISPLAY_NAME).orEmpty() }
     private val targetDisplayID: String by lazy { intent.getStringExtra(EXTRA_TARGET_DISPLAY_ID).orEmpty() }
+    private val initialReport: JsonObject? by lazy {
+        intent.getStringExtra(EXTRA_INITIAL_REPORT_JSON)
+            ?.let { value -> runCatching { JsonParser.parseString(value).asJsonObject }.getOrNull() }
+    }
     private var attachmentSelectionHandler: ((List<XingDunAttachment>) -> Unit)? = null
     private var pendingInvitePoster: Bitmap? = null
     private var pendingPersonalQRCode: XingDunPersonalQRCodeArtifact? = null
@@ -161,7 +165,9 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var reportPage = 1
     private var reportTotal = 0
     private var reportLoading = false
+    private var reportReloadPending = false
     private var reportTouchStartY = 0f
+    private var reportDetailRecord: JsonObject? = null
     private val favoriteRecords = mutableListOf<JsonObject>()
     private var favoritePage = 1
     private var favoriteTotal = 0
@@ -2783,40 +2789,60 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
 
     private fun loadReports(reset: Boolean) {
-        if (reportLoading) return
+        if (reportLoading) {
+            if (reset) reportReloadPending = true
+            return
+        }
         reportLoading = true
         val requestedPage = if (reset) 1 else reportPage + 1
+        val requestedTargetFilter = reportTargetFilter
+        val requestedStatusFilter = reportStatusFilter
+        if (reset) {
+            reportRecords.clear()
+            reportPage = 1
+            reportTotal = 0
+            reportListContainer?.removeAllViews()
+        }
         setBusy(true)
         lifecycleScope.launch {
-            runCatching {
+            val result = runCatching {
                 XingDunSessionManager.apiClient().get<JsonObject>(
                     requireSession(),
                     "report/list",
                     mapOf(
-                        "target_type" to reportTargetFilter,
-                        "status" to reportStatusFilter?.toString(),
+                        "target_type" to requestedTargetFilter,
+                        "status" to requestedStatusFilter?.toString(),
                         "page" to requestedPage.toString(),
                         "page_size" to REPORT_PAGE_SIZE.toString(),
                     ),
                     JsonObject::class.java,
                 )
-            }.onSuccess { page ->
-                reportLoading = false
-                setBusy(false)
-                if (reset) reportRecords.clear()
-                page.array("list").forEach { element ->
-                    val item = element.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@forEach
-                    val id = item.int("id") ?: return@forEach
-                    if (reportRecords.none { it.int("id") == id }) reportRecords += item
+            }
+            val filtersStillCurrent = requestedTargetFilter == reportTargetFilter &&
+                requestedStatusFilter == reportStatusFilter
+            reportLoading = false
+            setBusy(false)
+            result.onSuccess { page ->
+                if (filtersStillCurrent) {
+                    page.array("list").forEach { element ->
+                        val item = element.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@forEach
+                        val id = item.int("id") ?: return@forEach
+                        if (reportRecords.none { it.int("id") == id }) reportRecords += item
+                    }
+                    reportPage = requestedPage
+                    reportTotal = page.int("total") ?: reportRecords.size
+                    renderReportList()
                 }
-                reportPage = requestedPage
-                reportTotal = page.int("total") ?: reportRecords.size
-                renderReportList()
             }.onFailure { error ->
-                reportLoading = false
-                val message = getString(R.string.xingdun_reports_load_failed)
-                showFailure(IllegalStateException(message, error))
-                if (reportRecords.isEmpty()) renderReportList(message)
+                if (filtersStillCurrent) {
+                    val message = getString(R.string.xingdun_reports_load_failed)
+                    showFailure(IllegalStateException(message, error))
+                    renderReportList(message)
+                }
+            }
+            if (reportReloadPending || !filtersStillCurrent) {
+                reportReloadPending = false
+                loadReports(reset = true)
             }
         }
     }
@@ -2824,8 +2850,19 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun renderReportList(errorMessage: String? = null) {
         val container = reportListContainer ?: return
         container.removeAllViews()
+        errorMessage?.let { message ->
+            container.addView(TextView(this).apply {
+                text = message
+                textSize = 14f
+                setTextColor(0xFF8A6D1D.toInt())
+                setPadding(14.dp(), 12.dp(), 14.dp(), 12.dp())
+                background = roundedDrawable(0xFFFFF4D8.toInt(), 14f)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = 10.dp()
+            })
+        }
         if (reportRecords.isEmpty()) {
-            container.addView(reportEmptyState(errorMessage))
+            container.addView(reportEmptyState(null))
             return
         }
         reportRecords.forEach { record -> container.addView(reportHistoryRow(record)) }
@@ -2866,16 +2903,15 @@ open class XingDunFeatureActivity : BaseActivity() {
         isFocusable = true
         setOnClickListener {
             record.int("id")?.takeIf { it > 0 }?.let { reportID ->
-                if (debugReportFixtureEnabled) {
-                    startActivity(Intent(this@XingDunFeatureActivity, XingDunFeatureActivity::class.java).apply {
-                        putExtra(EXTRA_MODE, MODE_REPORT_DETAIL)
-                        putExtra(EXTRA_ITEM_ID, reportID)
+                startActivity(Intent(this@XingDunFeatureActivity, XingDunFeatureActivity::class.java).apply {
+                    putExtra(EXTRA_MODE, MODE_REPORT_DETAIL)
+                    putExtra(EXTRA_ITEM_ID, reportID)
+                    putExtra(EXTRA_INITIAL_REPORT_JSON, record.toString())
+                    if (debugReportFixtureEnabled) {
                         putExtra(EXTRA_DEBUG_BYPASS_LOGIN, true)
                         putExtra(EXTRA_DEBUG_REPORT_FIXTURE, true)
-                    })
-                } else {
-                    start(this@XingDunFeatureActivity, MODE_REPORT_DETAIL, reportID)
-                }
+                    }
+                })
             }
         }
         addView(ImageView(context).apply {
@@ -2916,10 +2952,33 @@ open class XingDunFeatureActivity : BaseActivity() {
             showFailure(IllegalArgumentException(getString(R.string.xingdun_report_invalid_target)))
             return
         }
-        if (BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false)) {
-            renderReportDetail(debugReportFixture())
+        scrollView.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> reportTouchStartY = event.y
+                MotionEvent.ACTION_UP -> {
+                    if (scrollView.scrollY == 0 && event.y - reportTouchStartY > 120.dp()) {
+                        loadReportDetail()
+                    }
+                }
+            }
+            false
+        }
+        initialReport?.let {
+            reportDetailRecord = it
+            renderReportDetail(it)
+        }
+        if (debugReportFixtureEnabled) {
+            val fixture = debugReportFixture()
+            reportDetailRecord = fixture
+            renderReportDetail(fixture)
             return
         }
+        loadReportDetail()
+    }
+
+    private fun loadReportDetail() {
+        if (reportLoading) return
+        reportLoading = true
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
@@ -2927,11 +2986,16 @@ open class XingDunFeatureActivity : BaseActivity() {
                     requireSession(), "report/read", mapOf("id" to itemId.toString()), JsonObject::class.java
                 )
             }.onSuccess {
+                reportLoading = false
                 setBusy(false)
+                reportDetailRecord = it
                 renderReportDetail(it)
             }.onFailure { error ->
+                reportLoading = false
                 showFailure(IllegalStateException(getString(R.string.xingdun_report_detail_load_failed), error))
-                content.addView(actionButton(R.string.xingdun_retry) { content.removeAllViews(); showReportDetail() })
+                if (reportDetailRecord == null) {
+                    content.addView(actionButton(R.string.xingdun_retry) { content.removeAllViews(); loadReportDetail() })
+                }
             }
         }
     }
@@ -3113,11 +3177,14 @@ open class XingDunFeatureActivity : BaseActivity() {
         "user" -> getString(R.string.xingdun_report_target_user)
         "team" -> getString(R.string.xingdun_report_target_team)
         "message" -> getString(R.string.xingdun_report_target_message)
+        "post" -> getString(R.string.xingdun_report_target_post)
         else -> getString(R.string.xingdun_report_target)
     }
 
     private fun reportTargetIcon(value: String?): Int = when (value) {
-        "user", "team", "message" -> R.drawable.xingdun_ic_mine_report
+        "user" -> R.drawable.xingdun_ic_user
+        "team" -> R.drawable.demo_ic_tab_contacts
+        "message", "post" -> R.drawable.demo_ic_tab_messages
         else -> R.drawable.xingdun_ic_mine_report
     }
 
@@ -6327,6 +6394,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val EXTRA_DEBUG_INVITE_POSTER_FIXTURE = "debug_invite_poster_fixture"
         private const val EXTRA_DEBUG_FAVORITES_FIXTURE = "debug_favorites_fixture"
         private const val EXTRA_DEBUG_LEGAL_URL = "debug_legal_url"
+        private const val EXTRA_INITIAL_REPORT_JSON = "initial_report_json"
         private const val EXTRA_ITEM_ID = "item_id"
         private const val EXTRA_TARGET_ID = "target_id"
         private const val EXTRA_TARGET_TYPE = "target_type"
