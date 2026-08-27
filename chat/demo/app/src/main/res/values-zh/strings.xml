@@ -938,6 +938,17 @@
     <string name="xingdun_favorites_load_more_failed">更多收藏加载失败，请稍后重试。</string>
     <string name="xingdun_favorite_unknown_conversation">会话</string>
     <string name="xingdun_favorite_more_actions">更多收藏操作</string>
+    <string name="xingdun_favorite_action_add">收藏</string>
+    <string name="xingdun_favorite_action_remove">取消收藏</string>
+    <string name="xingdun_favorite_added">消息已收藏</string>
+    <string name="xingdun_favorite_removed">已取消收藏</string>
+    <string name="xingdun_favorite_update_failed">收藏操作失败，请稍后重试。</string>
+    <string name="xingdun_favorite_preview_sender_primary">星盾用户</string>
+    <string name="xingdun_favorite_preview_sender_secondary">测试账号 B</string>
+    <string name="xingdun_favorite_preview_conversation_project">项目协作群</string>
+    <string name="xingdun_favorite_preview_conversation_team">研发中心</string>
+    <string name="xingdun_favorite_preview_text">明天下午三点进行 Android 与 iOS 页面验收。</string>
+    <string name="xingdun_favorite_preview_file">Android 对标验收清单.pdf</string>
     <string name="xingdun_favorite_media_open_failed">暂时无法打开此媒体。</string>
     <string name="xingdun_favorite_picture">[图片]</string>
     <string name="xingdun_favorite_audio">[语音]</string>

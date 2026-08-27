@@ -64,6 +64,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.GlideException
@@ -182,7 +183,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var favoriteListContainer: LinearLayout? = null
     private val favoriteAudioPlayer: AudioPlayer by lazy { AudioPlayer.create() }
     private var favoriteAudioURL: String? = null
-    private var favoriteAudioView: TextView? = null
+    private var favoriteAudioView: FavoriteAudioVisual? = null
     private var aboutUpdateProgress: ProgressBar? = null
     private var aboutUpdateRow: View? = null
     private val reportRecords = mutableListOf<JsonObject>()
@@ -194,6 +195,14 @@ open class XingDunFeatureActivity : BaseActivity() {
         get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_PERSONAL_QR_FIXTURE, false)
     private val debugInvitePosterFixtureEnabled: Boolean
         get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_INVITE_POSTER_FIXTURE, false)
+    private val debugFavoritesFixtureEnabled: Boolean
+        get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_FAVORITES_FIXTURE, false)
+
+    private data class FavoriteAudioVisual(
+        val icon: TextView,
+        val duration: TextView,
+        val seconds: Int,
+    )
 
     private val attachmentPicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isEmpty()) return@registerForActivityResult
@@ -5257,7 +5266,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showFavorites() {
-        if (XingDunSessionManager.currentSession()?.features?.messageFavorite != true) {
+        if (!debugFavoritesFixtureEnabled && XingDunSessionManager.currentSession()?.features?.messageFavorite != true) {
             addMessage(R.string.xingdun_feature_unavailable)
             return
         }
@@ -5287,6 +5296,10 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun loadFavorites(reset: Boolean) {
         if (favoriteLoading) return
+        if (debugFavoritesFixtureEnabled) {
+            loadFavoriteDebugFixture(reset)
+            return
+        }
         favoriteLoading = true
         val requestedPage = if (reset) 1 else favoritePage + 1
         setBusy(true)
@@ -5318,6 +5331,63 @@ open class XingDunFeatureActivity : BaseActivity() {
                 else status.setText(R.string.xingdun_favorites_load_more_failed)
             }
         }
+    }
+
+    private fun loadFavoriteDebugFixture(reset: Boolean) {
+        if (!reset && favoriteRecords.isNotEmpty()) return
+        favoriteRecords.clear()
+        val fixture = JsonParser.parseString(
+            """
+            [
+              {
+                "favorite_id": 9101,
+                "conversation_id": "c2c_xd_demo",
+                "favorited_at": "2026-08-28 14:20:00",
+                "message": {
+                  "message_id": "fav-text-1",
+                  "sender": "x001",
+                  "sender_nickname": "${getString(R.string.xingdun_favorite_preview_sender_primary)}",
+                  "conversation_name": "${getString(R.string.xingdun_favorite_preview_conversation_project)}",
+                  "message_type": "TEXT",
+                  "text": "${getString(R.string.xingdun_favorite_preview_text)}"
+                }
+              },
+              {
+                "favorite_id": 9102,
+                "conversation_id": "group_xd_demo",
+                "favorited_at": "2026-08-27 09:32:00",
+                "message": {
+                  "message_id": "fav-audio-1",
+                  "sender": "d001",
+                  "sender_nickname": "${getString(R.string.xingdun_favorite_preview_sender_secondary)}",
+                  "conversation_name": "${getString(R.string.xingdun_favorite_preview_conversation_team)}",
+                  "message_type": "AUDIO",
+                  "text": "",
+                  "attachment": [{"MsgType":"TIMSoundElem","MsgContent":{"Second":8}}]
+                }
+              },
+              {
+                "favorite_id": 9103,
+                "conversation_id": "group_xd_demo",
+                "favorited_at": "2026-08-26 18:05:00",
+                "message": {
+                  "message_id": "fav-file-1",
+                  "sender": "x001",
+                  "sender_nickname": "${getString(R.string.xingdun_favorite_preview_sender_primary)}",
+                  "conversation_name": "${getString(R.string.xingdun_favorite_preview_conversation_team)}",
+                  "message_type": "FILE",
+                  "text": "${getString(R.string.xingdun_favorite_preview_file)}"
+                }
+              }
+            ]
+            """.trimIndent(),
+        ).asJsonArray
+        fixture.forEach { favoriteRecords += it.asJsonObject }
+        favoritePage = 1
+        favoriteTotal = favoriteRecords.size
+        favoriteLoading = false
+        setBusy(false)
+        renderFavorites()
     }
 
     private fun renderFavorites(errorMessage: String? = null) {
@@ -5425,12 +5495,20 @@ open class XingDunFeatureActivity : BaseActivity() {
                 })
             }
             body.addView(header)
-            body.addView(TextView(context).apply {
-                text = "${favoriteTypeLabel(messageType)}  ·  $conversationName"
-                textSize = 12f
-                setTextColor(0xFF66716F.toInt())
-                maxLines = 1
+            body.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, 5.dp(), 0, 0)
+                addView(ImageView(context).apply {
+                    setImageResource(favoriteTypeIcon(messageType))
+                    imageTintList = ColorStateList.valueOf(0xFF23B39C.toInt())
+                }, LinearLayout.LayoutParams(14.dp(), 14.dp()).apply { marginEnd = 6.dp() })
+                addView(TextView(context).apply {
+                    text = conversationName
+                    textSize = 12f
+                    setTextColor(0xFF66716F.toInt())
+                    maxLines = 1
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             })
 
             if ((messageType == "PICTURE" || messageType == "VIDEO") && previewURL != null) {
@@ -5456,26 +5534,53 @@ open class XingDunFeatureActivity : BaseActivity() {
                     setOnClickListener { openFavoriteMedia(messageType, playbackURL ?: previewURL) }
                 }
                 body.addView(thumbnail, LinearLayout.LayoutParams(72.dp(), 72.dp()).apply { topMargin = 8.dp() })
+            } else if (messageType == "AUDIO") {
+                val duration = audioDuration ?: 1
+                val icon = TextView(context).apply {
+                    text = "▶"
+                    textSize = 16f
+                    gravity = Gravity.CENTER
+                    setTextColor(0xFF159A86.toInt())
+                }
+                val durationView = TextView(context).apply {
+                    text = "$duration″"
+                    textSize = 14f
+                    setTextColor(0xFF159A86.toInt())
+                }
+                val audioBar = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    background = roundedDrawable(0x1F23B39C, 10f)
+                    setPadding(10.dp(), 0, 10.dp(), 0)
+                    addView(icon, LinearLayout.LayoutParams(20.dp(), 40.dp()).apply { marginEnd = 6.dp() })
+                    addView(LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        repeat(minOf(18, duration + 5)) { index ->
+                            addView(View(context).apply {
+                                background = roundedDrawable(0xFF159A86.toInt(), 1f)
+                            }, LinearLayout.LayoutParams(2.dp(), if (index % 3 == 0) 13.dp() else 7.dp()).apply {
+                                marginEnd = 2.dp()
+                            })
+                        }
+                    }, LinearLayout.LayoutParams(0, 40.dp(), 1f))
+                    addView(durationView)
+                    isClickable = playbackURL != null
+                    isFocusable = playbackURL != null
+                    contentDescription = getString(R.string.xingdun_favorite_audio_play_hint)
+                }
+                val visual = FavoriteAudioVisual(icon, durationView, duration)
+                playbackURL?.let { url -> audioBar.setOnClickListener { toggleFavoriteAudio(url, visual) } }
+                body.addView(audioBar, LinearLayout.LayoutParams(minOf(220.dp(), (92 + maxOf(0, duration - 2) * 7).dp()), 40.dp()).apply {
+                    topMargin = 8.dp()
+                })
             } else {
                 body.addView(TextView(context).apply {
-                    text = if (messageType == "AUDIO") {
-                        if (audioDuration != null) getString(R.string.xingdun_favorite_audio_duration, audioDuration)
-                        else favoriteSummary(snapshot, messageType)
-                    } else {
-                        favoriteSummary(snapshot, messageType)
-                    }
+                    text = favoriteSummary(snapshot, messageType)
                     textSize = 14f
                     setTextColor(Color.BLACK)
                     maxLines = 3
                     setPadding(0, 8.dp(), 0, 0)
-                    if ((messageType == "AUDIO") && playbackURL != null) {
-                        background = roundedDrawable(0x1F23B39C, 10f)
-                        setPadding(12.dp(), 10.dp(), 12.dp(), 10.dp())
-                        isClickable = true
-                        isFocusable = true
-                        contentDescription = getString(R.string.xingdun_favorite_audio_play_hint)
-                        setOnClickListener { toggleFavoriteAudio(playbackURL, this, audioDuration) }
-                    }
                 })
             }
             row.addView(body, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -5488,7 +5593,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 isClickable = favoriteID != null
                 isFocusable = favoriteID != null
                 setTextColor(0xFF69716F.toInt())
-                setOnClickListener { anchor -> favoriteID?.let { showFavoriteActions(anchor, it) } }
+                setOnClickListener { anchor -> favoriteID?.let { showFavoriteActions(anchor, it, snapshot.string("message_id")) } }
             }, FrameLayout.LayoutParams(38.dp(), 38.dp(), Gravity.TOP or Gravity.END))
             if (senderID.isNotBlank()) loadFavoriteAvatar(senderID, avatar)
         }.also { card ->
@@ -5564,17 +5669,13 @@ open class XingDunFeatureActivity : BaseActivity() {
             ?.coerceAtLeast(1)
     }
 
-    private fun favoriteTypeLabel(messageType: String): String = getString(
-        when (messageType) {
-            "PICTURE" -> R.string.xingdun_favorite_type_picture
-            "AUDIO" -> R.string.xingdun_favorite_type_audio
-            "VIDEO" -> R.string.xingdun_favorite_type_video
-            "FILE" -> R.string.xingdun_favorite_type_file
-            "LOCATION" -> R.string.xingdun_favorite_type_location
-            "CUSTOM" -> R.string.xingdun_favorite_type_custom
-            else -> R.string.xingdun_favorite_type_text
-        },
-    )
+    private fun favoriteTypeIcon(messageType: String): Int = when (messageType) {
+        "PICTURE" -> R.drawable.xingdun_ic_storage_image
+        "AUDIO" -> R.drawable.xingdun_ic_storage_audio
+        "VIDEO" -> R.drawable.xingdun_ic_storage_video
+        "FILE" -> R.drawable.xingdun_ic_storage_file
+        else -> R.drawable.xingdun_ic_mine_document
+    }
 
     private fun favoriteMediaURL(snapshot: JsonObject, messageType: String, preview: Boolean): String? {
         val attachment = snapshot.get("attachment") ?: return null
@@ -5615,11 +5716,11 @@ open class XingDunFeatureActivity : BaseActivity() {
         else -> null
     }
 
-    private fun showFavoriteActions(anchor: View, favoriteID: Int) {
+    private fun showFavoriteActions(anchor: View, favoriteID: Int, messageID: String?) {
         PopupMenu(this, anchor).apply {
             menu.add(R.string.xingdun_remove_favorite)
             setOnMenuItemClickListener {
-                confirmRemoveFavorite(favoriteID)
+                removeFavorite(favoriteID, messageID)
                 true
             }
             show()
@@ -5653,46 +5754,44 @@ open class XingDunFeatureActivity : BaseActivity() {
         if (session == null) status.setText(R.string.xingdun_favorite_media_open_failed)
     }
 
-    private fun toggleFavoriteAudio(url: String, view: TextView, seconds: Int?) {
-        val duration = seconds ?: 1
+    private fun toggleFavoriteAudio(url: String, view: FavoriteAudioVisual) {
         if (favoriteAudioURL == url && favoriteAudioPlayer.isPlaying()) {
             favoriteAudioPlayer.pause()
-            view.text = getString(R.string.xingdun_favorite_audio_duration, duration)
+            updateFavoriteAudioVisual(view, false)
             return
         }
         if (favoriteAudioURL == url && favoriteAudioPlayer.isPaused()) {
             favoriteAudioPlayer.resume()
-            view.text = getString(R.string.xingdun_favorite_audio_playing, duration)
+            updateFavoriteAudioVisual(view, true)
             return
         }
-        favoriteAudioView?.let { previous ->
-            val previousSeconds = previous.tag as? Int ?: 1
-            previous.text = getString(R.string.xingdun_favorite_audio_duration, previousSeconds)
-        }
+        favoriteAudioView?.let { updateFavoriteAudioVisual(it, false) }
         favoriteAudioURL = url
-        favoriteAudioView = view.apply { tag = duration }
+        favoriteAudioView = view
         favoriteAudioPlayer.setListener(object : AudioPlayerListener {
-            override fun onPlay() = updateFavoriteAudioView(view, url, duration, true)
-            override fun onResume() = updateFavoriteAudioView(view, url, duration, true)
-            override fun onPause() = updateFavoriteAudioView(view, url, duration, false)
-            override fun onCompletion() = updateFavoriteAudioView(view, url, duration, false)
+            override fun onPlay() = updateFavoriteAudioView(view, url, true)
+            override fun onResume() = updateFavoriteAudioView(view, url, true)
+            override fun onPause() = updateFavoriteAudioView(view, url, false)
+            override fun onCompletion() = updateFavoriteAudioView(view, url, false)
             override fun onError(errorMessage: String) {
-                updateFavoriteAudioView(view, url, duration, false)
+                updateFavoriteAudioView(view, url, false)
                 status.setText(R.string.xingdun_favorite_media_open_failed)
             }
         })
         favoriteAudioPlayer.play(url)
     }
 
-    private fun updateFavoriteAudioView(view: TextView, url: String, seconds: Int, playing: Boolean) {
-        view.post {
+    private fun updateFavoriteAudioView(view: FavoriteAudioVisual, url: String, playing: Boolean) {
+        view.icon.post {
             if (favoriteAudioURL != url) return@post
-            view.text = getString(
-                if (playing) R.string.xingdun_favorite_audio_playing else R.string.xingdun_favorite_audio_duration,
-                seconds,
-            )
+            updateFavoriteAudioVisual(view, playing)
             if (!playing) favoriteAudioURL = null
         }
+    }
+
+    private fun updateFavoriteAudioVisual(view: FavoriteAudioVisual, playing: Boolean) {
+        view.icon.text = if (playing) "Ⅱ" else "▶"
+        view.duration.text = "${view.seconds}″"
     }
 
     private fun downloadFavoriteMedia(url: String, mediaType: Int): String? = runCatching {
@@ -5708,26 +5807,29 @@ open class XingDunFeatureActivity : BaseActivity() {
         target.absolutePath
     }.getOrNull()
 
-    private fun confirmRemoveFavorite(favoriteID: Int) {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_remove_favorite)
-            .setMessage(R.string.xingdun_remove_favorite_confirm)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.xingdun_remove_favorite) { _, _ ->
-                setBusy(true)
-                lifecycleScope.launch {
-                    runCatching {
-                        XingDunSessionManager.apiClient().deleteEmpty(
-                            requireSession(), "message/favorite", mapOf("favorite_id" to favoriteID)
-                        )
-                    }.onSuccess {
-                        favoriteRecords.removeAll { (it.int("favorite_id") ?: it.int("id")) == favoriteID }
-                        favoriteTotal = maxOf(0, favoriteTotal - 1)
-                        setBusy(false)
-                        renderFavorites()
-                    }.onFailure(::showFailure)
-                }
-            }.show()
+    private fun removeFavorite(favoriteID: Int, messageID: String?) {
+        if (debugFavoritesFixtureEnabled) {
+            favoriteRecords.removeAll { (it.int("favorite_id") ?: it.int("id")) == favoriteID }
+            favoriteTotal = maxOf(0, favoriteTotal - 1)
+            favoritePage = XingDunMessageFavoritePolicy.pageAfterRemoval(favoritePage)
+            renderFavorites()
+            return
+        }
+        setBusy(true)
+        lifecycleScope.launch {
+            runCatching {
+                XingDunSessionManager.apiClient().deleteEmpty(
+                    requireSession(), "message/favorite", mapOf("favorite_id" to favoriteID)
+                )
+            }.onSuccess {
+                favoriteRecords.removeAll { (it.int("favorite_id") ?: it.int("id")) == favoriteID }
+                favoriteTotal = maxOf(0, favoriteTotal - 1)
+                favoritePage = XingDunMessageFavoritePolicy.pageAfterRemoval(favoritePage)
+                messageID?.takeIf(String::isNotBlank)?.let(XingDunMessageFavoriteRepository::noteRemoved)
+                setBusy(false)
+                renderFavorites()
+            }.onFailure(::showFailure)
+        }
     }
 
     private fun showRedpacketAccount() {
@@ -6223,6 +6325,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val EXTRA_DEBUG_REPORT_FIXTURE = "debug_report_fixture"
         private const val EXTRA_DEBUG_PERSONAL_QR_FIXTURE = "debug_personal_qr_fixture"
         private const val EXTRA_DEBUG_INVITE_POSTER_FIXTURE = "debug_invite_poster_fixture"
+        private const val EXTRA_DEBUG_FAVORITES_FIXTURE = "debug_favorites_fixture"
         private const val EXTRA_DEBUG_LEGAL_URL = "debug_legal_url"
         private const val EXTRA_ITEM_ID = "item_id"
         private const val EXTRA_TARGET_ID = "target_id"

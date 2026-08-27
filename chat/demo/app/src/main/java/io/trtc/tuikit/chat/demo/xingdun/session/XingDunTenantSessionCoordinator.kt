@@ -11,6 +11,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationMa
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketStatusLoader
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunAutoDeleteRepository
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessageRepository
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoriteRepository
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
 
@@ -70,6 +71,7 @@ internal object XingDunTenantSessionCoordinator {
             XingDunRedpacketStatusLoader.clearTenantCache()
             XingDunAutoDeleteRepository.clearTenantCache()
             XingDunPinnedMessageRepository.clearTenantCache()
+            XingDunMessageFavoriteRepository.clearTenantCache()
             XingDunForegroundNotificationManager.resetTenantState()
             MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, "")
             if (clearEnterprise) {

@@ -36,6 +36,12 @@ import io.trtc.tuikit.atomicxcore.api.conversation.GetConversationInfoCompletion
 import io.trtc.tuikit.atomicxcore.api.group.GroupEvent
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
+import io.trtc.tuikit.atomicxcore.api.message.MessageStatus
+import io.trtc.tuikit.atomicxcore.api.message.AudioMessagePayload
+import io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload
+import io.trtc.tuikit.atomicxcore.api.message.ImageMessagePayload
+import io.trtc.tuikit.atomicxcore.api.message.TextMessagePayload
+import io.trtc.tuikit.atomicxcore.api.message.VideoMessagePayload
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.app.R
@@ -43,6 +49,9 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessagePresentatio
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessageParser
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFavoriteMessageRequest
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoritePolicy
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoriteRepository
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagePolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessageRepository
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagesActivity
@@ -101,9 +110,11 @@ class ChatActivity : BaseActivity() {
     private var isPeerTyping = false
     private var latestChatTitle: String = ""
     private lateinit var conversationID: String
+    private var messageFavoriteEnabled = false
     private var messagePinEnabled = false
     private var canManagePinnedMessages = false
     private var pinnedPage = XingDunPinnedMessagePage()
+    private val activeFavoriteMessageIDs = mutableSetOf<String>()
 
     private val pinnedRepositoryListener: (String) -> Unit = { changedID ->
         if (::conversationID.isInitialized && changedID == conversationID) {
@@ -119,6 +130,7 @@ class ChatActivity : BaseActivity() {
         private const val C2C_CONVERSATION_ID_PREFIX = "c2c_"
         private const val GROUP_CONVERSATION_ID_PREFIX = "group_"
         private const val UNREAD_BADGE_DEBOUNCE_MS = 300L
+        private const val FAVORITE_ACTION_ID = "xingdun.message.favorite"
         private const val PIN_ACTION_ID = "xingdun.message.pin"
 
         fun start(context: Context, conversationID: String) {
@@ -185,6 +197,7 @@ class ChatActivity : BaseActivity() {
         pinnedMessageSummary = findViewById(R.id.demo_pinnedMessageSummary)
         pinnedMessageCount = findViewById(R.id.demo_pinnedMessageCount)
         pinnedMessageChevron = findViewById(R.id.demo_pinnedMessageChevron)
+        messageFavoriteEnabled = XingDunSessionManager.currentSession()?.features?.messageFavorite == true
         messagePinEnabled = XingDunSessionManager.currentSession()?.features?.messagePin == true
         canManagePinnedMessages = conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)
         pinnedMessageBar.setOnClickListener { XingDunPinnedMessagesActivity.start(this, conversationID) }
@@ -216,7 +229,7 @@ class ChatActivity : BaseActivity() {
             isSupportListenFromHere = false,
         )
         XingDunCustomMessagePresentation.configure(messageListConfig)
-        configurePinnedMessageAction(messageListConfig)
+        configureBusinessMessageActions(messageListConfig)
         val isC2CConversation = conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)
         val messageInputConfig = ChatMessageInputConfig(
             isShowAudioCall = isC2CConversation,
@@ -270,6 +283,10 @@ class ChatActivity : BaseActivity() {
         applyColors(themeStore.themeState.value.currentTheme.tokens.color)
 
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+        if (messageFavoriteEnabled) {
+            activityScope?.launch { runCatching { XingDunMessageFavoriteRepository.loadRecent() } }
+        }
 
         if (messagePinEnabled) {
             XingDunPinnedMessageRepository.addListener(pinnedRepositoryListener)
@@ -349,26 +366,128 @@ class ChatActivity : BaseActivity() {
         }
     }
 
-    private fun configurePinnedMessageAction(config: ChatMessageListConfig) {
-        if (!messagePinEnabled) return
+    private fun configureBusinessMessageActions(config: ChatMessageListConfig) {
+        if (!messageFavoriteEnabled && !messagePinEnabled) return
         config.customizeActions {
             val message = editorContext.message
             val messageID = message.msgID.takeIf(String::isNotBlank) ?: return@customizeActions
             if (XingDunCustomMessageParser.parse(message)?.isControl == true) return@customizeActions
-            if (!canManagePinnedMessages) return@customizeActions
-            val isPinned = XingDunPinnedMessageRepository.isPinned(
-                this@ChatActivity,
-                conversationID,
-                messageID,
-            )
-            val action = MessageCustomAction(
-                ID = PIN_ACTION_ID,
-                title = getString(if (isPinned) R.string.xingdun_pinned_action_unpin else R.string.xingdun_pinned_action_pin),
-                iconResID = R.drawable.xingdun_ic_pin,
-                action = { handlePinnedMessageAction(it) },
-            )
-            if (!insertBefore(MessageActionIDs.DELETE, action)) add(action)
+            if (message.status in setOf(MessageStatus.REVOKED, MessageStatus.DELETED)) return@customizeActions
+
+            if (messageFavoriteEnabled) {
+                val isFavorite = XingDunMessageFavoriteRepository.isFavorite(messageID)
+                val favoriteAction = MessageCustomAction(
+                    ID = FAVORITE_ACTION_ID,
+                    title = getString(
+                        if (isFavorite) R.string.xingdun_favorite_action_remove
+                        else R.string.xingdun_favorite_action_add,
+                    ),
+                    iconResID = R.drawable.xingdun_ic_mine_favorite,
+                    action = { handleFavoriteMessageAction(it) },
+                )
+                if (!insertBefore(MessageActionIDs.DELETE, favoriteAction)) add(favoriteAction)
+            }
+
+            if (messagePinEnabled && canManagePinnedMessages) {
+                val isPinned = XingDunPinnedMessageRepository.isPinned(
+                    this@ChatActivity,
+                    conversationID,
+                    messageID,
+                )
+                val pinAction = MessageCustomAction(
+                    ID = PIN_ACTION_ID,
+                    title = getString(if (isPinned) R.string.xingdun_pinned_action_unpin else R.string.xingdun_pinned_action_pin),
+                    iconResID = R.drawable.xingdun_ic_pin,
+                    action = { handlePinnedMessageAction(it) },
+                )
+                if (!insertBefore(MessageActionIDs.DELETE, pinAction)) add(pinAction)
+            }
         }
+    }
+
+    private fun handleFavoriteMessageAction(message: MessageInfo) {
+        val messageID = message.msgID.takeIf(String::isNotBlank) ?: return
+        if (!activeFavoriteMessageIDs.add(messageID)) return
+        val currentlyFavorite = XingDunMessageFavoriteRepository.isFavorite(messageID)
+        val scope = activityScope ?: run {
+            activeFavoriteMessageIDs.remove(messageID)
+            return
+        }
+        scope.launch {
+            val result = runCatching {
+                if (currentlyFavorite) {
+                    XingDunMessageFavoriteRepository.unfavorite(messageID)
+                } else {
+                    XingDunMessageFavoriteRepository.favorite(favoriteRequest(message))
+                }
+            }
+            activeFavoriteMessageIDs.remove(messageID)
+            Toast.makeText(
+                this@ChatActivity,
+                result.fold(
+                    onSuccess = {
+                        if (currentlyFavorite) R.string.xingdun_favorite_removed
+                        else R.string.xingdun_favorite_added
+                    },
+                    onFailure = { R.string.xingdun_favorite_update_failed },
+                ),
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+
+    private fun favoriteRequest(message: MessageInfo): XingDunFavoriteMessageRequest {
+        val summary = MessageListMessageSummaryFormatter().format(this, message, conversationID)
+        val text = when (val payload = message.messagePayload) {
+            is TextMessagePayload -> payload.text
+            is CustomMessagePayload -> XingDunCustomMessageParser.parse(message)?.summary(this) ?: payload.description.orEmpty()
+            else -> ""
+        }
+        val timestamp = message.timestamp?.let { if (it > 10_000_000_000L) it else it * 1_000L }
+        return XingDunFavoriteMessageRequest(
+            messageId = message.msgID,
+            conversationId = conversationID,
+            messageSequence = message.sequence,
+            senderId = message.from.userID,
+            messageType = XingDunMessageFavoritePolicy.serverMessageType(message.messageType.name),
+            text = text.ifBlank { summary.takeIf { message.messageType.name == "CUSTOM" }.orEmpty() },
+            attachment = favoriteAttachment(message),
+            sentAt = timestamp,
+        )
+    }
+
+    private fun favoriteAttachment(message: MessageInfo): Any = when (val payload = message.messagePayload) {
+        is ImageMessagePayload -> {
+            val original = payload.originalImageURL?.takeIf(String::isNotBlank)
+            val thumbnail = payload.thumbImageURL?.takeIf(String::isNotBlank)
+                ?: payload.largeImageURL?.takeIf(String::isNotBlank)
+                ?: original
+            buildList {
+                val info = buildList {
+                    original?.let { add(mapOf("Type" to 1, "URL" to it)) }
+                    thumbnail?.let { add(mapOf("Type" to 3, "URL" to it)) }
+                }
+                if (info.isNotEmpty()) add(mapOf("MsgType" to "TIMImageElem", "MsgContent" to mapOf("ImageInfoArray" to info)))
+            }
+        }
+        is VideoMessagePayload -> mapOf(
+            "ThumbUrl" to payload.videoSnapshotURL.orEmpty(),
+            "VideoUrl" to payload.videoURL.orEmpty(),
+        ).filterValues(String::isNotBlank).let { content ->
+            if (content.isEmpty()) emptyList()
+            else listOf(mapOf("MsgType" to "TIMVideoFileElem", "MsgContent" to content))
+        }
+        is AudioMessagePayload -> listOf(
+            mapOf(
+                "MsgType" to "TIMSoundElem",
+                "MsgContent" to mapOf(
+                    "Second" to payload.audioDuration,
+                    "Url" to payload.audioURL.orEmpty(),
+                    "Size" to payload.audioSize,
+                ),
+            ),
+        )
+        else -> emptyList<Map<String, Any>>()
     }
 
     private fun handlePinnedMessageAction(message: MessageInfo) {

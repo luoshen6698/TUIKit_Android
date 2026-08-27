@@ -944,6 +944,17 @@
     <string name="xingdun_favorites_load_more_failed">Couldn’t load more favorites. Try again later.</string>
     <string name="xingdun_favorite_unknown_conversation">Conversation</string>
     <string name="xingdun_favorite_more_actions">More favorite actions</string>
+    <string name="xingdun_favorite_action_add">Favorite</string>
+    <string name="xingdun_favorite_action_remove">Remove favorite</string>
+    <string name="xingdun_favorite_added">Message added to favorites</string>
+    <string name="xingdun_favorite_removed">Favorite removed</string>
+    <string name="xingdun_favorite_update_failed">Couldn’t update this favorite. Try again later.</string>
+    <string name="xingdun_favorite_preview_sender_primary">XingDun User</string>
+    <string name="xingdun_favorite_preview_sender_secondary">Test Account B</string>
+    <string name="xingdun_favorite_preview_conversation_project">Project Team</string>
+    <string name="xingdun_favorite_preview_conversation_team">Engineering</string>
+    <string name="xingdun_favorite_preview_text">Review the Android and iOS pages at 3:00 PM tomorrow.</string>
+    <string name="xingdun_favorite_preview_file">Android parity checklist.pdf</string>
     <string name="xingdun_favorite_media_open_failed">This media item can’t be opened.</string>
     <string name="xingdun_favorite_picture">[Image]</string>
     <string name="xingdun_favorite_audio">[Voice]</string>
