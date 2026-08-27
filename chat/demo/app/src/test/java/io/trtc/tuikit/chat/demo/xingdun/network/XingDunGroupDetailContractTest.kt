@@ -48,4 +48,66 @@ class XingDunGroupDetailContractTest {
         assertTrue(member.copy(currentUserRole = "administrator").canEditAnnouncement)
         assertTrue(member.copy(currentUserRole = "owner").canEditAnnouncement)
     }
+
+    @Test
+    fun managementPolicyAndDangerPermissionsMatchIOSRules() {
+        val member = XingDunGroupDetail(
+            currentUserRole = "member",
+            groupType = "Public",
+            muteAllLevel = 2,
+        )
+        assertFalse(member.canEditManagement)
+        assertFalse(member.canManagePolicies)
+        assertFalse(member.canSetMuteAll)
+        assertTrue(member.supportsJoinMode)
+        assertTrue(member.canLeave)
+        assertFalse(member.canDismiss)
+
+        val administrator = member.copy(currentUserRole = "administrator", muteAllLevel = 1)
+        assertTrue(administrator.canEditManagement)
+        assertFalse(administrator.canManagePolicies)
+        assertTrue(administrator.canSetMuteAll)
+
+        val assignedCustomerService = administrator.copy(currentUserIsAssignedCs = true, muteAllLevel = 2)
+        assertTrue(assignedCustomerService.canManagePolicies)
+        assertTrue(assignedCustomerService.canSetMuteAll)
+        assertFalse(assignedCustomerService.canLeave)
+
+        val owner = member.copy(currentUserRole = "owner", muteAllLevel = 0)
+        assertTrue(owner.canManagePolicies)
+        assertFalse(owner.canLeave)
+        assertTrue(owner.canDismiss)
+        assertFalse(owner.copy(isOfficial = true).canDismiss)
+        assertFalse(owner.copy(isCustomerService = true).canDismiss)
+    }
+
+    @Test
+    fun managementFieldsDecodeFromTenantContract() {
+        val detail = gson.fromJson(
+            """{
+                "group_id":"@TGS#group",
+                "group_type":"Public",
+                "join_mode":1,
+                "invite_mode":2,
+                "update_team_mode":1,
+                "at_all_mode":2,
+                "be_invite_mode":2,
+                "view_member_card_mode":1,
+                "pin_message_mode":2,
+                "mute_all":true,
+                "mute_all_level":2,
+                "is_official":false,
+                "is_customer_service":true,
+                "current_user_is_assigned_cs":true
+            }""".trimIndent(),
+            XingDunGroupDetail::class.java,
+        )
+        assertEquals(1, detail.joinMode)
+        assertEquals(2, detail.inviteMode)
+        assertEquals(2, detail.beInviteMode)
+        assertTrue(detail.muteAll)
+        assertEquals(2, detail.muteAllLevel)
+        assertTrue(detail.isCustomerService)
+        assertTrue(detail.currentUserIsAssignedCs)
+    }
 }

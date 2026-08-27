@@ -44,6 +44,26 @@
             android:theme="@style/Chat_UIKit_Theme"
             android:windowSoftInputMode="adjustResize" />
         <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupManagementPreviewActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme" />
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupAdministratorsPreviewActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme" />
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupManagementEnglishPreviewActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme" />
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupAdministratorsEnglishPreviewActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme" />
+        <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnglishLaunchActivity"
             android:exported="true"
             android:theme="@style/Chat_UIKit_Theme"

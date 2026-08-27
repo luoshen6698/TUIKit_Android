@@ -25,6 +25,7 @@ import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupInfoActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupAnnouncementActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupQRCodeActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupManagementActivity
 import io.trtc.tuikit.chat.app.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -140,6 +141,9 @@ class ChatSettingActivity : BaseActivity() {
                 },
                 onGroupQRCodeClick = {
                     XingDunGroupQRCodeActivity.start(this, groupID)
+                },
+                onGroupManagementClick = {
+                    XingDunGroupManagementActivity.start(this, groupID)
                 },
                 onGroupDeleted = {
                     EventBus.post(Event.GroupDeleted(groupID))

@@ -155,9 +155,21 @@ data class XingDunGroupDetail(
     val announcement: String? = null,
     val intro: String? = null,
     val memberCount: Int = 0,
+    val ownerUserId: String? = null,
     val currentUserRole: String = "member",
+    val groupType: String = "unknown",
+    val joinMode: Int = JOIN_MODE_APPROVAL,
+    val inviteMode: Int = MODE_ADMINISTRATORS,
     val updateTeamMode: Int = 2,
-    val currentUserIsAssignedCs: Boolean = false
+    val atAllMode: Int = MODE_ADMINISTRATORS,
+    val beInviteMode: Int = BE_INVITE_CONFIRM,
+    val viewMemberCardMode: Int = MODE_ADMINISTRATORS,
+    val pinMessageMode: Int = MODE_ADMINISTRATORS,
+    val muteAll: Boolean = false,
+    val muteAllLevel: Int = 0,
+    val isOfficial: Boolean = false,
+    val isCustomerService: Boolean = false,
+    val currentUserIsAssignedCs: Boolean = false,
 ) {
     val publicGroupId: String?
         get() = displayGroupId?.trim()?.takeIf { value -> value.isNotEmpty() && value.all(Char::isDigit) }
@@ -173,10 +185,52 @@ data class XingDunGroupDetail(
     val canEditAnnouncement: Boolean
         get() = currentUserRole == "owner" || currentUserRole == "administrator"
 
+    val canEditManagement: Boolean
+        get() = currentUserRole == "owner" || currentUserRole == "administrator"
+
+    val canManagePolicies: Boolean
+        get() = currentUserRole == "owner" ||
+            (currentUserIsAssignedCs && currentUserRole == "administrator")
+
+    val canSetMuteAll: Boolean
+        get() = currentUserIsAssignedCs ||
+            (muteAllLevel != MUTE_LEVEL_CUSTOMER_SERVICE && canEditManagement)
+
+    val supportsJoinMode: Boolean
+        get() = groupType.equals("public", ignoreCase = true) ||
+            groupType.equals("community", ignoreCase = true)
+
+    val canLeave: Boolean
+        get() = currentUserRole != "owner" && !currentUserIsAssignedCs
+
+    val canDismiss: Boolean
+        get() = currentUserRole == "owner" && !isOfficial && !isCustomerService
+
     private companion object {
         const val MODE_ALL = 1
+        const val MODE_ADMINISTRATORS = 2
+        const val JOIN_MODE_APPROVAL = 2
+        const val BE_INVITE_CONFIRM = 1
+        const val MUTE_LEVEL_CUSTOMER_SERVICE = 2
     }
 }
+
+data class XingDunGroupMemberPage(
+    val total: Int = 0,
+    val list: List<XingDunGroupMember> = emptyList(),
+    val page: Int = 1,
+    val pageSize: Int = 50,
+)
+
+data class XingDunGroupMember(
+    val userId: String = "",
+    val nickname: String = "",
+    val avatar: String? = null,
+    val role: String = "member",
+    val isMuted: Boolean = false,
+    val muteEndTime: String? = null,
+    val joinTime: String? = null,
+)
 
 data class XingDunLoginRequest(
     val username: String,

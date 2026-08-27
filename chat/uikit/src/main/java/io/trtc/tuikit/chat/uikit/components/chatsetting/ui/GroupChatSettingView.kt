@@ -50,6 +50,7 @@ class GroupChatSettingView @JvmOverloads constructor(
     private var onGroupInfoClick: (() -> Unit)? = null
     private var onGroupAnnouncementClick: (() -> Unit)? = null
     private var onGroupQRCodeClick: (() -> Unit)? = null
+    private var onGroupManagementClick: (() -> Unit)? = null
     private var onGroupDeleted: (() -> Unit)? = null
 
     private var viewModel: GroupChatSettingViewModel? = null
@@ -76,6 +77,7 @@ class GroupChatSettingView @JvmOverloads constructor(
         onGroupInfoClick: (() -> Unit)? = null,
         onGroupAnnouncementClick: (() -> Unit)? = null,
         onGroupQRCodeClick: (() -> Unit)? = null,
+        onGroupManagementClick: (() -> Unit)? = null,
         onGroupDeleted: (() -> Unit)? = null
     ) {
         this.onSendMessageClick = onSendMessageClick
@@ -83,6 +85,7 @@ class GroupChatSettingView @JvmOverloads constructor(
         this.onGroupInfoClick = onGroupInfoClick
         this.onGroupAnnouncementClick = onGroupAnnouncementClick
         this.onGroupQRCodeClick = onGroupQRCodeClick
+        this.onGroupManagementClick = onGroupManagementClick
         this.onGroupDeleted = onGroupDeleted
 
         val owner = context.findViewModelStoreOwner() ?: return
@@ -138,7 +141,9 @@ class GroupChatSettingView @JvmOverloads constructor(
             viewModelProvider = { viewModel },
             createSectionContainer = ::createSectionContainer,
             rebuildSection = ::rebuildSection,
-            onOpenGroupManagement = ::showGroupManagement,
+            onOpenGroupManagement = { viewModel ->
+                onGroupManagementClick?.invoke() ?: showGroupManagement(viewModel)
+            },
             onOpenGroupAnnouncement = onGroupAnnouncementClick,
             onOpenGroupQRCode = onGroupQRCodeClick,
             onShowJoinMethod = ::showJoinMethodActionSheet,
