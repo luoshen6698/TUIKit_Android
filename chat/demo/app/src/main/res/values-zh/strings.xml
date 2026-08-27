@@ -1099,6 +1099,18 @@
     <string name="xingdun_group_transfer_owner_confirm">确认转让</string>
     <string name="xingdun_group_transfer_owner_processing">正在转让群主</string>
     <string name="xingdun_group_transfer_owner_success">群主已转让。</string>
+    <string name="xingdun_group_nickname_title">群内昵称</string>
+    <string name="xingdun_group_nickname_save">保存</string>
+    <string name="xingdun_group_nickname_section">我在群里的昵称</string>
+    <string name="xingdun_group_nickname_not_set">未设置</string>
+    <string name="xingdun_group_nickname_byte_hint">最多 32 个 UTF-8 字节</string>
+    <string name="xingdun_group_nickname_byte_count">%1$d/32</string>
+    <string name="xingdun_group_nickname_load_failed">群内昵称加载失败，请稍后重试。</string>
+    <string name="xingdun_group_nickname_retry">重试</string>
+    <string name="xingdun_group_nickname_saving">正在保存</string>
+    <string name="xingdun_group_nickname_save_failed">群内昵称保存失败，请稍后重试。</string>
+    <string name="xingdun_group_nickname_saved">群内昵称已保存。</string>
+    <string name="xingdun_group_nickname_preview_value">项目负责人</string>
     <string-array name="xingdun_report_reason_labels">
         <item>垃圾广告</item><item>骚扰辱骂</item><item>欺诈诈骗</item><item>暴力违法</item><item>色情低俗</item><item>其他问题</item>
     </string-array>

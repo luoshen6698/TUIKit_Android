@@ -28,6 +28,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupQRCodeActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupManagementActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMembersActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupTransferOwnerActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupNicknameActivity
 import io.trtc.tuikit.chat.app.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,7 @@ class ChatSettingActivity : BaseActivity() {
     private var activityScope: CoroutineScope? = null
     private val themeStore by lazy { ThemeStore.shared(this) }
     private val contactStore by lazy { ContactStore.shared }
+    private var groupSettingView: GroupChatSettingView? = null
 
     companion object {
         private const val EXTRA_USER_ID = "user_id"
@@ -123,6 +125,7 @@ class ChatSettingActivity : BaseActivity() {
         } else if (!groupID.isNullOrEmpty()) {
             tvTitle.text = getString(R.string.demo_chat_setting_group_settings)
             val settingView = GroupChatSettingView(this)
+            groupSettingView = settingView
             settingContainer.addView(settingView)
             settingView.setup(
                 groupID = groupID,
@@ -153,6 +156,9 @@ class ChatSettingActivity : BaseActivity() {
                 onTransferOwnerClick = {
                     XingDunGroupTransferOwnerActivity.start(this, groupID)
                 },
+                onGroupNicknameClick = {
+                    XingDunGroupNicknameActivity.start(this, groupID)
+                },
                 onGroupDeleted = {
                     EventBus.post(Event.GroupDeleted(groupID))
                     finish()
@@ -178,6 +184,11 @@ class ChatSettingActivity : BaseActivity() {
                 headerDivider.setBackgroundColor(colors.strokeColorPrimary)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        groupSettingView?.refreshSelfNameCard()
     }
 
     private fun handleGroupMemberClick(memberUserID: String) {

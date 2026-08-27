@@ -17,6 +17,7 @@ internal class GroupChatSettingRowsController(
     private val onOpenGroupManagement: (GroupChatSettingViewModel) -> Unit,
     private val onOpenGroupAnnouncement: (() -> Unit)?,
     private val onOpenGroupQRCode: (() -> Unit)?,
+    private val onOpenGroupNickname: (() -> Unit)?,
     private val onShowJoinMethod: (GroupChatSettingViewModel) -> Unit,
     private val onShowInviteMethod: (GroupChatSettingViewModel) -> Unit,
     private val onShowChatBackgroundPicker: (GroupChatSettingViewModel) -> Unit
@@ -191,19 +192,26 @@ internal class GroupChatSettingRowsController(
         myAliasRow.setValue(
             state.nameCard?.takeIf { it.isNotBlank() } ?: context.getString(R.string.chat_setting_not_set)
         )
-        myAliasRow.setShowArrow(false)
-        myAliasRow.setCustomAccessory(
-            if (permissions.canEditSelfNameCard) R.drawable.chat_setting_group_name_edit_icon else null
-        )
+        myAliasRow.setShowArrow(onOpenGroupNickname != null && permissions.canEditSelfNameCard)
+        myAliasRow.setCustomAccessory(if (onOpenGroupNickname == null && permissions.canEditSelfNameCard) {
+            R.drawable.chat_setting_group_name_edit_icon
+        } else {
+            null
+        })
         if (permissions.canEditSelfNameCard) {
             myAliasRow.isClickable = true
             myAliasRow.setOnClickListener {
-                TextInputDialog(
-                    context = context,
-                    title = context.getString(R.string.chat_setting_modify_group_name_card),
-                    initialText = viewModel.selfNameCard.value ?: "",
-                    onConfirm = { value -> viewModel.setGroupNickname(value) }
-                ).show()
+                val callback = onOpenGroupNickname
+                if (callback != null) {
+                    callback()
+                } else {
+                    TextInputDialog(
+                        context = context,
+                        title = context.getString(R.string.chat_setting_modify_group_name_card),
+                        initialText = viewModel.selfNameCard.value ?: "",
+                        onConfirm = { value -> viewModel.setGroupNickname(value) }
+                    ).show()
+                }
             }
         } else {
             myAliasRow.isClickable = false

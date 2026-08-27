@@ -164,14 +164,14 @@ class GroupChatSettingViewModel(
         .map { it?.inviteOption ?: GroupInviteOption.ANY }
         .stateIn(viewModelScope, SharingStarted.Eagerly, GroupInviteOption.ANY)
 
-    private fun refreshSelfNameCard() {
+    fun refreshSelfNameCard() {
         val userID = currentUserID
         if (userID.isEmpty()) return
         _groupMemberStore.getMemberInfo(
             listOf(userID),
             object : GetMemberInfoCompletionHandler {
-                override fun onSuccess(membersInfo: List<GroupMember>) {
-                    _selfNameCard.value = membersInfo.firstOrNull()?.nameCard
+                override fun onSuccess(memberInfoList: List<GroupMember>) {
+                    _selfNameCard.value = memberInfoList.firstOrNull()?.nameCard
                 }
 
                 override fun onFailure(code: Int, desc: String) {}

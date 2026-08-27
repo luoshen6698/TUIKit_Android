@@ -150,6 +150,13 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupNicknameActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name="io.trtc.tuikit.chat.demo.chat.ChatSettingActivity"
             android:exported="false"
             android:theme="@style/Chat_UIKit_Theme" />

@@ -1105,6 +1105,18 @@
     <string name="xingdun_group_transfer_owner_confirm">Transfer</string>
     <string name="xingdun_group_transfer_owner_processing">Transferring ownership</string>
     <string name="xingdun_group_transfer_owner_success">Group ownership transferred.</string>
+    <string name="xingdun_group_nickname_title">Group Name</string>
+    <string name="xingdun_group_nickname_save">Save</string>
+    <string name="xingdun_group_nickname_section">My Name in This Group</string>
+    <string name="xingdun_group_nickname_not_set">Not set</string>
+    <string name="xingdun_group_nickname_byte_hint">Up to 32 UTF-8 bytes</string>
+    <string name="xingdun_group_nickname_byte_count">%1$d/32</string>
+    <string name="xingdun_group_nickname_load_failed">Unable to load your group name. Please try again.</string>
+    <string name="xingdun_group_nickname_retry">Retry</string>
+    <string name="xingdun_group_nickname_saving">Saving</string>
+    <string name="xingdun_group_nickname_save_failed">Unable to save your group name. Please try again.</string>
+    <string name="xingdun_group_nickname_saved">Group name saved.</string>
+    <string name="xingdun_group_nickname_preview_value">Project Lead</string>
     <string-array name="xingdun_report_reason_values" translatable="false">
         <item>spam</item><item>harassment</item><item>fraud</item><item>violence</item><item>porn</item><item>other</item>
     </string-array>

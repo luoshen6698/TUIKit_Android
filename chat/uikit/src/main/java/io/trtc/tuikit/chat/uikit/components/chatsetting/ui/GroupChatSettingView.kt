@@ -53,6 +53,7 @@ class GroupChatSettingView @JvmOverloads constructor(
     private var onGroupQRCodeClick: (() -> Unit)? = null
     private var onGroupManagementClick: (() -> Unit)? = null
     private var onTransferOwnerClick: (() -> Unit)? = null
+    private var onGroupNicknameClick: (() -> Unit)? = null
     private var onGroupDeleted: (() -> Unit)? = null
 
     private var viewModel: GroupChatSettingViewModel? = null
@@ -82,6 +83,7 @@ class GroupChatSettingView @JvmOverloads constructor(
         onGroupQRCodeClick: (() -> Unit)? = null,
         onGroupManagementClick: (() -> Unit)? = null,
         onTransferOwnerClick: (() -> Unit)? = null,
+        onGroupNicknameClick: (() -> Unit)? = null,
         onGroupDeleted: (() -> Unit)? = null
     ) {
         this.onSendMessageClick = onSendMessageClick
@@ -92,6 +94,7 @@ class GroupChatSettingView @JvmOverloads constructor(
         this.onGroupQRCodeClick = onGroupQRCodeClick
         this.onGroupManagementClick = onGroupManagementClick
         this.onTransferOwnerClick = onTransferOwnerClick
+        this.onGroupNicknameClick = onGroupNicknameClick
         this.onGroupDeleted = onGroupDeleted
 
         val owner = context.findViewModelStoreOwner() ?: return
@@ -152,6 +155,7 @@ class GroupChatSettingView @JvmOverloads constructor(
             },
             onOpenGroupAnnouncement = onGroupAnnouncementClick,
             onOpenGroupQRCode = onGroupQRCodeClick,
+            onOpenGroupNickname = onGroupNicknameClick,
             onShowJoinMethod = ::showJoinMethodActionSheet,
             onShowInviteMethod = ::showInviteMethodActionSheet,
             onShowChatBackgroundPicker = ::showChatBackgroundPicker
@@ -188,6 +192,10 @@ class GroupChatSettingView @JvmOverloads constructor(
 
         scrollView.addView(contentLayout)
         addView(scrollView)
+    }
+
+    fun refreshSelfNameCard() {
+        viewModel?.refreshSelfNameCard()
     }
 
     private fun createSectionContainer(): LinearLayout {
