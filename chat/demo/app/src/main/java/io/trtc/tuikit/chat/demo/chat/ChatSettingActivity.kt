@@ -26,6 +26,8 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupInfoActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupAnnouncementActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupQRCodeActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupManagementActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMembersActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupTransferOwnerActivity
 import io.trtc.tuikit.chat.app.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -133,6 +135,9 @@ class ChatSettingActivity : BaseActivity() {
                 onGroupMemberClick = { member ->
                     handleGroupMemberClick(member.userID)
                 },
+                onGroupMemberListClick = {
+                    XingDunGroupMembersActivity.start(this, groupID)
+                },
                 onGroupInfoClick = {
                     XingDunGroupInfoActivity.start(this, groupID)
                 },
@@ -144,6 +149,9 @@ class ChatSettingActivity : BaseActivity() {
                 },
                 onGroupManagementClick = {
                     XingDunGroupManagementActivity.start(this, groupID)
+                },
+                onTransferOwnerClick = {
+                    XingDunGroupTransferOwnerActivity.start(this, groupID)
                 },
                 onGroupDeleted = {
                     EventBus.post(Event.GroupDeleted(groupID))

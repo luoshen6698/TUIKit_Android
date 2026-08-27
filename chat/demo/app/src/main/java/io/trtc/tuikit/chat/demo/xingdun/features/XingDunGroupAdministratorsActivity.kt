@@ -28,9 +28,6 @@ import androidx.core.view.updatePadding
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
-import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
-import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
-import io.trtc.tuikit.atomicxcore.api.contact.GetContactInfoCompletionHandler
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
@@ -450,18 +447,9 @@ open class XingDunGroupAdministratorsActivity : BaseActivity() {
     }
 
     private fun openMemberDetail(userID: String) {
-        ContactStore.shared.getContactInfo(
-            userIDList = listOf(userID),
-            completion = object : GetContactInfoCompletionHandler {
-                override fun onSuccess(contactInfoList: List<ContactInfo>) {
-                    contactInfoList.firstOrNull()?.let { XingDunContactDetailActivity.start(this@XingDunGroupAdministratorsActivity, it) }
-                }
-
-                override fun onFailure(code: Int, desc: String) {
-                    Toast.makeText(this@XingDunGroupAdministratorsActivity, desc, Toast.LENGTH_LONG).show()
-                }
-            },
-        )
+        members.firstOrNull { it.userId == userID }?.let { member ->
+            XingDunContactDetailActivity.start(this, member.userId, member.nickname, member.avatar)
+        }
     }
 
     private fun canManageAdministrators(value: XingDunGroupDetail): Boolean =

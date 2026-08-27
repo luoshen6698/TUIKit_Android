@@ -24,7 +24,8 @@ internal class GroupChatSettingActionSection(
     private val createDivider: () -> View,
     private val createSpacer: () -> View,
     private val canPerformAction: (GroupType, GroupMemberRole, GroupPermission) -> Boolean,
-    private val onGroupDeletedProvider: () -> (() -> Unit)?
+    private val onGroupDeletedProvider: () -> (() -> Unit)?,
+    private val onOpenTransferOwner: () -> Boolean
 ) {
     fun rebuild(
         actionSection: LinearLayout,
@@ -112,6 +113,7 @@ internal class GroupChatSettingActionSection(
             setTitle(context.getString(R.string.chat_setting_transfer_group_owner))
             setButtonStyle(SettingRowButton.Style.LINK)
             setOnClickListener {
+                if (onOpenTransferOwner()) return@setOnClickListener
                 viewModel.loadAllGroupMembers {
                     val candidates = viewModel.memberList.value
                         .filter { it.role != GroupMemberRole.OWNER }

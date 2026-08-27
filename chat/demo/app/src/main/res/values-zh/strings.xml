@@ -1072,6 +1072,33 @@
     <string name="xingdun_group_preview_administrator_two">安全管理员</string>
     <string name="xingdun_group_preview_member_one">产品成员</string>
     <string name="xingdun_group_preview_member_two">研发成员</string>
+    <string name="xingdun_group_preview_member_three">运营成员</string>
+    <string name="xingdun_group_members">群成员</string>
+    <string name="xingdun_group_members_title_count">群成员 (%1$d)</string>
+    <string name="xingdun_group_members_loading">正在加载群成员</string>
+    <string name="xingdun_group_members_load_failed">群成员加载失败</string>
+    <string name="xingdun_group_members_search">搜索成员</string>
+    <string name="xingdun_group_members_empty">暂无群成员</string>
+    <string name="xingdun_group_members_no_match">未找到群成员</string>
+    <string name="xingdun_group_member_owner">群主</string>
+    <string name="xingdun_group_member_administrator">管理员</string>
+    <string name="xingdun_group_member_muted">已禁言</string>
+    <string name="xingdun_group_member_card_restricted">群主或管理员已限制查看成员信息。</string>
+    <string name="xingdun_group_member_remove">移除</string>
+    <string name="xingdun_group_member_remove_title">移出群成员？</string>
+    <string name="xingdun_group_member_remove_message">该成员将无法继续访问群聊，之后可由有权限的成员重新邀请。</string>
+    <string name="xingdun_group_member_removed">已将该成员移出群聊。</string>
+    <string name="xingdun_group_transfer_owner_title">选择新群主</string>
+    <string name="xingdun_group_transfer_owner_loading">正在加载群成员</string>
+    <string name="xingdun_group_transfer_owner_load_failed">群成员加载失败</string>
+    <string name="xingdun_group_transfer_owner_only_owner">仅群主可以转让群主。</string>
+    <string name="xingdun_group_transfer_owner_empty">暂无可转让的群成员</string>
+    <string name="xingdun_group_transfer_owner_no_match">未找到匹配成员</string>
+    <string name="xingdun_group_transfer_owner_confirm_title">确认转让群主？</string>
+    <string name="xingdun_group_transfer_owner_confirm_message">确定将群主转让给“%1$s”吗？转让后你将变为普通成员。</string>
+    <string name="xingdun_group_transfer_owner_confirm">确认转让</string>
+    <string name="xingdun_group_transfer_owner_processing">正在转让群主</string>
+    <string name="xingdun_group_transfer_owner_success">群主已转让。</string>
     <string-array name="xingdun_report_reason_labels">
         <item>垃圾广告</item><item>骚扰辱骂</item><item>欺诈诈骗</item><item>暴力违法</item><item>色情低俗</item><item>其他问题</item>
     </string-array>

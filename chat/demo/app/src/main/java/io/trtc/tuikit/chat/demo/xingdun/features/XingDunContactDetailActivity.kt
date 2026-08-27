@@ -655,5 +655,14 @@ class XingDunContactDetailActivity : BaseActivity() {
                 if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
         }
+
+        fun start(context: Context, userID: String, nickname: String?, avatar: String?) {
+            context.startActivity(Intent(context, XingDunContactDetailActivity::class.java).apply {
+                putExtra(EXTRA_USER_ID, userID)
+                putExtra(EXTRA_NICKNAME, nickname)
+                putExtra(EXTRA_AVATAR, avatar)
+                if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        }
     }
 }

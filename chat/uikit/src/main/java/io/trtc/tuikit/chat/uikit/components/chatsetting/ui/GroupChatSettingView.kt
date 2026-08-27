@@ -47,10 +47,12 @@ class GroupChatSettingView @JvmOverloads constructor(
 
     private var onSendMessageClick: (() -> Unit)? = null
     private var onGroupMemberClick: ((GroupMember) -> Unit)? = null
+    private var onGroupMemberListClick: (() -> Unit)? = null
     private var onGroupInfoClick: (() -> Unit)? = null
     private var onGroupAnnouncementClick: (() -> Unit)? = null
     private var onGroupQRCodeClick: (() -> Unit)? = null
     private var onGroupManagementClick: (() -> Unit)? = null
+    private var onTransferOwnerClick: (() -> Unit)? = null
     private var onGroupDeleted: (() -> Unit)? = null
 
     private var viewModel: GroupChatSettingViewModel? = null
@@ -74,18 +76,22 @@ class GroupChatSettingView @JvmOverloads constructor(
         groupID: String,
         onSendMessageClick: (() -> Unit)? = null,
         onGroupMemberClick: ((GroupMember) -> Unit)? = null,
+        onGroupMemberListClick: (() -> Unit)? = null,
         onGroupInfoClick: (() -> Unit)? = null,
         onGroupAnnouncementClick: (() -> Unit)? = null,
         onGroupQRCodeClick: (() -> Unit)? = null,
         onGroupManagementClick: (() -> Unit)? = null,
+        onTransferOwnerClick: (() -> Unit)? = null,
         onGroupDeleted: (() -> Unit)? = null
     ) {
         this.onSendMessageClick = onSendMessageClick
         this.onGroupMemberClick = onGroupMemberClick
+        this.onGroupMemberListClick = onGroupMemberListClick
         this.onGroupInfoClick = onGroupInfoClick
         this.onGroupAnnouncementClick = onGroupAnnouncementClick
         this.onGroupQRCodeClick = onGroupQRCodeClick
         this.onGroupManagementClick = onGroupManagementClick
+        this.onTransferOwnerClick = onTransferOwnerClick
         this.onGroupDeleted = onGroupDeleted
 
         val owner = context.findViewModelStoreOwner() ?: return
@@ -129,7 +135,7 @@ class GroupChatSettingView @JvmOverloads constructor(
         contentLayout.addView(createSpacer(12f))
 
         memberPreviewSection = GroupMemberPreviewSection(context).apply {
-            onHeaderClick = { showMemberList() }
+            onHeaderClick = { onGroupMemberListClick?.invoke() ?: showMemberList() }
             onMemberClick = { member -> onGroupMemberClick?.invoke(member) }
             onAddClick = { showAddMemberDialog() }
         }
@@ -167,7 +173,16 @@ class GroupChatSettingView @JvmOverloads constructor(
             createDivider = ::createDivider,
             createSpacer = { createSpacer(10f) },
             canPerformAction = ::canPerformAction,
-            onGroupDeletedProvider = { onGroupDeleted }
+            onGroupDeletedProvider = { onGroupDeleted },
+            onOpenTransferOwner = {
+                val callback = onTransferOwnerClick
+                if (callback == null) {
+                    false
+                } else {
+                    callback()
+                    true
+                }
+            }
         )
         contentLayout.addView(actionSection, cardLayoutParams())
 

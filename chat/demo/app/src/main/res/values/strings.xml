@@ -1078,6 +1078,33 @@
     <string name="xingdun_group_preview_administrator_two">Security Administrator</string>
     <string name="xingdun_group_preview_member_one">Product Member</string>
     <string name="xingdun_group_preview_member_two">Engineering Member</string>
+    <string name="xingdun_group_preview_member_three">Operations Member</string>
+    <string name="xingdun_group_members">Group Members</string>
+    <string name="xingdun_group_members_title_count">Group Members (%1$d)</string>
+    <string name="xingdun_group_members_loading">Loading group members</string>
+    <string name="xingdun_group_members_load_failed">Unable to load group members</string>
+    <string name="xingdun_group_members_search">Search members</string>
+    <string name="xingdun_group_members_empty">No group members</string>
+    <string name="xingdun_group_members_no_match">No members found</string>
+    <string name="xingdun_group_member_owner">Owner</string>
+    <string name="xingdun_group_member_administrator">Administrator</string>
+    <string name="xingdun_group_member_muted">Muted</string>
+    <string name="xingdun_group_member_card_restricted">The owner or an administrator has restricted access to member profiles.</string>
+    <string name="xingdun_group_member_remove">Remove</string>
+    <string name="xingdun_group_member_remove_title">Remove Group Member?</string>
+    <string name="xingdun_group_member_remove_message">This member will no longer have access to the group. An authorized member can invite them again later.</string>
+    <string name="xingdun_group_member_removed">Member removed from the group.</string>
+    <string name="xingdun_group_transfer_owner_title">Choose New Owner</string>
+    <string name="xingdun_group_transfer_owner_loading">Loading group members</string>
+    <string name="xingdun_group_transfer_owner_load_failed">Unable to load group members</string>
+    <string name="xingdun_group_transfer_owner_only_owner">Only the group owner can transfer ownership.</string>
+    <string name="xingdun_group_transfer_owner_empty">No eligible group members</string>
+    <string name="xingdun_group_transfer_owner_no_match">No matching members</string>
+    <string name="xingdun_group_transfer_owner_confirm_title">Transfer Group Ownership?</string>
+    <string name="xingdun_group_transfer_owner_confirm_message">Transfer ownership to “%1$s”? You will become a regular member afterward.</string>
+    <string name="xingdun_group_transfer_owner_confirm">Transfer</string>
+    <string name="xingdun_group_transfer_owner_processing">Transferring ownership</string>
+    <string name="xingdun_group_transfer_owner_success">Group ownership transferred.</string>
     <string-array name="xingdun_report_reason_values" translatable="false">
         <item>spam</item><item>harassment</item><item>fraud</item><item>violence</item><item>porn</item><item>other</item>
     </string-array>
