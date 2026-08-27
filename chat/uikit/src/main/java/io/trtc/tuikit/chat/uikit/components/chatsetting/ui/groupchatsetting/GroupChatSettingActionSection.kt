@@ -54,20 +54,22 @@ internal class GroupChatSettingActionSection(
 
         val customRows = customActions(viewModel).map { createCustomActionRow(it) }
 
-        builtInRows.forEachIndexed { index, row ->
-            actionSection.addView(row)
-            if (index != builtInRows.lastIndex) {
-                actionSection.addView(createDivider())
-            }
-        }
-
         if (customRows.isNotEmpty()) {
-            if (builtInRows.isNotEmpty()) {
-                actionSection.addView(createSpacer())
-            }
             customRows.forEachIndexed { index, row ->
                 actionSection.addView(row)
                 if (index != customRows.lastIndex) {
+                    actionSection.addView(createDivider())
+                }
+            }
+        }
+
+        if (builtInRows.isNotEmpty()) {
+            if (customRows.isNotEmpty()) {
+                actionSection.addView(createSpacer())
+            }
+            builtInRows.forEachIndexed { index, row ->
+                actionSection.addView(row)
+                if (index != builtInRows.lastIndex) {
                     actionSection.addView(createDivider())
                 }
             }
@@ -85,7 +87,8 @@ internal class GroupChatSettingActionSection(
                 context = context,
                 scene = ChatSettingScene.GROUP,
                 userID = null,
-                groupID = viewModel.groupID
+                groupID = viewModel.groupID,
+                displayName = viewModel.groupName.value.takeIf(String::isNotBlank)
             )
         )
     }

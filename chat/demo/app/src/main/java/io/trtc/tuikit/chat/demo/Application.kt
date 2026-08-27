@@ -10,6 +10,9 @@ import androidx.core.os.LocaleListCompat
 import com.tencent.mmkv.MMKV
 import io.trtc.tuikit.chat.uikit.components.config.AppBuilderConfig
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
+import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingActionConfig
+import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingCustomAction
+import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingScene
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.atomicxcore.api.login.LoginListener
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
@@ -18,6 +21,7 @@ import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseAccessActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessagePresentation
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBusinessActionHandler
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
@@ -56,6 +60,27 @@ class Application : Application() {
         XingDunCustomMessagePresentation.registerGlobalSummaries()
         XingDunForegroundNotificationManager.initialize(this)
         BusinessActionRegistry.handler = XingDunBusinessActionHandler(this)
+        ChatSettingActionConfig.setCustomActionProvider { actionContext ->
+            val groupID = actionContext.groupID
+            if (actionContext.scene == ChatSettingScene.GROUP && !groupID.isNullOrBlank()) {
+                listOf(
+                    ChatSettingCustomAction(
+                        title = actionContext.context.getString(R.string.xingdun_report_group),
+                        onClick = { context ->
+                            XingDunFeatureActivity.startReport(
+                                context = context,
+                                targetType = "team",
+                                targetID = groupID,
+                                displayName = actionContext.displayName ?: groupID,
+                                displayID = groupID
+                            )
+                        }
+                    )
+                )
+            } else {
+                emptyList()
+            }
+        }
 
         applyLanguageFromSettings()
 

@@ -10,7 +10,6 @@ import android.widget.ScrollView
 import android.widget.Toast
 import androidx.lifecycle.ViewModelProvider
 import io.trtc.tuikit.chat.uikit.R
-import io.trtc.tuikit.chat.uikit.components.chatsetting.permission.GroupMemberActionPolicy
 import io.trtc.tuikit.chat.uikit.components.chatsetting.permission.GroupPermission
 import io.trtc.tuikit.chat.uikit.components.chatsetting.permission.GroupPermissionManager
 import io.trtc.tuikit.chat.uikit.components.chatsetting.ui.groupchatsetting.GroupChatSettingActionSection
@@ -48,6 +47,8 @@ class GroupChatSettingView @JvmOverloads constructor(
 
     private var onSendMessageClick: (() -> Unit)? = null
     private var onGroupMemberClick: ((GroupMember) -> Unit)? = null
+    private var onGroupInfoClick: (() -> Unit)? = null
+    private var onGroupQRCodeClick: (() -> Unit)? = null
     private var onGroupDeleted: (() -> Unit)? = null
 
     private var viewModel: GroupChatSettingViewModel? = null
@@ -71,10 +72,14 @@ class GroupChatSettingView @JvmOverloads constructor(
         groupID: String,
         onSendMessageClick: (() -> Unit)? = null,
         onGroupMemberClick: ((GroupMember) -> Unit)? = null,
+        onGroupInfoClick: (() -> Unit)? = null,
+        onGroupQRCodeClick: (() -> Unit)? = null,
         onGroupDeleted: (() -> Unit)? = null
     ) {
         this.onSendMessageClick = onSendMessageClick
         this.onGroupMemberClick = onGroupMemberClick
+        this.onGroupInfoClick = onGroupInfoClick
+        this.onGroupQRCodeClick = onGroupQRCodeClick
         this.onGroupDeleted = onGroupDeleted
 
         val owner = context.findViewModelStoreOwner() ?: return
@@ -114,17 +119,16 @@ class GroupChatSettingView @JvmOverloads constructor(
         }
 
         headerSection = GroupChatSettingHeaderSection(context)
-        contentLayout.addView(headerSection.rootView)
-        contentLayout.addView(createSpacer(10f))
+        contentLayout.addView(headerSection.rootView, cardLayoutParams())
+        contentLayout.addView(createSpacer(12f))
 
         memberPreviewSection = GroupMemberPreviewSection(context).apply {
             onHeaderClick = { showMemberList() }
             onMemberClick = { member -> onGroupMemberClick?.invoke(member) }
             onAddClick = { showAddMemberDialog() }
-            onRemoveClick = { showRemoveMemberDialog() }
         }
-        contentLayout.addView(memberPreviewSection)
-        contentLayout.addView(createSpacer(10f))
+        contentLayout.addView(memberPreviewSection, cardLayoutParams())
+        contentLayout.addView(createSpacer(12f))
 
         rowsController = GroupChatSettingRowsController(
             context = context,
@@ -132,15 +136,16 @@ class GroupChatSettingView @JvmOverloads constructor(
             createSectionContainer = ::createSectionContainer,
             rebuildSection = ::rebuildSection,
             onOpenGroupManagement = ::showGroupManagement,
+            onOpenGroupQRCode = onGroupQRCodeClick,
             onShowJoinMethod = ::showJoinMethodActionSheet,
             onShowInviteMethod = ::showInviteMethodActionSheet,
             onShowChatBackgroundPicker = ::showChatBackgroundPicker
         )
         val rowSections = rowsController.buildSections()
         rowSections.forEachIndexed { index, section ->
-            contentLayout.addView(section)
+            contentLayout.addView(section, cardLayoutParams())
             if (index != rowSections.lastIndex) {
-                contentLayout.addView(createSpacer(10f))
+                contentLayout.addView(createSpacer(12f))
             }
         }
 
@@ -155,7 +160,7 @@ class GroupChatSettingView @JvmOverloads constructor(
             canPerformAction = ::canPerformAction,
             onGroupDeletedProvider = { onGroupDeleted }
         )
-        contentLayout.addView(actionSection)
+        contentLayout.addView(actionSection, cardLayoutParams())
 
         scrollView.addView(contentLayout)
         addView(scrollView)
@@ -165,8 +170,27 @@ class GroupChatSettingView @JvmOverloads constructor(
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = LAYOUT_DIRECTION_LOCALE
-            setBackgroundColor(getColors().bgColorOperate)
+            applyCardBackground(getColors())
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+        }
+    }
+
+    private fun View.applyCardBackground(colors: ColorTokens) {
+        background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(colors.bgColorOperate)
+            cornerRadius = dp2px(18f, resources.displayMetrics)
+        }
+        clipToOutline = true
+    }
+
+    private fun cardLayoutParams(): LinearLayout.LayoutParams {
+        val margin = dp2px(16f, resources.displayMetrics).toInt()
+        return LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            marginStart = margin
+            marginEnd = margin
         }
     }
 
@@ -289,14 +313,14 @@ class GroupChatSettingView @JvmOverloads constructor(
             state = state,
             onAvatarClick = ::showGroupAvatarPicker,
             onGroupNameConfirmed = vm::setGroupName,
-            onGroupIdClick = ::copyGroupID
+            onGroupIdClick = ::copyGroupID,
+            onGroupInfoClick = onGroupInfoClick,
         )
 
         memberPreviewSection.updateContent(
             members = state.groupMembers,
             memberCount = state.memberCount,
-            showAddButton = permissions.canAddMember,
-            showRemoveButton = permissions.canRemoveMember
+            showAddButton = permissions.canAddMember
         )
 
         rowsController.refresh(state, vm)
@@ -351,28 +375,6 @@ class GroupChatSettingView @JvmOverloads constructor(
             },
             onViewInfo = { member -> onGroupMemberClick?.invoke(member) }
         ).show()
-    }
-
-    private fun showRemoveMemberDialog() {
-        val vm = viewModel ?: return
-        val selfRole = vm.selfRole.value
-        vm.loadAllGroupMembers {
-            val candidates = GroupMemberActionPolicy.filterRemovableMembers(
-                currentUserRole = selfRole,
-                members = vm.memberList.value,
-                roleSelector = GroupMember::role
-            )
-            GroupMemberPickerDialog(
-                context = context,
-                title = context.getString(R.string.chat_setting_delete_member),
-                candidates = candidates,
-                onConfirm = { selectedMembers ->
-                    if (selectedMembers.isNotEmpty()) {
-                        vm.deleteMember(selectedMembers)
-                    }
-                }
-            ).show()
-        }
     }
 
     private fun showGroupAvatarPicker() {
@@ -479,9 +481,13 @@ class GroupChatSettingView @JvmOverloads constructor(
         }
         if (::rowsController.isInitialized) {
             rowsController.applyThemeColors(colors)
+            rowsController.settingsSection.applyCardBackground(colors)
+            rowsController.aliasSection.applyCardBackground(colors)
+            rowsController.switchSection.applyCardBackground(colors)
+            rowsController.backgroundSection.applyCardBackground(colors)
         }
         if (::actionSection.isInitialized) {
-            actionSection.setBackgroundColor(colors.bgColorOperate)
+            actionSection.applyCardBackground(colors)
         }
         themeTaggedViews.forEach { view ->
             when (view.tag) {

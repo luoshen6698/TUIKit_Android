@@ -22,6 +22,8 @@ import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.atomicxcore.api.contact.GetContactInfoCompletionHandler
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.common.Event
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupInfoActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupQRCodeActivity
 import io.trtc.tuikit.chat.app.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -115,7 +117,7 @@ class ChatSettingActivity : BaseActivity() {
                 }
             )
         } else if (!groupID.isNullOrEmpty()) {
-            tvTitle.text = getString(R.string.demo_chat_setting_group_info)
+            tvTitle.text = getString(R.string.demo_chat_setting_group_settings)
             val settingView = GroupChatSettingView(this)
             settingContainer.addView(settingView)
             settingView.setup(
@@ -128,6 +130,12 @@ class ChatSettingActivity : BaseActivity() {
                 },
                 onGroupMemberClick = { member ->
                     handleGroupMemberClick(member.userID)
+                },
+                onGroupInfoClick = {
+                    XingDunGroupInfoActivity.start(this, groupID)
+                },
+                onGroupQRCodeClick = {
+                    XingDunGroupQRCodeActivity.start(this, groupID)
                 },
                 onGroupDeleted = {
                     EventBus.post(Event.GroupDeleted(groupID))

@@ -157,6 +157,8 @@
     <string name="demo_chat_title">Chat</string>
     <string name="demo_chat_setting_contact_info">Contact Info</string>
     <string name="demo_chat_setting_group_info">Group Info</string>
+    <string name="demo_chat_setting_group_settings">Group Settings</string>
+    <string name="xingdun_report_group">Report this group</string>
     <string name="demo_message_input_hint">Type a message…</string>
     <string name="demo_chat_custom_message_menu_title">Custom Message</string>
     <string name="demo_chat_custom_message_content">Welcome to the Cloud Communication IM family!</string>
@@ -515,6 +517,19 @@
     <string name="xingdun_open_chat">Open chat</string>
     <string name="xingdun_open_group_chat">Open group chat</string>
     <string name="xingdun_group_announcement">Group announcement</string>
+    <string name="xingdun_group_qr_title">Group QR Code</string>
+    <string name="xingdun_group_qr_loading">Loading group QR code</string>
+    <string name="xingdun_group_qr_load_failed">Could not load group QR code</string>
+    <string name="xingdun_group_qr_load_failed_message">Check the network and IM connection, then try again.</string>
+    <string name="xingdun_group_qr_image_description">Group QR code</string>
+    <string name="xingdun_group_qr_number">Group number: %1$s</string>
+    <string name="xingdun_group_qr_save">Save image</string>
+    <string name="xingdun_group_qr_share">Share group QR code</string>
+    <string name="xingdun_group_qr_saved">Group QR code saved to Photos.</string>
+    <string name="xingdun_group_qr_save_failed">Could not save the group QR code. Try again later.</string>
+    <string name="xingdun_group_qr_share_failed">Could not share the group QR code. Try again later.</string>
+    <string name="xingdun_group_qr_permission_denied">Allow XingDun IM to access Photos in system settings before saving the group QR code.</string>
+    <string name="xingdun_group_qr_share_text">%1$s group chat: %2$s\nGroup number: %3$s</string>
     <string name="xingdun_save_announcement">Save announcement</string>
     <string name="xingdun_announcement_too_long">The announcement must be 100 characters or fewer.</string>
     <string name="xingdun_enable_mute_all">Enable mute all</string>
@@ -981,6 +996,28 @@
     <string name="xingdun_group_list_members">%1$d members</string>
     <string name="xingdun_group_list_refresh">Refresh groups</string>
     <string name="xingdun_group_list_muted">Muted</string>
+    <string name="xingdun_group_info_loading">Loading group information</string>
+    <string name="xingdun_group_info_load_failed">Unable to load group information</string>
+    <string name="xingdun_group_info_load_failed_message">Check your connection and try again.</string>
+    <string name="xingdun_group_info_retry">Reload</string>
+    <string name="xingdun_group_info_avatar">Group avatar</string>
+    <string name="xingdun_group_info_name">Group name</string>
+    <string name="xingdun_group_info_intro">Group description</string>
+    <string name="xingdun_group_info_intro_hint">Enter a group description</string>
+    <string name="xingdun_group_info_id">Group ID</string>
+    <string name="xingdun_group_info_id_unavailable">Unavailable</string>
+    <string name="xingdun_group_info_id_copied">Group ID copied</string>
+    <string name="xingdun_group_info_byte_count">%1$d/%2$d UTF-8 bytes</string>
+    <string name="xingdun_group_info_intro_too_long">The group description cannot exceed 240 UTF-8 bytes.</string>
+    <string name="xingdun_group_info_save">Save</string>
+    <string name="xingdun_group_info_intro_updated">Group description updated</string>
+    <string name="xingdun_group_info_avatar_updated">Group avatar updated</string>
+    <string name="xingdun_group_info_choose_photo">Choose from Photos</string>
+    <string name="xingdun_group_info_default_avatars">Default avatars</string>
+    <string name="xingdun_group_info_default_avatar_number">Default group avatar %1$d</string>
+    <string name="xingdun_group_info_avatar_required">Choose an avatar first</string>
+    <string name="xingdun_group_info_preview_name">Project Collaboration Group</string>
+    <string name="xingdun_group_info_preview_intro">Secure enterprise collaboration and project communication.</string>
     <string-array name="xingdun_report_reason_values" translatable="false">
         <item>spam</item><item>harassment</item><item>fraud</item><item>violence</item><item>porn</item><item>other</item>
     </string-array>

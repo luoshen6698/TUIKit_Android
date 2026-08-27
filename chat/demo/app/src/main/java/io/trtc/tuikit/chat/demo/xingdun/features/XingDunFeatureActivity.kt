@@ -56,7 +56,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.core.os.LocaleListCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -6042,44 +6041,12 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private suspend fun saveBitmapToPictures(bitmap: Bitmap, name: String) = withContext(Dispatchers.IO) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val values = ContentValues().apply {
-                put(MediaStore.Images.Media.DISPLAY_NAME, name)
-                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/XingDun")
-                put(MediaStore.Images.Media.IS_PENDING, 1)
-            }
-            val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                ?: error(getString(R.string.xingdun_personal_qr_save_failed))
-            runCatching {
-                contentResolver.openOutputStream(uri)?.use { output ->
-                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
-                } ?: error(getString(R.string.xingdun_personal_qr_save_failed))
-                values.clear()
-                values.put(MediaStore.Images.Media.IS_PENDING, 0)
-                contentResolver.update(uri, values, null, null)
-            }.getOrElse { error ->
-                contentResolver.delete(uri, null, null)
-                throw error
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-            val target = File(directory, "XingDun/$name")
-            val parent = requireNotNull(target.parentFile)
-            check(parent.exists() || parent.mkdirs())
-            FileOutputStream(target).use { output -> check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) }
-            @Suppress("DEPRECATION")
-            sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(target)))
-        }
+        XingDunImageDelivery.saveToPictures(this@XingDunFeatureActivity, bitmap, name)
     }
 
     private fun sharePersonalQRCode(artifact: XingDunPersonalQRCodeArtifact) {
         runCatching {
-            val directory = File(cacheDir, "xingdun-share").apply { mkdirs() }
-            val file = File(directory, "personal-qr.png")
-            FileOutputStream(file).use { output -> check(artifact.image.compress(Bitmap.CompressFormat.PNG, 100, output)) }
-            val uri = FileProvider.getUriForFile(this, "${BuildConfig.APPLICATION_ID}.xingdun.files", file)
+            val uri = XingDunImageDelivery.shareUri(this, artifact.image, "personal-qr.png")
             startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                 type = "image/png"
                 putExtra(Intent.EXTRA_STREAM, uri)

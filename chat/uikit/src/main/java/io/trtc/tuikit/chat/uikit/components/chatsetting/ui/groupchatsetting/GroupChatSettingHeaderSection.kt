@@ -1,9 +1,12 @@
 package io.trtc.tuikit.chat.uikit.components.chatsetting.ui.groupchatsetting
 import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
 import android.view.Gravity
 import android.widget.LinearLayout
+import android.widget.ImageView
 import android.widget.TextView
+import android.view.View
 import io.trtc.tuikit.chat.uikit.R
 import io.trtc.tuikit.chat.uikit.components.chatsetting.ui.TextInputDialog
 import io.trtc.tuikit.atomicx.common.util.ScreenUtil.dp2px
@@ -19,6 +22,7 @@ internal class GroupChatSettingHeaderSection(
     private val avatarView: Avatar
     private val nameView: TextView
     private val idView: TextView
+    private val disclosureView: ImageView
 
     init {
         val dm = context.resources.displayMetrics
@@ -72,13 +76,23 @@ internal class GroupChatSettingHeaderSection(
         textInfoLayout.addView(idView)
 
         rootView.addView(textInfoLayout)
+
+        disclosureView = ImageView(context).apply {
+            setImageResource(R.drawable.uikit_ic_arrow_right)
+            visibility = View.GONE
+        }
+        rootView.addView(disclosureView, LinearLayout.LayoutParams(
+            dp2px(18f, dm).toInt(),
+            dp2px(24f, dm).toInt(),
+        ))
     }
 
     fun update(
         state: GroupChatSettingUiState,
         onAvatarClick: () -> Unit,
         onGroupNameConfirmed: (String) -> Unit,
-        onGroupIdClick: () -> Unit
+        onGroupIdClick: () -> Unit,
+        onGroupInfoClick: (() -> Unit)? = null,
     ) {
         val permissions = state.permissions
         val headerDisplayName = state.headerDisplayName
@@ -91,13 +105,24 @@ internal class GroupChatSettingHeaderSection(
             )
         )
 
-        if (permissions.canEditGroupAvatar) {
+        rootView.isClickable = onGroupInfoClick != null
+        rootView.isFocusable = onGroupInfoClick != null
+        rootView.setOnClickListener(onGroupInfoClick?.let { action -> android.view.View.OnClickListener { action() } })
+        disclosureView.visibility = if (onGroupInfoClick != null) View.VISIBLE else View.GONE
+
+        if (onGroupInfoClick != null) {
+            avatarView.setOnAvatarClickListener(null)
+            nameView.isClickable = false
+            nameView.setOnClickListener(null)
+            idView.isClickable = false
+            idView.setOnClickListener(null)
+        } else if (permissions.canEditGroupAvatar) {
             avatarView.setOnAvatarClickListener { onAvatarClick() }
         } else {
             avatarView.setOnAvatarClickListener(null)
         }
 
-        if (permissions.canEditGroupName) {
+        if (onGroupInfoClick == null && permissions.canEditGroupName) {
             nameView.isClickable = true
             nameView.setOnClickListener {
                 TextInputDialog(
@@ -116,14 +141,20 @@ internal class GroupChatSettingHeaderSection(
             nameView.setOnClickListener(null)
         }
 
-        idView.isClickable = true
-        idView.setOnClickListener { onGroupIdClick() }
+        if (onGroupInfoClick == null) {
+            idView.isClickable = true
+            idView.setOnClickListener { onGroupIdClick() }
+        }
     }
 
     fun applyThemeColors(colors: ColorTokens) {
-        rootView.setBackgroundColor(colors.bgColorOperate)
+        rootView.background = GradientDrawable().apply {
+            setColor(colors.bgColorOperate)
+            cornerRadius = dp2px(18f, context.resources.displayMetrics)
+        }
         nameView.setTextColor(colors.textColorPrimary)
         idView.setTextColor(colors.textColorTertiary)
+        disclosureView.imageTintList = android.content.res.ColorStateList.valueOf(colors.textColorTertiary)
     }
 
     private fun getColors(): ColorTokens {

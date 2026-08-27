@@ -17,7 +17,8 @@ data class ChatSettingActionContext(
     val context: Context,
     val scene: ChatSettingScene,
     val userID: String?,
-    val groupID: String?
+    val groupID: String?,
+    val displayName: String? = null
 )
 
 data class ChatSettingCustomAction(

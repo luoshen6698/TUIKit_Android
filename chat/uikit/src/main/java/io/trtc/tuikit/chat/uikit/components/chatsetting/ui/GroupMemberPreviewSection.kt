@@ -33,15 +33,12 @@ internal class GroupMemberPreviewSection @JvmOverloads constructor(
     private val row2: LinearLayout
 
     private var currentMembers: List<GroupMember> = emptyList()
-    private var currentMemberCount: Int = 0
     private var showAddButton: Boolean = false
-    private var showRemoveButton: Boolean = false
     private var viewScope: CoroutineScope? = null
 
     var onHeaderClick: (() -> Unit)? = null
     var onMemberClick: ((GroupMember) -> Unit)? = null
     var onAddClick: (() -> Unit)? = null
-    var onRemoveClick: (() -> Unit)? = null
 
     init {
         orientation = VERTICAL
@@ -84,14 +81,12 @@ internal class GroupMemberPreviewSection @JvmOverloads constructor(
     fun updateContent(
         members: List<GroupMember>,
         memberCount: Int,
-        showAddButton: Boolean,
-        showRemoveButton: Boolean
+        showAddButton: Boolean
     ) {
         currentMembers = members
-        currentMemberCount = memberCount
         this.showAddButton = showAddButton
-        this.showRemoveButton = showRemoveButton
-        headerRow.setValue(memberCount.toString())
+        headerRow.setTitle(context.getString(R.string.chat_setting_group_members_count, memberCount))
+        headerRow.setValue("")
         renderPreviewItems()
     }
 
@@ -110,18 +105,12 @@ internal class GroupMemberPreviewSection @JvmOverloads constructor(
         row1.removeAllViews()
         row2.removeAllViews()
 
-        val reserved = (if (showAddButton) 1 else 0) + (if (showRemoveButton) 1 else 0)
-        val maxMemberSlots = (MAX_TOTAL_COUNT - reserved).coerceAtLeast(0)
-
         val items = mutableListOf<View>()
-        currentMembers.take(maxMemberSlots).forEach { member ->
-            items.add(createMemberItem(member))
-        }
         if (showAddButton) {
-            items.add(createActionItem(ACTION_ADD))
+            items.add(createInviteItem())
         }
-        if (showRemoveButton) {
-            items.add(createActionItem(ACTION_REMOVE))
+        currentMembers.take(MEMBER_PREVIEW_COUNT).forEach { member ->
+            items.add(createMemberItem(member))
         }
 
         items.forEachIndexed { index, item ->
@@ -220,13 +209,13 @@ internal class GroupMemberPreviewSection @JvmOverloads constructor(
         }
     }
 
-    private fun createActionItem(actionType: ActionType): View {
+    private fun createInviteItem(): View {
         val colors = getColors()
         val dm = resources.displayMetrics
         val itemWidth = dp2px(40f, dm).toInt()
         val iconSize = dp2px(40f, dm).toInt()
         val iconCornerRadius = dp2px(4f, dm)
-        val symbol = if (actionType == ACTION_ADD) "+" else "−"
+        val symbol = "+"
 
         return LinearLayout(context).apply {
             orientation = VERTICAL
@@ -236,11 +225,7 @@ internal class GroupMemberPreviewSection @JvmOverloads constructor(
             isClickable = true
             isFocusable = true
             setOnClickListener {
-                if (actionType == ACTION_ADD) {
-                    onAddClick?.invoke()
-                } else {
-                    onRemoveClick?.invoke()
-                }
+                onAddClick?.invoke()
             }
 
             addView(
@@ -265,22 +250,29 @@ internal class GroupMemberPreviewSection @JvmOverloads constructor(
                 }
             )
 
-            addView(
-                View(context).apply {
-                    layoutParams = LayoutParams(
-                        LayoutParams.MATCH_PARENT,
-                        dp2px(20f, dm).toInt()
-                    )
-                }
-            )
+            addView(TextView(context).apply {
+                text = context.getString(R.string.chat_setting_invite)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                setTextColor(colors.textColorSecondary)
+                gravity = Gravity.CENTER
+                maxLines = 1
+                layoutParams = LayoutParams(
+                    LayoutParams.MATCH_PARENT,
+                    LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp2px(3f, dm).toInt() }
+            })
         }
     }
 
     private fun applyThemeColors(colors: ColorTokens) {
-        setBackgroundColor(colors.bgColorOperate)
-        gridContainer.setBackgroundColor(colors.bgColorOperate)
-        row1.setBackgroundColor(colors.bgColorOperate)
-        row2.setBackgroundColor(colors.bgColorOperate)
+        background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(colors.bgColorOperate)
+            cornerRadius = dp2px(18f, resources.displayMetrics)
+        }
+        clipToOutline = true
+        gridContainer.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        row1.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        row2.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         renderPreviewItems()
     }
 
@@ -304,16 +296,8 @@ internal class GroupMemberPreviewSection @JvmOverloads constructor(
         return ThemeStore.shared(context).themeState.value.currentTheme.tokens.color
     }
 
-    private enum class ActionType {
-        ADD,
-        REMOVE
-    }
-
     private companion object {
-        const val COLUMNS_PER_ROW = 6
-        const val MAX_ROWS = 2
-        const val MAX_TOTAL_COUNT = COLUMNS_PER_ROW * MAX_ROWS
-        val ACTION_ADD = ActionType.ADD
-        val ACTION_REMOVE = ActionType.REMOVE
+        const val COLUMNS_PER_ROW = 5
+        const val MEMBER_PREVIEW_COUNT = 4
     }
 }

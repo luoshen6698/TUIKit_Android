@@ -15,6 +15,7 @@
     <string name="chat_setting_delete_contact">Delete Contact</string>
     <string name="chat_setting_delete_contact_tips">Confirm to delete this contact</string>
     <string name="chat_setting_group_notice">Group Announcement</string>
+    <string name="chat_setting_group_qr_code">Group QR Code</string>
     <string name="chat_setting_no_group_notice">No group announcement</string>
     <string name="chat_setting_group_manage">Manage</string>
     <string name="chat_setting_group_management">Group Management</string>
@@ -32,6 +33,8 @@
     <string name="chat_setting_not_set">Not Set</string>
     <string name="chat_setting_modify_group_name_card">Edit Group Name card</string>
     <string name="chat_setting_group_members">Group Members</string>
+    <string name="chat_setting_group_members_count">Members (%1$d)</string>
+    <string name="chat_setting_invite">Invite</string>
     <string name="chat_setting_add_group_members">Add Group Members</string>
     <string name="chat_setting_member_type_administrator">Administrator</string>
     <string name="chat_setting_member_type_owner">Group Owner</string>

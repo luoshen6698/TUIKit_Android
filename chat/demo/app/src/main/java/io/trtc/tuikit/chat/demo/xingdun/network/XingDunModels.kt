@@ -146,6 +146,34 @@ data class XingDunGroupMetadata(
     val isCustomerService: Boolean = false
 )
 
+/** Tenant-scoped group details returned by `/team/detail`. */
+data class XingDunGroupDetail(
+    val groupId: String = "",
+    val displayGroupId: String? = null,
+    val name: String = "",
+    val avatar: String? = null,
+    val announcement: String? = null,
+    val intro: String? = null,
+    val memberCount: Int = 0,
+    val currentUserRole: String = "member",
+    val updateTeamMode: Int = 2,
+    val currentUserIsAssignedCs: Boolean = false
+) {
+    val publicGroupId: String?
+        get() = displayGroupId?.trim()?.takeIf { value -> value.isNotEmpty() && value.all(Char::isDigit) }
+            ?: groupId.trim().takeIf { value -> value.isNotEmpty() && value.all(Char::isDigit) }
+
+    val canEditGroupInfo: Boolean
+        get() = currentUserIsAssignedCs ||
+            currentUserRole == "owner" ||
+            currentUserRole == "administrator" ||
+            updateTeamMode == MODE_ALL
+
+    private companion object {
+        const val MODE_ALL = 1
+    }
+}
+
 data class XingDunLoginRequest(
     val username: String,
     val password: String,

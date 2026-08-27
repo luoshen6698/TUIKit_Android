@@ -15,6 +15,7 @@ internal class GroupChatSettingRowsController(
     private val createSectionContainer: () -> LinearLayout,
     private val rebuildSection: (LinearLayout, List<View>) -> Unit,
     private val onOpenGroupManagement: (GroupChatSettingViewModel) -> Unit,
+    private val onOpenGroupQRCode: (() -> Unit)?,
     private val onShowJoinMethod: (GroupChatSettingViewModel) -> Unit,
     private val onShowInviteMethod: (GroupChatSettingViewModel) -> Unit,
     private val onShowChatBackgroundPicker: (GroupChatSettingViewModel) -> Unit
@@ -29,6 +30,7 @@ internal class GroupChatSettingRowsController(
         private set
 
     private lateinit var groupNoticeRow: SettingRowNavigate
+    private lateinit var groupQRCodeRow: SettingRowNavigate
     private lateinit var groupTypeRow: SettingRowNavigate
     private lateinit var joinMethodRow: SettingRowNavigate
     private lateinit var inviteMethodRow: SettingRowNavigate
@@ -42,6 +44,12 @@ internal class GroupChatSettingRowsController(
         settingsSection = createSectionContainer()
         groupNoticeRow = SettingRowNavigate(context).apply {
             setTitle(context.getString(R.string.chat_setting_group_notice))
+        }
+        groupQRCodeRow = SettingRowNavigate(context).apply {
+            setTitle(context.getString(R.string.chat_setting_group_qr_code))
+            setShowArrow(true)
+            visibility = if (onOpenGroupQRCode == null) View.GONE else View.VISIBLE
+            setOnClickListener { onOpenGroupQRCode?.invoke() }
         }
         groupManageRow = SettingRowNavigate(context).apply {
             setTitle(context.getString(R.string.chat_setting_group_management))
@@ -119,6 +127,12 @@ internal class GroupChatSettingRowsController(
             groupNoticeRow.isClickable = false
             groupNoticeRow.setOnClickListener(null)
         }
+
+        groupQRCodeRow.visibility = if (onOpenGroupQRCode == null) View.GONE else View.VISIBLE
+        groupQRCodeRow.setShowArrow(true)
+        groupQRCodeRow.setCustomAccessory(null)
+        groupQRCodeRow.isClickable = onOpenGroupQRCode != null
+        groupQRCodeRow.setOnClickListener { onOpenGroupQRCode?.invoke() }
 
         groupManageRow.visibility = if (permissions.canOpenGroupManagement) View.VISIBLE else View.GONE
         if (permissions.canOpenGroupManagement) {
@@ -228,7 +242,7 @@ internal class GroupChatSettingRowsController(
     private fun rebuildSettingsSection() {
         rebuildSection(
             settingsSection,
-            listOf(groupNoticeRow, groupManageRow, groupTypeRow, joinMethodRow, inviteMethodRow)
+            listOf(groupNoticeRow, groupQRCodeRow, groupManageRow, groupTypeRow, joinMethodRow, inviteMethodRow)
         )
     }
 }
