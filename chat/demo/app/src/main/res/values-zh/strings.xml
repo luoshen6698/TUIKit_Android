@@ -470,6 +470,7 @@
     <string name="xingdun_personal_qr_share_text">%1$s个人二维码\n昵称：%2$s\n账号：%3$s</string>
     <string name="xingdun_personal_qr_image_description">个人二维码卡片，长按可分享</string>
     <string name="xingdun_personal_qr_save_image">保存图片</string>
+    <string name="xingdun_personal_qr_saving">正在保存</string>
     <string name="xingdun_personal_qr_saved">个人二维码已保存到相册。</string>
     <string name="xingdun_personal_qr_save_failed">保存到相册失败，请稍后重试。</string>
     <string name="xingdun_personal_qr_share_failed">个人二维码分享失败。</string>

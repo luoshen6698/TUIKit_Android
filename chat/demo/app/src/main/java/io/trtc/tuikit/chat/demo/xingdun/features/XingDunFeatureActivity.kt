@@ -159,6 +159,8 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var attachmentSelectionHandler: ((List<XingDunAttachment>) -> Unit)? = null
     private var pendingInvitePoster: Bitmap? = null
     private var pendingPersonalQRCode: XingDunPersonalQRCodeArtifact? = null
+    private var personalQRCodeSaving = false
+    private var personalQRCodeSaveButton: Button? = null
     private var legalWebView: WebView? = null
     private var reportTargetFilter: String? = null
     private var reportStatusFilter: Int? = null
@@ -283,8 +285,12 @@ open class XingDunFeatureActivity : BaseActivity() {
     private val personalQRCodeStoragePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val artifact = pendingPersonalQRCode
         pendingPersonalQRCode = null
-        if (granted && artifact != null) savePersonalQRCode(artifact)
-        else showPersonalQRCodeSettingsPrompt()
+        if (granted && artifact != null) {
+            performPersonalQRCodeSave(artifact)
+        } else {
+            setPersonalQRCodeSaving(false)
+            showPersonalQRCodeSettingsPrompt()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -6072,11 +6078,20 @@ open class XingDunFeatureActivity : BaseActivity() {
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
-                val profile = runCatching {
+                val profileResult = runCatching {
                     XingDunSessionManager.apiClient().get<JsonObject>(
                         session, "user/profile", emptyMap(), JsonObject::class.java
                     )
-                }.getOrDefault(JsonObject())
+                }
+                val profile = profileResult.getOrDefault(JsonObject())
+                if (profileResult.isSuccess) {
+                    profile.string("tim_user_id")?.let { returnedUserID ->
+                        check(returnedUserID == session.timUserId)
+                    }
+                    profile.string("company_code")?.let { returnedCompanyCode ->
+                        check(returnedCompanyCode.equals(session.companyCode, ignoreCase = true))
+                    }
+                }
                 val displayName = profile.string("nickname") ?: session.nickname.ifBlank { session.timUserId }
                 val accountID = profile.string("custom_id") ?: session.username ?: session.timUserId
                 val avatarURL = profile.string("avatar")
@@ -6140,6 +6155,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun renderPersonalQRCode(artifact: XingDunPersonalQRCodeArtifact) {
         content.removeAllViews()
         content.gravity = Gravity.CENTER_HORIZONTAL
+        setPersonalQRCodeSaving(false)
         val card = ImageView(this).apply {
             setImageBitmap(artifact.image)
             adjustViewBounds = true
@@ -6148,7 +6164,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             background = roundedDrawable(Color.WHITE, 16f)
             clipToOutline = true
             setOnLongClickListener {
-                sharePersonalQRCode(artifact)
+                showPersonalQRCodeActions(this, artifact)
                 true
             }
         }
@@ -6157,12 +6173,14 @@ open class XingDunFeatureActivity : BaseActivity() {
             marginStart = 30.dp()
             marginEnd = 30.dp()
         })
-        content.addView(actionButton(R.string.xingdun_personal_qr_save_image) {
+        val saveButton = actionButton(R.string.xingdun_personal_qr_save_image) {
             savePersonalQRCode(artifact)
         }.apply {
             setTextColor(Color.WHITE)
             backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF28B7A2.toInt())
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()).apply {
+        }
+        personalQRCodeSaveButton = saveButton
+        content.addView(saveButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()).apply {
             topMargin = 16.dp()
             marginStart = 30.dp()
             marginEnd = 30.dp()
@@ -6170,6 +6188,8 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showPersonalQRCodeUnavailable() {
+        personalQRCodeSaveButton = null
+        personalQRCodeSaving = false
         content.removeAllViews()
         content.gravity = Gravity.CENTER
         content.addView(TextView(this).apply {
@@ -6188,6 +6208,8 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun savePersonalQRCode(artifact: XingDunPersonalQRCodeArtifact) {
+        if (personalQRCodeSaving) return
+        setPersonalQRCodeSaving(true)
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -6195,17 +6217,46 @@ open class XingDunFeatureActivity : BaseActivity() {
             personalQRCodeStoragePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             return
         }
+        performPersonalQRCodeSave(artifact)
+    }
+
+    private fun performPersonalQRCodeSave(artifact: XingDunPersonalQRCodeArtifact) {
         lifecycleScope.launch {
             setBusy(true)
             runCatching {
                 saveBitmapToPictures(artifact.image, "xingdun_personal_qr_${System.currentTimeMillis()}.png")
             }.onSuccess {
+                setPersonalQRCodeSaving(false)
                 setBusy(false)
                 status.setText(R.string.xingdun_personal_qr_saved)
             }.onFailure {
+                setPersonalQRCodeSaving(false)
                 setBusy(false)
                 status.setText(R.string.xingdun_personal_qr_save_failed)
             }
+        }
+    }
+
+    private fun setPersonalQRCodeSaving(saving: Boolean) {
+        personalQRCodeSaving = saving
+        personalQRCodeSaveButton?.apply {
+            isEnabled = !saving
+            setText(if (saving) R.string.xingdun_personal_qr_saving else R.string.xingdun_personal_qr_save_image)
+            alpha = if (saving) 0.48f else 1f
+        }
+    }
+
+    private fun showPersonalQRCodeActions(anchor: View, artifact: XingDunPersonalQRCodeArtifact) {
+        PopupMenu(this, anchor).apply {
+            menu.add(getString(R.string.xingdun_personal_qr_save_image)).setOnMenuItemClickListener {
+                savePersonalQRCode(artifact)
+                true
+            }
+            menu.add(getString(R.string.xingdun_share)).setOnMenuItemClickListener {
+                sharePersonalQRCode(artifact)
+                true
+            }
+            show()
         }
     }
 
@@ -6214,6 +6265,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun sharePersonalQRCode(artifact: XingDunPersonalQRCodeArtifact) {
+        if (personalQRCodeSaving) return
         runCatching {
             val uri = XingDunImageDelivery.shareUri(this, artifact.image, "personal-qr.png")
             startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {

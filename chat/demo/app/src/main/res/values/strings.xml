@@ -476,6 +476,7 @@
     <string name="xingdun_personal_qr_share_text">%1$s personal QR code\nNickname: %2$s\nAccount: %3$s</string>
     <string name="xingdun_personal_qr_image_description">Personal QR card. Long press to share.</string>
     <string name="xingdun_personal_qr_save_image">Save image</string>
+    <string name="xingdun_personal_qr_saving">Saving</string>
     <string name="xingdun_personal_qr_saved">Personal QR code saved to Photos.</string>
     <string name="xingdun_personal_qr_save_failed">Could not save the image. Try again later.</string>
     <string name="xingdun_personal_qr_share_failed">Could not share the personal QR code.</string>
