@@ -847,6 +847,7 @@
     <string name="xingdun_invite_poster_unavailable">Poster unavailable</string>
     <string name="xingdun_invite_poster_unavailable_detail">Check your network and reload the invitation details.</string>
     <string name="xingdun_save_invite_poster">Save poster</string>
+    <string name="xingdun_invite_poster_saving">Saving</string>
     <string name="xingdun_invite_poster_saved">Invitation poster saved to Pictures.</string>
     <string name="xingdun_invite_poster_save_failed">Could not save the invitation poster. Please try again.</string>
     <string name="xingdun_invite_poster_permission_denied">Unable to save. Allow this app to access photos in system settings.</string>

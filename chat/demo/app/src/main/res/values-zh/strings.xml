@@ -841,6 +841,7 @@
     <string name="xingdun_invite_poster_unavailable">海报不可用</string>
     <string name="xingdun_invite_poster_unavailable_detail">请检查网络后重新加载邀请信息。</string>
     <string name="xingdun_save_invite_poster">保存海报</string>
+    <string name="xingdun_invite_poster_saving">正在保存</string>
     <string name="xingdun_invite_poster_saved">邀请海报已保存到相册。</string>
     <string name="xingdun_invite_poster_save_failed">邀请海报保存失败，请稍后重试。</string>
     <string name="xingdun_invite_poster_permission_denied">无法保存，请在系统设置中允许本应用访问相册。</string>

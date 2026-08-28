@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.TimePickerDialog
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -22,8 +21,6 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.provider.MediaStore
 import android.provider.Settings
 import android.text.InputType
 import android.text.format.Formatter
@@ -158,6 +155,9 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
     private var attachmentSelectionHandler: ((List<XingDunAttachment>) -> Unit)? = null
     private var pendingInvitePoster: Bitmap? = null
+    private var invitePosterSaving = false
+    private var invitePosterSaveButton: Button? = null
+    private var invitePosterCopyButton: Button? = null
     private var pendingPersonalQRCode: XingDunPersonalQRCodeArtifact? = null
     private var personalQRCodeSaving = false
     private var personalQRCodeSaveButton: Button? = null
@@ -278,8 +278,12 @@ open class XingDunFeatureActivity : BaseActivity() {
     private val invitePosterStoragePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val poster = pendingInvitePoster
         pendingInvitePoster = null
-        if (granted && poster != null) saveInvitePoster(poster)
-        else showInvitePosterSettingsPrompt()
+        if (granted && poster != null) {
+            performInvitePosterSave(poster)
+        } else {
+            setInvitePosterSaving(false)
+            showInvitePosterSettingsPrompt()
+        }
     }
 
     private val personalQRCodeStoragePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -1962,8 +1966,24 @@ open class XingDunFeatureActivity : BaseActivity() {
                 val response = XingDunSessionManager.apiClient().get<JsonObject>(
                     session, "share/inviteInfo", emptyMap(), JsonObject::class.java
                 )
-                validateInviteInformation(response, session.companyCode) to session
-            }.onSuccess { (invitation, session) ->
+                val invitation = validateInviteInformation(response, session.companyCode)
+                val profileResult = runCatching {
+                    XingDunSessionManager.apiClient().get<JsonObject>(
+                        session, "user/profile", emptyMap(), JsonObject::class.java
+                    )
+                }
+                val profile = profileResult.getOrDefault(JsonObject())
+                if (profileResult.isSuccess) {
+                    profile.string("tim_user_id")?.let { returnedUserID ->
+                        check(returnedUserID == session.timUserId)
+                    }
+                    profile.string("company_code")?.let { returnedCompanyCode ->
+                        check(returnedCompanyCode.equals(session.companyCode, ignoreCase = true))
+                    }
+                }
+                val nickname = profile.string("nickname") ?: session.nickname
+                Triple(invitation, session, nickname)
+            }.onSuccess { (invitation, session, nickname) ->
                 setBusy(false)
                 val qrBitmap = BarcodeEncoder().encodeBitmap(
                     invitation.qrPayload,
@@ -1974,7 +1994,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 val poster = createInvitePoster(
                     qrBitmap = qrBitmap,
                     inviteCode = invitation.inviteCode,
-                    nickname = session.nickname,
+                    nickname = nickname,
                     brandName = session.companyName.ifBlank { getString(R.string.xingdun_platform_brand_name) },
                 )
                 renderInvitePoster(poster, invitation.shareUrl)
@@ -2037,6 +2057,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun renderInvitePoster(poster: Bitmap, shareUrl: String) {
         content.removeAllViews()
         content.gravity = Gravity.CENTER_HORIZONTAL
+        setInvitePosterSaving(false)
         content.addView(ImageView(this).apply {
             setImageBitmap(poster)
             adjustViewBounds = true
@@ -2049,14 +2070,19 @@ open class XingDunFeatureActivity : BaseActivity() {
             marginStart = 30.dp()
             marginEnd = 30.dp()
         })
-        content.addView(invitePosterButton(R.string.xingdun_save_invite_poster, primary = true) {
+        val saveButton = invitePosterButton(R.string.xingdun_save_invite_poster, primary = true) {
             saveInvitePoster(poster)
-        })
-        content.addView(invitePosterButton(R.string.xingdun_copy_share_link, primary = false) {
+        }
+        val copyButton = invitePosterButton(R.string.xingdun_copy_share_link, primary = false) {
+            if (invitePosterSaving) return@invitePosterButton
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.xingdun_copy_share_link), shareUrl))
             showInvitePosterFeedback(R.string.xingdun_share_link_copied)
-        })
+        }
+        invitePosterSaveButton = saveButton
+        invitePosterCopyButton = copyButton
+        content.addView(saveButton)
+        content.addView(copyButton)
     }
 
     private fun invitePosterButton(label: Int, primary: Boolean, action: () -> Unit): Button =
@@ -2071,6 +2097,9 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
 
     private fun showInvitePosterUnavailable() {
+        invitePosterSaveButton = null
+        invitePosterCopyButton = null
+        invitePosterSaving = false
         content.removeAllViews()
         content.gravity = Gravity.CENTER
         content.addView(TextView(this).apply {
@@ -2150,6 +2179,8 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun saveInvitePoster(poster: Bitmap) {
+        if (invitePosterSaving) return
+        setInvitePosterSaving(true)
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -2157,51 +2188,40 @@ open class XingDunFeatureActivity : BaseActivity() {
             invitePosterStoragePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             return
         }
+        performInvitePosterSave(poster)
+    }
+
+    private fun performInvitePosterSave(poster: Bitmap) {
         lifecycleScope.launch {
             setBusy(true)
             runCatching {
-                withContext(Dispatchers.IO) {
-                    val name = "xingdun_invite_${System.currentTimeMillis()}.png"
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        val values = ContentValues().apply {
-                            put(MediaStore.Images.Media.DISPLAY_NAME, name)
-                            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                            put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/XingDun")
-                            put(MediaStore.Images.Media.IS_PENDING, 1)
-                        }
-                        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                            ?: error(getString(R.string.xingdun_invite_poster_save_failed))
-                        runCatching {
-                            contentResolver.openOutputStream(uri)?.use { output ->
-                                check(poster.compress(Bitmap.CompressFormat.PNG, 100, output))
-                            } ?: error(getString(R.string.xingdun_invite_poster_save_failed))
-                            values.clear()
-                            values.put(MediaStore.Images.Media.IS_PENDING, 0)
-                            contentResolver.update(uri, values, null, null)
-                        }.getOrElse { error ->
-                            contentResolver.delete(uri, null, null)
-                            throw error
-                        }
-                    } else {
-                        @Suppress("DEPRECATION")
-                        val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                        val target = File(directory, "XingDun/$name")
-                        val parent = requireNotNull(target.parentFile)
-                        check(parent.exists() || parent.mkdirs())
-                        FileOutputStream(target).use { output ->
-                            check(poster.compress(Bitmap.CompressFormat.PNG, 100, output))
-                        }
-                        @Suppress("DEPRECATION")
-                        sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(target)))
-                    }
-                }
+                XingDunImageDelivery.saveToPictures(
+                    this@XingDunFeatureActivity,
+                    poster,
+                    "xingdun_invite_${System.currentTimeMillis()}.png",
+                )
             }.onSuccess {
+                setInvitePosterSaving(false)
                 setBusy(false)
                 showInvitePosterFeedback(R.string.xingdun_invite_poster_saved)
             }.onFailure {
+                setInvitePosterSaving(false)
                 setBusy(false)
                 showInvitePosterFeedback(R.string.xingdun_invite_poster_save_failed)
             }
+        }
+    }
+
+    private fun setInvitePosterSaving(saving: Boolean) {
+        invitePosterSaving = saving
+        invitePosterSaveButton?.apply {
+            isEnabled = !saving
+            setText(if (saving) R.string.xingdun_invite_poster_saving else R.string.xingdun_save_invite_poster)
+            alpha = if (saving) 0.48f else 1f
+        }
+        invitePosterCopyButton?.apply {
+            isEnabled = !saving
+            alpha = if (saving) 0.48f else 1f
         }
     }
 
