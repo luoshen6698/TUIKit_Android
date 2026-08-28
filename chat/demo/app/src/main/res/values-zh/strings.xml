@@ -1224,4 +1224,40 @@
     <string-array name="xingdun_feedback_type_labels">
         <item>功能异常</item><item>产品建议</item><item>体验问题</item><item>账号问题</item><item>其他反馈</item>
     </string-array>
+    <string name="xingdun_new_friends">新的朋友</string>
+    <string name="xingdun_my_groups">我的群组</string>
+    <string name="xingdun_verification_messages_title">验证消息</string>
+    <string name="xingdun_friend">好友</string>
+    <string name="xingdun_group">群组</string>
+    <string name="xingdun_clear">清空</string>
+    <string name="xingdun_accept">同意</string>
+    <string name="xingdun_reject">拒绝</string>
+    <string name="xingdun_loading_friend_applications">正在加载好友申请</string>
+    <string name="xingdun_loading_group_applications">正在加载群申请</string>
+    <string name="xingdun_verification_load_failed">申请记录加载失败</string>
+    <string name="xingdun_no_friend_applications">暂无申请记录</string>
+    <string name="xingdun_no_friend_applications_message">新的好友申请会显示在这里。</string>
+    <string name="xingdun_no_group_applications">暂无群申请或邀请</string>
+    <string name="xingdun_no_group_applications_message">新的入群申请或群邀请将在这里显示。</string>
+    <string name="xingdun_confirm_accept_friend">同意这条好友申请？</string>
+    <string name="xingdun_confirm_reject_friend">拒绝这条好友申请？</string>
+    <string name="xingdun_confirm_accept_group">同意这条群申请或邀请？</string>
+    <string name="xingdun_confirm_reject_group">拒绝这条群申请或邀请？</string>
+    <string name="xingdun_confirm_clear_applications">清空全部已处理的好友申请记录？</string>
+    <string name="xingdun_deleted_user">已注销用户</string>
+    <string name="xingdun_friend_sent_agreed">对方已同意你的好友申请</string>
+    <string name="xingdun_friend_sent_rejected">对方已拒绝你的好友申请</string>
+    <string name="xingdun_friend_application_expired">好友申请已过期</string>
+    <string name="xingdun_friend_waiting">好友申请等待对方处理</string>
+    <string name="xingdun_friend_request_default">请求添加你为好友</string>
+    <string name="xingdun_group_invitation_summary">邀请你加入群聊“%1$s”</string>
+    <string name="xingdun_group_join_summary">申请加入群聊“%1$s”</string>
+    <string name="xingdun_group_invite_summary">邀请加入群聊“%1$s”</string>
+    <string name="xingdun_pending">待处理</string>
+    <string name="xingdun_processed">已处理</string>
+    <string name="xingdun_agreed">已同意</string>
+    <string name="xingdun_rejected">已拒绝</string>
+    <string name="xingdun_expired">已过期</string>
+    <string name="xingdun_unknown_status">未知状态</string>
+    <string name="xingdun_joined">已加入</string>
 </resources>

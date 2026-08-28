@@ -97,6 +97,12 @@
             android:theme="@style/Chat_UIKit_Theme" />
 
         <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunVerificationMessagesActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme" />
+
+        <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupInfoActivity"
             android:exported="false"
             android:screenOrientation="portrait"

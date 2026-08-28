@@ -1239,4 +1239,40 @@
     <string-array name="xingdun_feedback_type_labels">
         <item>Function issue</item><item>Product suggestion</item><item>Experience issue</item><item>Account issue</item><item>Other feedback</item>
     </string-array>
+    <string name="xingdun_new_friends">New Friends</string>
+    <string name="xingdun_my_groups">My Groups</string>
+    <string name="xingdun_verification_messages_title">Verification Messages</string>
+    <string name="xingdun_friend">Friends</string>
+    <string name="xingdun_group">Groups</string>
+    <string name="xingdun_clear">Clear</string>
+    <string name="xingdun_accept">Accept</string>
+    <string name="xingdun_reject">Reject</string>
+    <string name="xingdun_loading_friend_applications">Loading friend applications</string>
+    <string name="xingdun_loading_group_applications">Loading group applications</string>
+    <string name="xingdun_verification_load_failed">Applications could not be loaded</string>
+    <string name="xingdun_no_friend_applications">No application records</string>
+    <string name="xingdun_no_friend_applications_message">New friend applications will appear here.</string>
+    <string name="xingdun_no_group_applications">No group applications or invitations</string>
+    <string name="xingdun_no_group_applications_message">New group applications or invitations will appear here.</string>
+    <string name="xingdun_confirm_accept_friend">Accept this friend application?</string>
+    <string name="xingdun_confirm_reject_friend">Reject this friend application?</string>
+    <string name="xingdun_confirm_accept_group">Accept this group application or invitation?</string>
+    <string name="xingdun_confirm_reject_group">Reject this group application or invitation?</string>
+    <string name="xingdun_confirm_clear_applications">Clear all processed friend application records?</string>
+    <string name="xingdun_deleted_user">Deleted user</string>
+    <string name="xingdun_friend_sent_agreed">The other user accepted your friend application</string>
+    <string name="xingdun_friend_sent_rejected">The other user rejected your friend application</string>
+    <string name="xingdun_friend_application_expired">Friend application expired</string>
+    <string name="xingdun_friend_waiting">Friend application is waiting for the other user</string>
+    <string name="xingdun_friend_request_default">Wants to add you as a friend</string>
+    <string name="xingdun_group_invitation_summary">Invited you to join “%1$s”</string>
+    <string name="xingdun_group_join_summary">Applied to join “%1$s”</string>
+    <string name="xingdun_group_invite_summary">Group invitation for “%1$s”</string>
+    <string name="xingdun_pending">Pending</string>
+    <string name="xingdun_processed">Processed</string>
+    <string name="xingdun_agreed">Accepted</string>
+    <string name="xingdun_rejected">Rejected</string>
+    <string name="xingdun_expired">Expired</string>
+    <string name="xingdun_unknown_status">Unknown status</string>
+    <string name="xingdun_joined">Joined</string>
 </resources>

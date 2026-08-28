@@ -34,6 +34,7 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import io.trtc.tuikit.chat.uikit.components.contactlist.ui.ContactFlowLauncher
 import io.trtc.tuikit.chat.uikit.components.contactlist.config.ChatContactListConfig
+import io.trtc.tuikit.chat.uikit.components.contactlist.model.ContactListItemIDs
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
@@ -49,6 +50,8 @@ import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.search.SearchActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactDetailActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupListActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunVerificationMessagesActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspacePageView
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMinePageView
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
@@ -63,6 +66,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -121,6 +125,7 @@ class MainActivity : BaseActivity() {
     private val conversationListStore by lazy { ConversationListStore.create() }
     private val contactStore by lazy { ContactStore.shared }
     private val groupStore by lazy { GroupStore.shared }
+    private val verificationUnreadCount = MutableStateFlow(0)
     private var mainScope: CoroutineScope? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -217,6 +222,7 @@ class MainActivity : BaseActivity() {
             ) { friendApplicationUnreadCount, groupApplicationUnreadCount ->
                 friendApplicationUnreadCount + groupApplicationUnreadCount
             }.collectLatest { unreadCount ->
+                verificationUnreadCount.value = unreadCount
                 updateTabBadge(R.id.demo_tab_contacts, unreadCount)
             }
         }
@@ -837,8 +843,28 @@ class MainActivity : BaseActivity() {
             addView(searchButton)
             addView(addButton)
         }
+        val contactConfig = ChatContactListConfig(
+            showGroupApplications = false,
+            showSearchBar = false
+        ).customizeItems {
+            replace(ContactListItemIDs.NEW_CONTACTS) { item ->
+                item.copy(
+                    title = getString(R.string.xingdun_new_friends),
+                    titleResID = 0,
+                    badgeCount = verificationUnreadCount,
+                    onClick = { XingDunVerificationMessagesActivity.start(this@MainActivity) }
+                )
+            }
+            replace(ContactListItemIDs.MY_GROUPS) { item ->
+                item.copy(
+                    title = getString(R.string.xingdun_my_groups),
+                    titleResID = 0,
+                    onClick = { XingDunGroupListActivity.start(this@MainActivity) }
+                )
+            }
+        }
         page.setup(
-            config = ChatContactListConfig(showSearchBar = false),
+            config = contactConfig,
             headerTitle = getString(R.string.demo_page_contacts_title),
             headerRightAction = headerActions,
             onContactClick = { contactInfo ->
