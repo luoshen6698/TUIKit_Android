@@ -50,6 +50,7 @@ import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.search.SearchActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactDetailActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunBlacklistActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupListActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunVerificationMessagesActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspacePageView
@@ -861,6 +862,9 @@ class MainActivity : BaseActivity() {
                     titleResID = 0,
                     onClick = { XingDunGroupListActivity.start(this@MainActivity) }
                 )
+            }
+            replace(ContactListItemIDs.BLACKLIST) { item ->
+                item.copy(onClick = { XingDunBlacklistActivity.start(this@MainActivity) })
             }
         }
         page.setup(

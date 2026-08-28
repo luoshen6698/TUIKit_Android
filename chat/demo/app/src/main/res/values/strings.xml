@@ -1275,4 +1275,18 @@
     <string name="xingdun_expired">Expired</string>
     <string name="xingdun_unknown_status">Unknown status</string>
     <string name="xingdun_joined">Joined</string>
+    <string name="xingdun_blacklist_title">Blacklist</string>
+    <string name="xingdun_refresh_blacklist">Refresh blacklist</string>
+    <string name="xingdun_blacklist_explanation">You will not receive messages from these contacts. The friendship is retained while blocked.</string>
+    <string name="xingdun_blacklist_footer">Normal friendship is restored after unblocking.</string>
+    <string name="xingdun_loading_blacklist">Loading blacklist</string>
+    <string name="xingdun_blacklist_load_failed">Blacklist could not be loaded</string>
+    <string name="xingdun_blacklist_load_failed_message">Please try again later.</string>
+    <string name="xingdun_blacklist_empty">No blocked contacts</string>
+    <string name="xingdun_blacklist_empty_message">Blocked contacts will appear here.</string>
+    <string name="xingdun_unblock_title">Unblock?</string>
+    <string name="xingdun_unblock_message">You can receive messages from this contact again and the normal friendship will be restored.</string>
+    <string name="xingdun_unblock">Unblock</string>
+    <string name="xingdun_unblock_success">Unblocked. The friendship has been restored.</string>
+    <string name="xingdun_unblock_failed">Could not unblock this contact. Try again later.</string>
 </resources>

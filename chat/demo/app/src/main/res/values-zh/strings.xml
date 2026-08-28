@@ -1260,4 +1260,18 @@
     <string name="xingdun_expired">已过期</string>
     <string name="xingdun_unknown_status">未知状态</string>
     <string name="xingdun_joined">已加入</string>
+    <string name="xingdun_blacklist_title">黑名单</string>
+    <string name="xingdun_refresh_blacklist">刷新黑名单</string>
+    <string name="xingdun_blacklist_explanation">你不会收到这些联系人的消息，拉黑期间好友关系会保留。</string>
+    <string name="xingdun_blacklist_footer">解除拉黑后将恢复正常好友关系。</string>
+    <string name="xingdun_loading_blacklist">正在加载黑名单</string>
+    <string name="xingdun_blacklist_load_failed">黑名单加载失败</string>
+    <string name="xingdun_blacklist_load_failed_message">请稍后重试。</string>
+    <string name="xingdun_blacklist_empty">暂无黑名单成员</string>
+    <string name="xingdun_blacklist_empty_message">被拉黑的联系人会显示在这里。</string>
+    <string name="xingdun_unblock_title">解除拉黑？</string>
+    <string name="xingdun_unblock_message">解除后可以再次接收对方消息，并恢复正常好友关系。</string>
+    <string name="xingdun_unblock">解除</string>
+    <string name="xingdun_unblock_success">已解除拉黑，好友关系已恢复。</string>
+    <string name="xingdun_unblock_failed">解除拉黑失败，请稍后重试。</string>
 </resources>
