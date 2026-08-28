@@ -178,6 +178,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var accountSecurityTouchStartY = 0f
     private var accountSecurityLoading = false
     private var storageTouchStartY = 0f
+    private var storageLoading = false
     private var helpCustomerServiceTouchStartY = 0f
     private var helpCustomerServiceLoading = false
     private var helpCustomerServiceRow: LinearLayout? = null
@@ -4382,6 +4383,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     ).apply { bottomMargin = 8.dp() }
 
     private fun showStorageManagement() {
+        if (storageLoading) return
         applyStorageManagementChrome()
         scrollView.setOnTouchListener { _, event ->
             when (event.actionMasked) {
@@ -4395,14 +4397,17 @@ open class XingDunFeatureActivity : BaseActivity() {
             }
             false
         }
+        storageLoading = true
         setBusy(true)
         lifecycleScope.launch {
             runCatching { XingDunStorageManager.usage(this@XingDunFeatureActivity) }
                 .onSuccess { usage ->
+                    storageLoading = false
                     setBusy(false)
                     renderStorageManagement(usage)
                 }
                 .onFailure { error ->
+                    storageLoading = false
                     setBusy(false)
                     renderStorageLoadFailure(error)
                 }
