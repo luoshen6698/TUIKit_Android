@@ -101,6 +101,10 @@ open class SelfDetailActivity : BaseActivity() {
         if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
         val mode = result.data?.getStringExtra(XingDunProfileEditorActivity.EXTRA_MODE).orEmpty()
         val value = result.data?.getStringExtra(XingDunProfileEditorActivity.EXTRA_VALUE).orEmpty()
+        if (isDebugPreview) {
+            applyDebugEditorResult(mode, value)
+            return@registerForActivityResult
+        }
         when (mode) {
             XingDunProfileEditorActivity.MODE_ACCOUNT ->
                 if (value != cachedCustomID) saveCustomID(value)
@@ -375,9 +379,18 @@ open class SelfDetailActivity : BaseActivity() {
             return
         }
         runCatching {
-            XingDunSessionManager.apiClient().get<JsonObject>(
+            val profile = XingDunSessionManager.apiClient().get<JsonObject>(
                 session, "user/profile", emptyMap(), JsonObject::class.java
             )
+            val returnedUserID = profile.string("tim_user_id")
+            check(returnedUserID == null || returnedUserID == session.timUserId) {
+                getString(R.string.xingdun_profile_load_failed)
+            }
+            val returnedCompanyCode = profile.string("company_code")
+            check(returnedCompanyCode == null || returnedCompanyCode.equals(session.companyCode, ignoreCase = true)) {
+                getString(R.string.xingdun_profile_load_failed)
+            }
+            profile
         }.onSuccess { profile ->
             cachedCustomID = profile.string("custom_id").orEmpty()
             cachedNickname = profile.string("nickname") ?: cachedNickname
@@ -389,8 +402,8 @@ open class SelfDetailActivity : BaseActivity() {
             }
             cachedBirthday = profile.string("birthday")?.replace("-", "")?.toLongOrNull()
             cachedAvatarUrl = profile.get("avatar")?.takeUnless { it.isJsonNull }?.asString?.trim()?.takeIf(String::isNotEmpty)
-            phoneItem.setValue(profile.string("phone")?.let(::maskPhone) ?: getString(R.string.xingdun_not_bound))
-            emailItem.setValue(profile.string("email")?.let(::maskEmail) ?: getString(R.string.xingdun_not_bound))
+            phoneItem.setValue(profile.string("phone") ?: getString(R.string.xingdun_not_bound))
+            emailItem.setValue(profile.string("email") ?: getString(R.string.xingdun_not_bound))
             renderCachedProfile()
         }.onFailure { error ->
             if (showFailure) {
@@ -426,6 +439,27 @@ open class SelfDetailActivity : BaseActivity() {
         phoneItem.setValue(getString(R.string.xingdun_not_bound))
         emailItem.setValue(getString(R.string.xingdun_not_bound))
         renderCachedProfile()
+    }
+
+    private fun applyDebugEditorResult(mode: String, value: String) {
+        when (mode) {
+            XingDunProfileEditorActivity.MODE_ACCOUNT -> cachedCustomID = value
+            XingDunProfileEditorActivity.MODE_NICKNAME -> cachedNickname = value
+            XingDunProfileEditorActivity.MODE_SIGNATURE -> cachedSignature = value
+            XingDunProfileEditorActivity.MODE_GENDER -> {
+                cachedGender = when (value.toIntOrNull()) {
+                    1 -> Gender.MALE
+                    2 -> Gender.FEMALE
+                    else -> Gender.UNKNOWN
+                }
+            }
+            XingDunProfileEditorActivity.MODE_BIRTHDAY -> {
+                cachedBirthday = value.replace("-", "").toLongOrNull()
+            }
+            else -> return
+        }
+        renderCachedProfile()
+        Toast.makeText(this, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
     }
 
     private fun openEditor(mode: String, value: String) {
@@ -553,12 +587,6 @@ open class SelfDetailActivity : BaseActivity() {
 
     private fun JsonObject.string(name: String): String? =
         get(name)?.takeUnless { it.isJsonNull }?.asString?.trim()?.takeIf(String::isNotEmpty)
-
-    private fun maskPhone(value: String): String = if (value.length < 7) value else "${value.take(3)}****${value.takeLast(4)}"
-    private fun maskEmail(value: String): String {
-        val at = value.indexOf('@')
-        return if (at <= 0) value else "${value.take(1)}***${value.substring(at)}"
-    }
 
     private fun genderDisplayText(gender: Gender?): String = when (gender) {
         Gender.MALE -> getString(R.string.demo_settings_self_detail_gender_male)
