@@ -52,6 +52,14 @@
     <string name="contact_list_label_value_format">%1$s：%2$s</string>
 
     <string name="contact_list_create_group">创建群组</string>
+    <string name="contact_list_people_selection">人员选择</string>
+    <string name="contact_list_recent_conversations">最近会话</string>
+    <string name="contact_list_contacts">联系人</string>
+    <string name="contact_list_confirm_group_profile">确认群资料</string>
+    <string name="contact_list_select_two_friends">请至少选择 2 位好友。</string>
+    <string name="contact_list_enter_group_name">请输入群名称。</string>
+    <string name="contact_list_group_name_too_long">群名称不能超过 100 个 UTF-8 字节。</string>
+    <string name="contact_list_current_user_me">我</string>
     <string name="contact_list_create_c2c">创建聊天</string>
     <string name="contact_list_create">创建</string>
     <string name="contact_list_contact_next_step">下一步</string>

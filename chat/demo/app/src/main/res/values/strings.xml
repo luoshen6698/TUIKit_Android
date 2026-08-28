@@ -1289,4 +1289,5 @@
     <string name="xingdun_unblock">Unblock</string>
     <string name="xingdun_unblock_success">Unblocked. The friendship has been restored.</string>
     <string name="xingdun_unblock_failed">Could not unblock this contact. Try again later.</string>
+    <string name="xingdun_group_avatar_invalid">The group avatar must be a valid image no larger than 5 MB.</string>
 </resources>

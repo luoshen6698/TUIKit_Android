@@ -2,6 +2,7 @@ package io.trtc.tuikit.chat.demo.xingdun.network
 
 import android.content.Context
 import android.widget.Toast
+import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
@@ -16,6 +17,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.Locale
 
 class XingDunBusinessActionHandler(context: Context) : BusinessActionHandler {
 
@@ -97,15 +102,17 @@ class XingDunBusinessActionHandler(context: Context) : BusinessActionHandler {
                 BusinessActionResult()
             }
             is BusinessAction.CreateGroup -> {
-                val response: JsonObject = client.post(
+                val avatarFile = action.avatarURL?.takeIf(String::isNotBlank)?.let(::downloadGroupAvatar)
+                val response: JsonObject = client.postMultipart(
                     session,
                     "team/create",
                     mapOf(
                         "name" to action.groupName,
-                        "member_user_ids" to action.memberUserIDs,
+                        "member_user_ids" to Gson().toJson(action.memberUserIDs),
                         "be_invite_mode" to 2,
-                        "app_language" to "android"
+                        "app_language" to if (Locale.getDefault().language == "zh") "zh-Hans" else "en"
                     ),
+                    avatarFile?.let(::listOf).orEmpty(),
                     JsonObject::class.java
                 )
                 BusinessActionResult(response.string("group_id"))
@@ -192,6 +199,45 @@ class XingDunBusinessActionHandler(context: Context) : BusinessActionHandler {
                 BusinessActionResult()
             }
             is BusinessAction.JoinGroup -> error("JoinGroup must use the Tencent SDK path")
+        }
+    }
+
+    private fun downloadGroupAvatar(url: String): XingDunUploadFile {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 20_000
+        connection.instanceFollowRedirects = true
+        try {
+            val mimeType = connection.contentType?.substringBefore(';')?.lowercase(Locale.ROOT)
+                ?.takeIf { it in setOf("image/jpeg", "image/png", "image/webp") }
+                ?: if (url.substringBefore('?').endsWith(".png", true)) "image/png" else "image/jpeg"
+            val bytes = connection.inputStream.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(16 * 1024)
+                var total = 0
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    require(total <= 5 * 1024 * 1024) {
+                        appContext.getString(R.string.xingdun_group_avatar_invalid)
+                    }
+                    output.write(buffer, 0, count)
+                }
+                val data = output.toByteArray()
+                require(data.isNotEmpty() && data.size <= 5 * 1024 * 1024) {
+                    appContext.getString(R.string.xingdun_group_avatar_invalid)
+                }
+                data
+            }
+            val extension = when (mimeType) {
+                "image/png" -> "png"
+                "image/webp" -> "webp"
+                else -> "jpg"
+            }
+            return XingDunUploadFile("avatar", "xingdun-group-avatar.$extension", mimeType, bytes)
+        } finally {
+            connection.disconnect()
         }
     }
 

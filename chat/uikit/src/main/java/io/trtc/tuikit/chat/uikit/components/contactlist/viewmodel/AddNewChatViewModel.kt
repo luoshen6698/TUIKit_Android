@@ -10,6 +10,8 @@ import io.trtc.tuikit.chat.uikit.components.userpicker.model.UserPickerData
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
+import io.trtc.tuikit.atomicxcore.api.conversation.ConversationListStore
+import io.trtc.tuikit.atomicxcore.api.conversation.ConversationLoadOption
 import io.trtc.tuikit.atomicxcore.api.group.CreateGroupCompletionHandler
 import io.trtc.tuikit.atomicxcore.api.group.GroupCreateParams
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
@@ -56,7 +59,8 @@ data class AddNewChatUiState(
 
 class AddNewChatViewModel(
     private val contactStore: ContactStore,
-    private val groupStore: GroupStore
+    private val groupStore: GroupStore,
+    private val conversationListStore: ConversationListStore = ConversationListStore.create()
 ) : ViewModel() {
 
     companion object {
@@ -119,6 +123,27 @@ class AddNewChatViewModel(
         initialValue = emptyList()
     )
 
+    val recentContactDataSource: StateFlow<List<UserPickerData<ContactInfo>>> = combine(
+        contactState.friendList,
+        conversationListStore.state.conversationList
+    ) { friends, conversations ->
+        val friendsByID = friends.associateBy { it.userID }
+        conversations.mapNotNull { conversation ->
+            ConversationIDUtil.userIdOrNull(conversation.conversationID)?.let(friendsByID::get)
+        }.distinctBy { it.userID }.map {
+            UserPickerData(
+                key = it.userID,
+                label = it.displayName,
+                avatarUrl = it.avatarURL,
+                extraData = it
+            )
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
     private val _uiState = MutableStateFlow(AddNewChatUiState())
     val uiState: StateFlow<AddNewChatUiState> = _uiState.asStateFlow()
 
@@ -127,6 +152,13 @@ class AddNewChatViewModel(
 
     init {
         loadFriends()
+        conversationListStore.loadConversations(
+            ConversationLoadOption(),
+            object : CompletionHandler {
+                override fun onSuccess() {}
+                override fun onFailure(code: Int, desc: String) {}
+            }
+        )
     }
 
     fun setChatType(chatType: ChatType) {
@@ -162,7 +194,12 @@ class AddNewChatViewModel(
 
     fun startChat() {
         val currentState = _uiState.value
-        if (currentState.selectedContacts.isEmpty()) {
+        val hasEnoughContacts = if (currentState.chatType == ChatType.SINGLE) {
+            currentState.selectedContacts.isNotEmpty()
+        } else {
+            currentState.selectedContacts.size >= 2
+        }
+        if (!hasEnoughContacts) {
             _uiState.value = currentState.copy(error = "")
             return
         }
@@ -191,8 +228,12 @@ class AddNewChatViewModel(
             ?.getString(R.string.contact_list_group_name_separator)
             .orEmpty()
             .ifBlank { ", " }
+        val currentUserName = appContext
+            ?.getString(R.string.contact_list_current_user_me)
+            .orEmpty()
+            .ifBlank { "Me" }
         return ContactListGroupNameFormatter.generate(
-            names = contacts.map { it.displayName },
+            names = listOf(currentUserName) + contacts.map { it.displayName },
             separator = separator,
             suffix = { remainingCount ->
                 appContext
@@ -243,7 +284,7 @@ class AddNewChatViewModel(
         if (currentState.isCreating) {
             return
         }
-        if (currentState.selectedContacts.isEmpty()) {
+        if (currentState.selectedContacts.size !in 2..199) {
             _uiState.value = currentState.copy(error = "")
             return
         }

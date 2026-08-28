@@ -29,7 +29,6 @@ import io.trtc.tuikit.atomicx.common.util.ScreenUtil.dp2px
 import io.trtc.tuikit.chat.uikit.components.common.ConversationIDUtil
 import io.trtc.tuikit.chat.uikit.components.common.WindowThemeUtil
 import io.trtc.tuikit.chat.uikit.components.contactlist.ui.addchat.ContactSelectionStateMerger
-import io.trtc.tuikit.chat.uikit.components.contactlist.ui.addchat.CreateGroupSubmissionPolicy
 import io.trtc.tuikit.chat.uikit.components.contactlist.ui.addchat.GroupAvatarSelectorView
 import io.trtc.tuikit.chat.uikit.components.contactlist.ui.addchat.GroupTypeSelectionStepView
 import io.trtc.tuikit.chat.uikit.components.contactlist.ui.addchat.SelectedContactsBottomBar
@@ -172,6 +171,12 @@ internal class AddNewChatDialog(
         }
 
         scope.launch {
+            viewModel.recentContactDataSource.collectLatest { dataSource ->
+                updateRecentUserPickerIfVisible(dataSource)
+            }
+        }
+
+        scope.launch {
             ThemeStore.shared(context).themeState.collectLatest {
                 refreshCurrentStepForTheme()
             }
@@ -214,7 +219,11 @@ internal class AddNewChatDialog(
     private var currentDisplayedStep: GroupFlowStep? = null
     private var userPickerView: UserPickerView? = null
     private var allContactDataSource: List<UserPickerData<ContactInfo>> = emptyList()
+    private var recentContactDataSource: List<UserPickerData<ContactInfo>> = emptyList()
     private var currentSearchQuery = ""
+    private var showsRecentContacts = true
+    private var recentTabView: TextView? = null
+    private var contactsTabView: TextView? = null
 
     private var selectionBottomBar: SelectedContactsBottomBar? = null
 
@@ -230,7 +239,7 @@ internal class AddNewChatDialog(
 
         navBar.setTitle(
             if (chatType == ChatType.GROUP) {
-                context.getString(R.string.contact_list_create_group)
+                context.getString(R.string.contact_list_people_selection)
             } else {
                 context.getString(R.string.contact_list_create_c2c)
             }
@@ -285,6 +294,9 @@ internal class AddNewChatDialog(
                 AppBarLayout.LayoutParams.SCROLL_FLAG_SNAP
         }
         appBarLayout.addView(searchBarView, searchBarParams)
+        if (chatType == ChatType.GROUP) {
+            appBarLayout.addView(createSelectionTabs())
+        }
 
         val pickerContainer = FrameLayout(context).apply {
             layoutDirection = View.LAYOUT_DIRECTION_LOCALE
@@ -302,7 +314,7 @@ internal class AddNewChatDialog(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
-            setMaxCount(if (chatType == ChatType.SINGLE) 1 else 100)
+            setMaxCount(if (chatType == ChatType.SINGLE) 1 else 199)
             setShowCheckbox(chatType != ChatType.SINGLE)
         }
         userPickerView = picker
@@ -316,8 +328,14 @@ internal class AddNewChatDialog(
                 selectedContacts = viewModel.uiState.value.selectedContacts,
                 onConfirmClick = {
                     val count = viewModel.uiState.value.selectedContacts.size
-                    if (count > 0) {
+                    if (count >= 2) {
                         viewModel.startChat()
+                    } else {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.contact_list_select_two_friends),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
             )
@@ -349,6 +367,11 @@ internal class AddNewChatDialog(
         applyFilteredContactDataSource()
     }
 
+    private fun updateRecentUserPickerIfVisible(dataSource: List<UserPickerData<ContactInfo>>) {
+        recentContactDataSource = dataSource
+        applyFilteredContactDataSource()
+    }
+
     private fun applyFilteredContactDataSource() {
         val picker = userPickerView ?: return
         picker.setDefaultSelectedItems(viewModel.uiState.value.selectedContacts.map { it.userID })
@@ -357,12 +380,68 @@ internal class AddNewChatDialog(
 
     private fun getFilteredContactDataSource(): List<UserPickerData<ContactInfo>> {
         val keyword = currentSearchQuery.trim()
-        if (keyword.isEmpty()) {
-            return allContactDataSource
+        val source = if (chatType == ChatType.GROUP && showsRecentContacts) {
+            recentContactDataSource
+        } else {
+            allContactDataSource
         }
-        return allContactDataSource.filter { item ->
+        if (keyword.isEmpty()) {
+            return source
+        }
+        return source.filter { item ->
             item.extraData.matchesSearchQuery(keyword)
         }
+    }
+
+    private fun createSelectionTabs(): View {
+        val colors = getColors()
+        val dm = context.resources.displayMetrics
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(
+                dp2px(16f, dm).toInt(),
+                dp2px(6f, dm).toInt(),
+                dp2px(16f, dm).toInt(),
+                dp2px(10f, dm).toInt()
+            )
+            setBackgroundColor(colors.bgColorOperate)
+        }
+        recentTabView = selectionTab(R.string.contact_list_recent_conversations) {
+            showsRecentContacts = true
+            refreshSelectionTabs()
+            applyFilteredContactDataSource()
+        }
+        contactsTabView = selectionTab(R.string.contact_list_contacts) {
+            showsRecentContacts = false
+            refreshSelectionTabs()
+            applyFilteredContactDataSource()
+        }
+        row.addView(recentTabView, LinearLayout.LayoutParams(0, dp2px(38f, dm).toInt(), 1f))
+        row.addView(contactsTabView, LinearLayout.LayoutParams(0, dp2px(38f, dm).toInt(), 1f))
+        refreshSelectionTabs()
+        return row
+    }
+
+    private fun selectionTab(title: Int, onClick: () -> Unit): TextView = TextView(context).apply {
+        setText(title)
+        gravity = Gravity.CENTER
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+        setOnClickListener { onClick() }
+    }
+
+    private fun refreshSelectionTabs() {
+        val colors = getColors()
+        val radius = dp2px(19f, context.resources.displayMetrics)
+        fun style(view: TextView?, selected: Boolean) {
+            view ?: return
+            view.setTextColor(if (selected) colors.textColorPrimary else colors.textColorSecondary)
+            view.background = GradientDrawable().apply {
+                setColor(if (selected) colors.bgColorTopBar else colors.bgColorInput)
+                cornerRadius = radius
+            }
+        }
+        style(recentTabView, showsRecentContacts)
+        style(contactsTabView, !showsRecentContacts)
     }
 
     private fun updateSelectedContactsFromVisibleItems(
@@ -411,15 +490,16 @@ internal class AddNewChatDialog(
 
         contentContainer.removeAllViews()
 
-        val colors = getColors()
-        val dm = context.resources.displayMetrics
         val state = viewModel.uiState.value
-        val selectedType = viewModel.currentSelectedGroupType.value
         val displayedGroupName = state.groupName.ifBlank {
             viewModel.generateGroupName(state.selectedContacts)
         }
+        val displayedAvatarURL = state.groupAvatarUrl
+            ?: AddNewChatViewModel.getGroupAvatarUrls().firstOrNull().also {
+                viewModel.updateGroupAvatarUrl(it)
+            }
 
-        navBar.setTitle(context.getString(R.string.contact_list_create_group))
+        navBar.setTitle(context.getString(R.string.contact_list_confirm_group_profile))
         applyWindowTheme()
 
         val rootContainer = LinearLayout(context).apply {
@@ -454,38 +534,11 @@ internal class AddNewChatDialog(
                 onValueChange = { viewModel.updateGroupName(it) }
             )
         )
-        container.addView(createSettingsDivider())
-        container.addView(
-            createEditableSettingRow(
-                title = context.getString(R.string.contact_list_group_id),
-                initialValue = state.groupID.orEmpty(),
-                hint = context.getString(R.string.contact_list_group_id_option),
-                onValueChange = { viewModel.updateGroupID(it.ifBlank { null }) }
-            )
-        )
-        container.addView(createSettingsDivider())
-        container.addView(createGroupTypeRow(selectedType))
-
-        container.addView(
-            TextView(context).apply {
-                text = context.getString(selectedType.descriptionResID)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                setTextColor(colors.textColorSecondary)
-                setLineSpacing(0f, 1.25f)
-                setPadding(
-                    dp2px(16f, dm).toInt(),
-                    dp2px(8f, dm).toInt(),
-                    dp2px(16f, dm).toInt(),
-                    0
-                )
-                groupTypeDescView = this
-            }
-        )
 
         val avatarSelector = GroupAvatarSelectorView(
             context = context,
             displayedGroupName = displayedGroupName,
-            selectedAvatarUrl = state.groupAvatarUrl,
+            selectedAvatarUrl = displayedAvatarURL,
             avatarUrls = AddNewChatViewModel.getGroupAvatarUrls(),
             onAvatarSelected = { viewModel.updateGroupAvatarUrl(it) }
         )
@@ -690,32 +743,21 @@ internal class AddNewChatDialog(
 
     private fun submitCreateGroup() {
         val currentState = viewModel.uiState.value
-        val groupId = currentState.groupID
-        val groupType = viewModel.currentSelectedGroupType.value.type
-        when (CreateGroupSubmissionPolicy.evaluate(currentState.isCreating, groupId, groupType)) {
-            CreateGroupSubmissionPolicy.Decision.BLOCKED_CREATING -> return
-            CreateGroupSubmissionPolicy.Decision.BLOCKED_RESERVED_GROUP_ID -> {
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.contact_list_group_id_edit_format_tips),
-                    Toast.LENGTH_SHORT
-                ).show()
-                return
-            }
-            CreateGroupSubmissionPolicy.Decision.BLOCKED_COMMUNITY_GROUP_ID -> {
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.contact_list_community_id_edit_format_tips),
-                    Toast.LENGTH_SHORT
-                ).show()
-                return
-            }
-            CreateGroupSubmissionPolicy.Decision.ALLOW -> Unit
-            else -> return
+        if (currentState.isCreating) return
+        val normalizedName = currentState.groupName.trim()
+        val error = when {
+            currentState.selectedContacts.size < 2 -> R.string.contact_list_select_two_friends
+            normalizedName.isEmpty() -> R.string.contact_list_enter_group_name
+            normalizedName.toByteArray(Charsets.UTF_8).size > 100 -> R.string.contact_list_group_name_too_long
+            else -> null
+        }
+        if (error != null) {
+            Toast.makeText(context, context.getString(error), Toast.LENGTH_SHORT).show()
+            return
         }
         viewModel.createGroupChatWithSettings(
-            groupName = currentState.groupName,
-            groupID = groupId,
+            groupName = normalizedName,
+            groupID = null,
             groupAvatarUrl = currentState.groupAvatarUrl,
             onSuccess = {},
             onFailure = { _, desc ->

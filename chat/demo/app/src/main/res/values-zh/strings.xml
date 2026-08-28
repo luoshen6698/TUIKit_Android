@@ -1274,4 +1274,5 @@
     <string name="xingdun_unblock">解除</string>
     <string name="xingdun_unblock_success">已解除拉黑，好友关系已恢复。</string>
     <string name="xingdun_unblock_failed">解除拉黑失败，请稍后重试。</string>
+    <string name="xingdun_group_avatar_invalid">群头像须为不超过 5 MB 的有效图片。</string>
 </resources>
