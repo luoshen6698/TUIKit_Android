@@ -46,6 +46,19 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
 
         addView(PageHeaderView(context).apply {
             setTitle(context.getString(R.string.xingdun_workspace_title))
+            setEditContent(TextView(context).apply {
+                text = "▤"
+                textSize = 22f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF168F83.toInt())
+                contentDescription = context.getString(R.string.xingdun_workspace_my)
+                setPadding(12.dp(), 4.dp(), 4.dp(), 4.dp())
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    XingDunFeatureActivity.start(context, XingDunFeatureActivity.MODE_WORKSPACE_LIST)
+                }
+            })
         })
 
         scrollView = ScrollView(context).apply {
@@ -165,6 +178,7 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
         orientation = VERTICAL
         gravity = Gravity.CENTER
         background = roundedDrawable(Color.WHITE, 12f)
+        minimumHeight = 94.dp()
         setPadding(6.dp(), 12.dp(), 6.dp(), 10.dp())
         addView(TextView(context).apply {
             text = when (type.type) {
@@ -178,16 +192,20 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
             setTextColor(if (type.available) 0xFF168F83.toInt() else 0xFF8A8A8F.toInt())
         })
         addView(TextView(context).apply {
-            text = context.getString(when (type.type) {
-                "leave" -> R.string.xingdun_workspace_leave
-                "travel" -> R.string.xingdun_workspace_travel
-                "reimburse" -> R.string.xingdun_workspace_reimburse
-                else -> R.string.xingdun_workspace_create
-            })
+            text = typeDisplayName(type)
             textSize = 12f
             gravity = Gravity.CENTER
             setTextColor(0xFF1C1C1E.toInt())
             maxLines = 2
+        })
+        addView(TextView(context).apply {
+            text = type.unavailableReason?.takeIf { !type.available && it.isNotBlank() }
+                ?: categoryShortLabel(type.category)
+            textSize = 10f
+            gravity = Gravity.CENTER
+            setTextColor(if (type.available) 0xFF8A8A8F.toInt() else 0xFFD93025.toInt())
+            maxLines = 1
+            setPadding(2.dp(), 3.dp(), 2.dp(), 0)
         })
         isEnabled = type.available
         alpha = if (type.available) 1f else 0.58f
@@ -216,24 +234,56 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
 
     private fun addApplicationCategories(types: List<XingDunWorkspaceType>) {
         listOf(
-            "attendance" to R.string.xingdun_workspace_category_attendance,
-            "finance" to R.string.xingdun_workspace_category_finance,
-            "hr" to R.string.xingdun_workspace_category_hr
-        ).forEach { (category, title) ->
+            Triple("attendance", R.string.xingdun_workspace_category_attendance, "◷"),
+            Triple("finance", R.string.xingdun_workspace_category_finance, "¥"),
+            Triple("hr", R.string.xingdun_workspace_category_hr, "♟")
+        ).forEach { (category, title, icon) ->
             val values = types.filter { it.category == category }
             if (values.isNotEmpty()) {
-                addSectionHeader(context.getString(title), context.getString(R.string.xingdun_workspace_flow_count, values.size))
-                values.chunked(4).forEach { rowTypes ->
-                    body.addView(LinearLayout(context).apply {
-                        orientation = HORIZONTAL
-                        background = roundedDrawable(Color.WHITE, 14f)
-                        setPadding(8.dp(), 10.dp(), 8.dp(), 10.dp())
-                        rowTypes.forEach { type ->
-                            addView(typeGridItem(type), LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
-                        }
-                        repeat(4 - rowTypes.size) { addView(View(context), LayoutParams(0, 1, 1f)) }
-                    }, sectionLayoutParams())
-                }
+                body.addView(LinearLayout(context).apply {
+                    orientation = VERTICAL
+                    background = roundedDrawable(Color.WHITE, 14f)
+                    setPadding(12.dp(), 12.dp(), 12.dp(), 12.dp())
+                    addView(LinearLayout(context).apply {
+                        gravity = Gravity.CENTER_VERTICAL
+                        addView(TextView(context).apply {
+                            text = icon
+                            textSize = 18f
+                            gravity = Gravity.CENTER
+                            setTextColor(categoryColor(category))
+                        }, LayoutParams(28.dp(), 28.dp()).apply { marginEnd = 6.dp() })
+                        addView(TextView(context).apply {
+                            setText(title)
+                            textSize = 15f
+                            setTextColor(0xFF1C1C1E.toInt())
+                        }, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+                        addView(TextView(context).apply {
+                            text = context.getString(R.string.xingdun_workspace_flow_count, values.size)
+                            textSize = 11f
+                            gravity = Gravity.CENTER
+                            setTextColor(0xFF168F83.toInt())
+                            background = roundedDrawable(0xFFE1F3EE.toInt(), 12f)
+                            setPadding(9.dp(), 4.dp(), 9.dp(), 4.dp())
+                        })
+                    })
+                    addView(TextView(context).apply {
+                        text = values.joinToString(" · ") { typeDisplayName(it) }
+                        textSize = 11f
+                        setTextColor(0xFF8A8A8F.toInt())
+                        maxLines = 2
+                        setPadding(2.dp(), 5.dp(), 2.dp(), 8.dp())
+                    })
+                    values.chunked(4).forEach { rowTypes ->
+                        addView(LinearLayout(context).apply {
+                            orientation = HORIZONTAL
+                            setPadding(0, 2.dp(), 0, 2.dp())
+                            rowTypes.forEach { type ->
+                                addView(typeGridItem(type), LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+                            }
+                            repeat(4 - rowTypes.size) { addView(View(context), LayoutParams(0, 1, 1f)) }
+                        })
+                    }
+                }, sectionLayoutParams())
             }
         }
     }
@@ -241,8 +291,11 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
     private fun showFallback() {
         body.removeAllViews()
         addGuide(emptyList())
+        addSectionHeader(R.string.xingdun_workspace_recent, R.string.xingdun_view_all) {
+            XingDunFeatureActivity.start(context, XingDunFeatureActivity.MODE_WORKSPACE_LIST)
+        }
+        addInformationRow(context.getString(R.string.xingdun_workspace_no_records))
         addSectionHeader(R.string.xingdun_workspace_management)
-        addNavigationRow(context.getString(R.string.xingdun_workspace_my), null, XingDunFeatureActivity.MODE_WORKSPACE_LIST)
         addNavigationRow(context.getString(R.string.xingdun_workspace_pending), null, XingDunFeatureActivity.MODE_WORKSPACE_PENDING)
         body.addView(Button(context).apply {
             setText(R.string.xingdun_retry)
@@ -289,7 +342,7 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
             setTextColor(if (type.available) 0xFF20A88F.toInt() else 0xFF8A8A8F.toInt())
         })
         addView(TextView(context).apply {
-            text = type.name
+            text = typeDisplayName(type)
             textSize = 12f
             gravity = Gravity.CENTER
             setTextColor(0xFF1C1C1E.toInt())
@@ -350,6 +403,34 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
 
     private fun sectionLayoutParams() = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
         bottomMargin = 8.dp()
+    }
+
+    private fun typeDisplayName(type: XingDunWorkspaceType): String {
+        val resource = when (type.type) {
+            "leave" -> R.string.xingdun_workspace_leave
+            "travel" -> R.string.xingdun_workspace_travel
+            "out" -> R.string.xingdun_workspace_out
+            "overtime" -> R.string.xingdun_workspace_overtime
+            "reimburse" -> R.string.xingdun_workspace_reimburse
+            "purchase" -> R.string.xingdun_workspace_purchase
+            "hr_need" -> R.string.xingdun_workspace_hr_need
+            "confirmation" -> R.string.xingdun_workspace_confirmation
+            "resign" -> R.string.xingdun_workspace_resign
+            else -> return type.name
+        }
+        return context.getString(resource)
+    }
+
+    private fun categoryShortLabel(category: String): String = context.getString(when (category) {
+        "finance" -> R.string.xingdun_workspace_filter_finance
+        "hr" -> R.string.xingdun_workspace_filter_hr
+        else -> R.string.xingdun_workspace_filter_attendance
+    })
+
+    private fun categoryColor(category: String): Int = when (category) {
+        "finance" -> 0xFF20A88F.toInt()
+        "hr" -> 0xFFE6A117.toInt()
+        else -> 0xFF3478F6.toInt()
     }
 
     private fun roundedDrawable(color: Int, radius: Float) = GradientDrawable().apply {

@@ -946,6 +946,10 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun showWorkspaceDetail() {
         applyWorkspaceListChrome()
+        if (BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_WORKSPACE_DETAIL_FIXTURE, false)) {
+            renderWorkspaceDetail(debugWorkspaceDetailFixture())
+            return
+        }
         if (itemId <= 0) {
             status.setText(R.string.xingdun_workspace_invalid_application)
             return
@@ -993,7 +997,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         val type = item.string("type").orEmpty()
         val typeColor = workspaceTypeColor(type)
         val applicant = item.string("applicant_tim_user_id")
-        val isApplicant = applicant == requireSession().timUserId
+        val isApplicant = applicant != null && applicant == XingDunSessionManager.currentSession()?.timUserId
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = roundedDrawable(Color.WHITE, 16f)
@@ -1107,16 +1111,44 @@ open class XingDunFeatureActivity : BaseActivity() {
             gravity = Gravity.TOP
             setPadding(0, 14.dp(), 0, 0)
             addView(TextView(context).apply {
+                text = when (label) {
+                    R.string.xingdun_workspace_detail_reason -> "▤"
+                    R.string.xingdun_workspace_detail_start_time -> "▷"
+                    R.string.xingdun_workspace_detail_end_time -> "◉"
+                    R.string.xingdun_workspace_detail_amount -> "¥"
+                    R.string.xingdun_workspace_detail_update_time -> "↻"
+                    else -> "◷"
+                }
+                textSize = 13f
+                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                setTextColor(0xFF8A8A8F.toInt())
+            }, LinearLayout.LayoutParams(24.dp(), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = 6.dp() })
+            addView(TextView(context).apply {
                 setText(label)
                 textSize = 13f
                 setTextColor(0xFF8A8A8F.toInt())
-            }, LinearLayout.LayoutParams(78.dp(), ViewGroup.LayoutParams.WRAP_CONTENT))
+            }, LinearLayout.LayoutParams(72.dp(), ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(TextView(context).apply {
                 text = value
                 textSize = 15f
                 setTextColor(valueColor)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         })
+    }
+
+    private fun debugWorkspaceDetailFixture() = JsonObject().apply {
+        addProperty("id", 900001)
+        addProperty("type", "travel")
+        addProperty("type_name", getString(R.string.xingdun_workspace_travel))
+        addProperty("title", getString(R.string.xingdun_workspace_detail_preview_title))
+        addProperty("reason", getString(R.string.xingdun_workspace_detail_preview_reason))
+        addProperty("status", 3)
+        addProperty("status_text", getString(R.string.xingdun_workspace_status_submitted))
+        addProperty("applicant_tim_user_id", XingDunSessionManager.currentSession()?.timUserId.orEmpty())
+        addProperty("start_time", "2026-08-31 09:00:00")
+        addProperty("end_time", "2026-09-02 18:00:00")
+        addProperty("create_time", "2026-08-28 16:20:00")
+        addProperty("update_time", "2026-08-28 16:20:00")
     }
 
     private fun workspaceDetailActionButton(label: Int, foreground: Int, backgroundColor: Int, action: () -> Unit) = Button(this).apply {
@@ -1280,7 +1312,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         val basicCard = formCard()
         val title = EditText(this).apply {
             setHint(R.string.xingdun_workspace_form_title)
-            setText(getString(R.string.xingdun_workspace_default_title, typeTitle))
+            setText(typeTitle)
             textSize = 16f
             setTextColor(0xFF1C1C1E.toInt())
             setHintTextColor(0xFFAEAEB2.toInt())
@@ -6805,6 +6837,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val EXTRA_DEBUG_INVITE_POSTER_FIXTURE = "debug_invite_poster_fixture"
         private const val EXTRA_DEBUG_FAVORITES_FIXTURE = "debug_favorites_fixture"
         private const val EXTRA_DEBUG_ACCOUNT_SECURITY_FIXTURE = "debug_account_security_fixture"
+        private const val EXTRA_DEBUG_WORKSPACE_DETAIL_FIXTURE = "debug_workspace_detail_fixture"
         private const val EXTRA_DEBUG_LEGAL_URL = "debug_legal_url"
         private const val EXTRA_INITIAL_REPORT_JSON = "initial_report_json"
         private const val EXTRA_ITEM_ID = "item_id"

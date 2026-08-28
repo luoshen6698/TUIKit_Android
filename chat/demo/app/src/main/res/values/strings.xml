@@ -848,6 +848,8 @@
     <string name="xingdun_workspace_detail_update_time">Updated</string>
     <string name="xingdun_workspace_close_detail">Close application details</string>
     <string name="xingdun_workspace_detail_load_failed">Could not load application details. Please try again.</string>
+    <string name="xingdun_workspace_detail_preview_title">Q3 customer visit travel request</string>
+    <string name="xingdun_workspace_detail_preview_reason">Visit the customer site to confirm the delivery plan and acceptance schedule.</string>
     <string name="xingdun_workspace_withdraw_failed">Could not withdraw the application. Please try again.</string>
     <string name="xingdun_workspace_delete_failed">Could not delete the application. Please try again.</string>
     <string name="xingdun_workspace_no_available_types">No application type is currently available.</string>
