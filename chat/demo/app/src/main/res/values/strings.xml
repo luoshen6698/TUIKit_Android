@@ -495,6 +495,9 @@
     <string name="xingdun_report_target">Report target</string>
     <string name="xingdun_report_target_object">Target</string>
     <string name="xingdun_report_target_identifier">Identifier</string>
+    <string name="xingdun_report_target_user_id_hint">Enter Tencent UserID</string>
+    <string name="xingdun_report_target_team_id_hint">Enter Tencent GroupID</string>
+    <string name="xingdun_report_target_message_id_hint">Enter Tencent message ID</string>
     <string name="xingdun_report_description_hint">Describe the issue</string>
     <string name="xingdun_report_description_footer">Required, up to 500 characters</string>
     <string name="xingdun_report_character_count">%1$d/500</string>

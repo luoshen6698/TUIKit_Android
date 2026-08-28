@@ -177,6 +177,9 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var favoriteTouchStartY = 0f
     private var accountSecurityTouchStartY = 0f
     private var storageTouchStartY = 0f
+    private var helpCustomerServiceTouchStartY = 0f
+    private var helpCustomerServiceLoading = false
+    private var helpCustomerServiceRow: LinearLayout? = null
     private var customerServiceTouchStartY = 0f
     private var customerServiceLoading = false
     private val workspaceApplicationRecords = mutableListOf<JsonObject>()
@@ -2495,11 +2498,31 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
 
     private fun showReportForm() {
-        if (targetType !in setOf("user", "team", "message") || targetID.isBlank()) {
+        val targetValues = listOf("user", "team", "message")
+        val hasFixedTarget = targetType in targetValues && targetID.isNotBlank()
+        if ((targetType.isNotBlank() || targetID.isNotBlank()) && !hasFixedTarget) {
             showFailure(IllegalArgumentException(getString(R.string.xingdun_report_invalid_target)))
             return
         }
         applyFeedbackFormChrome()
+        var selectedTargetType = if (hasFixedTarget) targetType else targetValues.first()
+        val targetLabels = listOf(
+            getString(R.string.xingdun_report_target_user),
+            getString(R.string.xingdun_report_target_team),
+            getString(R.string.xingdun_report_target_message_short),
+        )
+        val targetTypeSelector = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@XingDunFeatureActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                targetLabels,
+            )
+        }
+        val targetIdentifier = if (hasFixedTarget) null else input(
+            R.string.xingdun_report_target_user_id_hint,
+        ).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
         val reasonValues = resources.getStringArray(R.array.xingdun_report_reason_values)
         val reasonLabels = resources.getStringArray(R.array.xingdun_report_reason_labels)
         val reason = Spinner(this).apply {
@@ -2531,6 +2554,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         lateinit var historyButton: Button
         lateinit var updateState: () -> Unit
         lateinit var renderAttachments: () -> Unit
+        var formReady = false
         renderAttachments = {
             attachmentTitle.text = getString(R.string.xingdun_report_images_count, attachments.size)
             attachmentRow.removeAllViews()
@@ -2550,17 +2574,36 @@ open class XingDunFeatureActivity : BaseActivity() {
             R.string.xingdun_report_target,
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(reportTargetRow(R.string.xingdun_report_target_type, reportFormTargetText(targetType)))
-                addView(reportDivider())
-                addView(reportTargetRow(
-                    R.string.xingdun_report_target_object,
-                    targetDisplayName.trim().ifEmpty { reportTargetText(targetType) },
-                ))
-                addView(reportDivider())
-                addView(reportTargetRow(
-                    R.string.xingdun_report_target_identifier,
-                    targetDisplayID.trim().ifEmpty { targetID },
-                ))
+                if (hasFixedTarget) {
+                    addView(reportTargetRow(R.string.xingdun_report_target_type, reportFormTargetText(targetType)))
+                    addView(reportDivider())
+                    addView(reportTargetRow(
+                        R.string.xingdun_report_target_object,
+                        targetDisplayName.trim().ifEmpty { reportTargetText(targetType) },
+                    ))
+                    addView(reportDivider())
+                    addView(reportTargetRow(
+                        R.string.xingdun_report_target_identifier,
+                        targetDisplayID.trim().ifEmpty { targetID },
+                    ))
+                } else {
+                    addView(LinearLayout(context).apply {
+                        gravity = Gravity.CENTER_VERTICAL
+                        minimumHeight = 48.dp()
+                        addView(TextView(context).apply {
+                            setText(R.string.xingdun_report_target_type)
+                            textSize = 16f
+                            setTextColor(0xFF1C1C1E.toInt())
+                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                        addView(targetTypeSelector, LinearLayout.LayoutParams(
+                            0,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            1.6f,
+                        ))
+                    })
+                    addView(reportDivider())
+                    addView(targetIdentifier)
+                }
             },
         )
         addFeedbackSection(R.string.xingdun_report_reason, reason)
@@ -2619,6 +2662,11 @@ open class XingDunFeatureActivity : BaseActivity() {
                 return@actionButton
             }
             val detail = description.text.toString().trim()
+            val submissionTargetID = if (hasFixedTarget) targetID else targetIdentifier?.text?.toString()?.trim().orEmpty()
+            if (submissionTargetID.isEmpty()) {
+                status.setText(R.string.xingdun_report_invalid_target)
+                return@actionButton
+            }
             if (detail.isEmpty() || detail.length > 500) {
                 status.setText(R.string.xingdun_report_description_required_error)
                 return@actionButton
@@ -2633,8 +2681,8 @@ open class XingDunFeatureActivity : BaseActivity() {
                         session = requireSession(),
                         path = "report/save",
                         fields = mapOf(
-                            "target_type" to targetType,
-                            "target_id" to targetID,
+                            "target_type" to selectedTargetType,
+                            "target_id" to submissionTargetID,
                             "reason" to reasonValues[reason.selectedItemPosition],
                             "description" to detail,
                         ),
@@ -2646,6 +2694,8 @@ open class XingDunFeatureActivity : BaseActivity() {
                     submitting = false
                     setBusy(false)
                     reason.isEnabled = false
+                    targetTypeSelector.isEnabled = false
+                    targetIdentifier?.isEnabled = false
                     description.isEnabled = false
                     val message = if (submission.duplicate == true) {
                         getString(R.string.xingdun_report_duplicate_result)
@@ -2673,10 +2723,28 @@ open class XingDunFeatureActivity : BaseActivity() {
             descriptionCount.text = getString(R.string.xingdun_report_character_count, count)
             descriptionCount.setTextColor(if (count > 500) 0xFFD93025.toInt() else 0xFF8A8A8F.toInt())
             addImageButton.isEnabled = result == null && attachments.size < XingDunAttachmentResolver.MAX_COUNT && !submitting
-            submitButton.isEnabled = result != null || (count in 1..500 && !submitting)
+            val hasTargetIdentifier = hasFixedTarget || !targetIdentifier?.text?.toString()?.trim().isNullOrEmpty()
+            targetTypeSelector.isEnabled = !hasFixedTarget && result == null && !submitting
+            targetIdentifier?.isEnabled = result == null && !submitting
+            submitButton.isEnabled = result != null || (hasTargetIdentifier && count in 1..500 && !submitting)
             submitButton.setText(if (submitting) R.string.xingdun_workspace_processing else if (result != null) R.string.xingdun_complete else R.string.xingdun_report_submit)
         }
+        targetTypeSelector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                selectedTargetType = targetValues[position.coerceIn(targetValues.indices)]
+                targetIdentifier?.setHint(when (selectedTargetType) {
+                    "team" -> R.string.xingdun_report_target_team_id_hint
+                    "message" -> R.string.xingdun_report_target_message_id_hint
+                    else -> R.string.xingdun_report_target_user_id_hint
+                })
+                if (formReady) updateState()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+        targetIdentifier?.doAfterTextChanged { if (formReady) updateState() }
         description.doAfterTextChanged { updateState() }
+        formReady = true
         renderAttachments()
         updateState()
     }
@@ -4553,6 +4621,19 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun showHelpCenter() {
         applyHelpCenterChrome()
+        helpCustomerServiceLoading = false
+        helpCustomerServiceRow = null
+        scrollView.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> helpCustomerServiceTouchStartY = event.y
+                MotionEvent.ACTION_UP -> {
+                    if (scrollView.scrollY == 0 && event.y - helpCustomerServiceTouchStartY > 72.dp()) {
+                        helpCustomerServiceRow?.let(::loadHelpCustomerService)
+                    }
+                }
+            }
+            false
+        }
         addHelpFAQSection(
             R.string.xingdun_help_section_account,
             listOf(
@@ -4668,6 +4749,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
         if (XingDunSessionManager.currentSession()?.features?.customerService == true) {
             val contactRow = LinearLayout(this)
+            helpCustomerServiceRow = contactRow
             group.addView(contactRow)
             group.addView(helpDivider())
             loadHelpCustomerService(contactRow)
@@ -4746,13 +4828,28 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun loadHelpCustomerService(row: LinearLayout) {
+        if (helpCustomerServiceLoading) return
+        val session = XingDunSessionManager.currentSession() ?: run {
+            configureHelpCustomerServiceRow(
+                row,
+                R.string.xingdun_contact_enterprise_support,
+                R.string.xingdun_session_expired,
+            ) {}
+            return
+        }
+        helpCustomerServiceLoading = true
         configureHelpCustomerServiceRow(row, R.string.xingdun_contact_enterprise_support, R.string.xingdun_loading) {}
         lifecycleScope.launch {
             runCatching {
                 XingDunSessionManager.apiClient().get<JsonObject>(
-                    requireSession(), "cs/identity", emptyMap(), JsonObject::class.java
-                )
+                    session, "cs/identity", emptyMap(), JsonObject::class.java
+                ).also { identity ->
+                    identity.string("company_code")?.let { returnedCompanyCode ->
+                        check(returnedCompanyCode.equals(session.companyCode, ignoreCase = true))
+                    }
+                }
             }.onSuccess { identity ->
+                helpCustomerServiceLoading = false
                 val target = identity.string("official_cs_tim_user_id")?.takeIf {
                     identity.boolean("customer_service_enabled") && identity.boolean("ordinary_entry_enabled")
                 }
@@ -4768,6 +4865,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                     }
                 }
             }.onFailure {
+                helpCustomerServiceLoading = false
                 configureHelpCustomerServiceRow(
                     row,
                     R.string.xingdun_contact_enterprise_support,
@@ -4782,7 +4880,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         val configured = helpNavigationRow(
             title = title,
             detail = detail,
-            icon = R.drawable.xingdun_ic_mine_help,
+            icon = R.drawable.xingdun_ic_mine_customer_service,
             action = action,
         )
         while (configured.childCount > 0) row.addView(configured.getChildAt(0).also { configured.removeView(it) })

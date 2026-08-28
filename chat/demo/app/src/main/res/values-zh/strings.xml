@@ -489,6 +489,9 @@
     <string name="xingdun_report_target">举报对象</string>
     <string name="xingdun_report_target_object">对象</string>
     <string name="xingdun_report_target_identifier">标识</string>
+    <string name="xingdun_report_target_user_id_hint">请输入腾讯 UserID</string>
+    <string name="xingdun_report_target_team_id_hint">请输入腾讯 GroupID</string>
+    <string name="xingdun_report_target_message_id_hint">请输入腾讯消息 ID</string>
     <string name="xingdun_report_description_hint">请描述问题</string>
     <string name="xingdun_report_description_footer">必填，最多 500 个字符</string>
     <string name="xingdun_report_character_count">%1$d/500</string>
