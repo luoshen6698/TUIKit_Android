@@ -149,6 +149,9 @@
     <string name="demo_login_user_id_label">用户 ID</string>
     <string name="demo_page_conversations_title">消息</string>
     <string name="demo_page_contacts_title">通讯录</string>
+    <string name="xingdun_global_search">全局搜索</string>
+    <string name="xingdun_more_contact_actions">更多通讯录操作</string>
+    <string name="xingdun_start_group_chat">发起群聊</string>
     <string name="demo_page_me_title">我的</string>
     <string name="demo_page_settings_title">设置</string>
     <string name="demo_search_hint">搜索</string>

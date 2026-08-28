@@ -33,6 +33,7 @@ import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import io.trtc.tuikit.chat.uikit.components.contactlist.ui.ContactFlowLauncher
+import io.trtc.tuikit.chat.uikit.components.contactlist.config.ChatContactListConfig
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
@@ -103,6 +104,7 @@ class MainActivity : BaseActivity() {
     private lateinit var bottomTabs: List<BottomTab>
 
     private var conversationsAddButton: ImageView? = null
+    private var contactsSearchButton: ImageView? = null
     private var contactsAddButton: ImageView? = null
     private var selectedTabIndex = 0
     private var currentTabId = R.id.demo_tab_messages
@@ -247,6 +249,7 @@ class MainActivity : BaseActivity() {
         bottomNav.background = roundedBackground(colors.bgColorBottomBar, 32f)
 
         conversationsAddButton?.setColorFilter(colors.textColorPrimary)
+        contactsSearchButton?.setColorFilter(colors.textColorPrimary)
         contactsAddButton?.setColorFilter(colors.textColorPrimary)
 
         updateSelectedTabColors(colors)
@@ -780,10 +783,20 @@ class MainActivity : BaseActivity() {
 
     private fun createContactsPage(): View {
         val page = ContactsPageView(this)
+        val searchButton = ImageView(this).apply {
+            setImageResource(io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_search)
+            contentDescription = getString(R.string.xingdun_global_search)
+            layoutParams = LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply {
+                marginEnd = 16.dpToPx()
+            }
+            setOnClickListener { SearchActivity.start(this@MainActivity) }
+        }
         val addButton = ImageView(this).apply {
             setImageResource(io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_add_circle)
+            contentDescription = getString(R.string.xingdun_more_contact_actions)
             layoutParams = ViewGroup.LayoutParams(24.dpToPx(), 24.dpToPx())
         }
+        contactsSearchButton = searchButton
         contactsAddButton = addButton
         addButton.setOnClickListener { anchor ->
             PopupMenuHelper(this).show(
@@ -791,12 +804,21 @@ class MainActivity : BaseActivity() {
                 listOf(
                     PopupMenuItem(
                         title = getString(R.string.demo_add_friend),
-                        onClick = { ContactFlowLauncher.showAddFriendPage(this) },
+                        onClick = {
+                            XingDunFeatureActivity.start(
+                                this,
+                                XingDunFeatureActivity.MODE_FRIEND_SEARCH
+                            )
+                        },
                         iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_user_add
                     ),
                     PopupMenuItem(
-                        title = getString(R.string.demo_add_group),
-                        onClick = { ContactFlowLauncher.showAddGroupPage(this) },
+                        title = getString(R.string.xingdun_start_group_chat),
+                        onClick = {
+                            ContactFlowLauncher.showCreateGroupChatPage(this) { conversationId ->
+                                ChatActivity.start(this, conversationId)
+                            }
+                        },
                         iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_chat_add
                     ),
                     PopupMenuItem(
@@ -809,9 +831,16 @@ class MainActivity : BaseActivity() {
                 )
             )
         }
+        val headerActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(searchButton)
+            addView(addButton)
+        }
         page.setup(
+            config = ChatContactListConfig(showSearchBar = false),
             headerTitle = getString(R.string.demo_page_contacts_title),
-            headerRightAction = addButton,
+            headerRightAction = headerActions,
             onContactClick = { contactInfo ->
                 XingDunContactDetailActivity.start(this, contactInfo)
             },

@@ -151,6 +151,9 @@
     <string name="demo_login_user_id_label">User ID</string>
     <string name="demo_page_conversations_title">Messages</string>
     <string name="demo_page_contacts_title">Contacts</string>
+    <string name="xingdun_global_search">Global search</string>
+    <string name="xingdun_more_contact_actions">More contact actions</string>
+    <string name="xingdun_start_group_chat">Start group chat</string>
     <string name="demo_page_me_title">Me</string>
     <string name="demo_page_settings_title">Settings</string>
     <string name="demo_search_hint">Search</string>
