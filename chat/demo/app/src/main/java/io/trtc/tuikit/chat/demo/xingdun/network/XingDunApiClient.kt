@@ -141,6 +141,18 @@ class XingDunApiClient(
         return execute(request, responseType)
     }
 
+    suspend fun <T> getNullable(
+        session: XingDunStoredSession,
+        path: String,
+        query: Map<String, String?>,
+        responseType: Type
+    ): T? {
+        val urlBuilder = endpointUrl(session.apiBaseUrl, path).toHttpUrl().newBuilder()
+        query.forEach { (key, value) -> if (value != null) urlBuilder.addQueryParameter(key, value) }
+        val request = requestBuilder(urlBuilder.build().toString(), session).get().build()
+        return executeNullable(request, responseType)
+    }
+
     suspend fun <T> publicGet(path: String, query: Map<String, String?>, responseType: Type): T {
         val urlBuilder = endpointUrl(centralBaseUrl(), path).toHttpUrl().newBuilder()
         query.forEach { (key, value) -> if (value != null) urlBuilder.addQueryParameter(key, value) }
@@ -260,6 +272,23 @@ class XingDunApiClient(
                 appContext.getString(R.string.xingdun_error_response_data),
                 envelope.traceId
             )
+        }
+    }
+
+    private suspend fun <T> executeNullable(request: Request, responseType: Type): T? = withContext(Dispatchers.IO) {
+        httpClient.newCall(request).execute().use { response ->
+            val payload = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw apiException(payload, response.code)
+            val envelopeType = TypeToken.getParameterized(XingDunEnvelope::class.java, responseType).type
+            val envelope: XingDunEnvelope<T> = try {
+                gson.fromJson(payload, envelopeType)
+            } catch (_: Exception) {
+                throw XingDunApiException(null, response.code, appContext.getString(R.string.xingdun_error_response_format))
+            }
+            if (envelope.code != 0 && envelope.code != 200) {
+                throw XingDunApiException(envelope.code, response.code, envelope.message, envelope.traceId)
+            }
+            envelope.data
         }
     }
 

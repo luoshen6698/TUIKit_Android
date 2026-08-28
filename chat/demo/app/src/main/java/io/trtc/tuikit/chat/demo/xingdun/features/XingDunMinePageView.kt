@@ -21,7 +21,6 @@ import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.login.UserProfile
 import io.trtc.tuikit.chat.app.R
-import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.settings.SelfDetailActivity
 import io.trtc.tuikit.chat.demo.settings.XingDunSystemSettingsActivity
@@ -281,22 +280,16 @@ class XingDunMinePageView @JvmOverloads constructor(
                     ?.asString
                     ?.trim()
                     ?.takeIf(String::isNotEmpty)
-                val assigned = identity.getAsJsonArray("customer_services")
-                    ?.firstOrNull()
-                    ?.takeIf { it.isJsonObject }
-                    ?.asJsonObject
-                    ?.get("tim_user_id")
+                val ordinaryEntryEnabled = identity.get("ordinary_entry_enabled")
                     ?.takeUnless { it.isJsonNull }
-                    ?.asString
-                    ?.trim()
-                    ?.takeIf(String::isNotEmpty)
-                val target = official ?: assigned
+                    ?.let { runCatching { it.asBoolean }.getOrNull() }
+                    ?: false
                 val enabled = declaredEnabled
                     ?: identity.get("is_cs")?.takeUnless { it.isJsonNull }
                         ?.let { runCatching { it.asBoolean }.getOrNull() }
-                    ?: (target != null)
-                if (enabled && target != null) {
-                    ChatActivity.start(context, "c2c_$target")
+                    ?: (official != null)
+                if (enabled && ordinaryEntryEnabled && official != null) {
+                    XingDunFeatureActivity.start(context, XingDunFeatureActivity.MODE_FRIEND_SEARCH, official)
                 } else {
                     Toast.makeText(context, R.string.xingdun_customer_service_not_configured, Toast.LENGTH_SHORT).show()
                 }

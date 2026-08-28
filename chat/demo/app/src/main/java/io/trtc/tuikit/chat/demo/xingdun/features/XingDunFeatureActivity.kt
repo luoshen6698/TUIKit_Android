@@ -315,6 +315,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             MODE_WORKSPACE_CREATE -> showWorkspaceForm()
             MODE_CUSTOMER_SERVICE -> showCustomerService()
             MODE_CUSTOMER_SERVICE_GROUP -> showCustomerServiceGroup()
+            MODE_FRIEND_SEARCH -> showFriendSearch()
             MODE_INVITE -> showInvite()
             MODE_FEEDBACK -> showFeedbackForm()
             MODE_VERSION -> showVersion()
@@ -1655,6 +1656,209 @@ open class XingDunFeatureActivity : BaseActivity() {
             }
         }
     }
+
+    private fun showFriendSearch() {
+        applyCustomerServiceChrome()
+        val query = input(R.string.xingdun_friend_search_hint).apply {
+            setText(targetID)
+            inputType = InputType.TYPE_CLASS_TEXT
+            maxLines = 1
+        }
+        val resultContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val searchButton = actionButton(R.string.xingdun_search_user) {
+            searchFriend(query.text.toString(), resultContainer)
+        }
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(14.dp(), 8.dp(), 14.dp(), 14.dp())
+            addView(query)
+            addView(searchButton)
+        }, customerServiceSectionLayoutParams())
+        content.addView(resultContainer)
+        if (targetID.isNotBlank()) searchFriend(targetID, resultContainer)
+    }
+
+    private fun searchFriend(rawQuery: String, resultContainer: LinearLayout) {
+        val keyword = rawQuery.trim()
+        if (keyword.isEmpty() || keyword.toByteArray(Charsets.UTF_8).size > 128) {
+            status.setText(R.string.xingdun_friend_search_invalid)
+            return
+        }
+        resultContainer.removeAllViews()
+        setBusy(true)
+        lifecycleScope.launch {
+            runCatching {
+                XingDunSessionManager.apiClient().getNullable<JsonObject>(
+                    requireSession(),
+                    "user/searchForFriend",
+                    mapOf("keyword" to keyword),
+                    JsonObject::class.java,
+                )
+            }.onSuccess { profile ->
+                setBusy(false)
+                if (profile == null) {
+                    resultContainer.addView(friendSearchEmptyState())
+                } else {
+                    renderFriendSearchProfile(resultContainer, profile)
+                }
+            }.onFailure { error ->
+                setBusy(false)
+                status.text = error.localizedMessage ?: getString(R.string.xingdun_friend_search_failed)
+            }
+        }
+    }
+
+    private fun renderFriendSearchProfile(container: LinearLayout, profile: JsonObject) {
+        val localUserID = profile.int("id") ?: 0
+        val timUserID = profile.string("tim_user_id").orEmpty()
+        val nickname = profile.string("nickname") ?: timUserID
+        val relationship = if (profile.boolean("is_self")) "self" else profile.string("relationship_status").orEmpty()
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(Color.WHITE, 14f)
+            setPadding(16.dp(), 16.dp(), 16.dp(), 16.dp())
+        }
+        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val avatarFrame = FrameLayout(this)
+        avatarFrame.addView(TextView(this).apply {
+            text = nickname.take(1).uppercase(Locale.getDefault())
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF168F83.toInt())
+            background = roundedDrawable(0xFFE3F5F0.toInt(), 26f)
+        }, FrameLayout.LayoutParams(52.dp(), 52.dp()))
+        profile.string("avatar")?.let { avatarURL ->
+            avatarFrame.addView(ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                background = roundedDrawable(0xFFE3F5F0.toInt(), 26f)
+                clipToOutline = true
+                Glide.with(this@XingDunFeatureActivity).load(avatarURL).into(this)
+            }, FrameLayout.LayoutParams(52.dp(), 52.dp()))
+        }
+        header.addView(avatarFrame, LinearLayout.LayoutParams(52.dp(), 52.dp()).apply { marginEnd = 12.dp() })
+        header.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(context).apply {
+                text = nickname
+                textSize = 17f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(0xFF1C1C1E.toInt())
+                maxLines = 1
+            })
+            profile.string("signature")?.let { signature ->
+                addView(TextView(context).apply {
+                    text = signature
+                    textSize = 13f
+                    setTextColor(0xFF8A8A8F.toInt())
+                    maxLines = 1
+                    setPadding(0, 3.dp(), 0, 0)
+                })
+            }
+            if (relationship.isNotBlank() && relationship != "none") {
+                addView(TextView(context).apply {
+                    text = friendRelationshipText(relationship)
+                    textSize = 13f
+                    setTextColor(if (relationship == "blocked") 0xFFD93025.toInt() else 0xFF168F83.toInt())
+                    setPadding(0, 3.dp(), 0, 0)
+                })
+            }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        card.addView(header)
+        profile.string("custom_id")?.let { customID ->
+            card.addView(TextView(this).apply {
+                text = getString(R.string.xingdun_friend_account_value, customID)
+                textSize = 14f
+                setTextColor(0xFF6D6D72.toInt())
+                setPadding(0, 14.dp(), 0, 0)
+            })
+        }
+        if (relationship.isBlank() || relationship == "none") {
+            card.addView(actionButton(R.string.xingdun_add_friend) {
+                showFriendApplicationComposer(card, localUserID)
+            })
+        }
+        container.addView(TextView(this).apply {
+            setText(R.string.xingdun_user_profile)
+            textSize = 14f
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(14.dp(), 12.dp(), 8.dp(), 8.dp())
+        })
+        container.addView(card, customerServiceSectionLayoutParams())
+    }
+
+    private fun showFriendApplicationComposer(card: LinearLayout, localUserID: Int) {
+        if (localUserID <= 0 || card.findViewWithTag<View>(FRIEND_APPLICATION_TAG) != null) return
+        val composer = LinearLayout(this).apply {
+            tag = FRIEND_APPLICATION_TAG
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 10.dp(), 0, 0)
+        }
+        val message = input(R.string.xingdun_friend_application_message).apply {
+            maxLines = 2
+        }
+        composer.addView(message)
+        composer.addView(LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(actionButton(R.string.xingdun_cancel) { card.removeView(composer) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(actionButton(R.string.xingdun_send_application) {
+                val normalized = message.text.toString().trim()
+                if (normalized.toByteArray(Charsets.UTF_8).size > 256) {
+                    status.setText(R.string.xingdun_friend_application_too_long)
+                    return@actionButton
+                }
+                setBusy(true)
+                lifecycleScope.launch {
+                    runCatching {
+                        XingDunSessionManager.apiClient().post<JsonObject>(
+                            requireSession(),
+                            "friend/apply",
+                            mapOf("to_user_id" to localUserID, "message" to normalized),
+                            JsonObject::class.java,
+                        )
+                    }.onSuccess { response ->
+                        setBusy(false)
+                        status.setText(
+                            if (response.string("relationship_status") == "friend") R.string.xingdun_friend_added
+                            else R.string.xingdun_friend_application_sent
+                        )
+                        card.removeView(composer)
+                    }.onFailure(::showFailure)
+                }
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 8.dp() })
+        })
+        card.addView(composer)
+    }
+
+    private fun friendSearchEmptyState(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        background = roundedDrawable(Color.WHITE, 14f)
+        setPadding(20.dp(), 56.dp(), 20.dp(), 56.dp())
+        addView(TextView(context).apply {
+            setText(R.string.xingdun_friend_not_found)
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(0xFF1C1C1E.toInt())
+        })
+        addView(TextView(context).apply {
+            setText(R.string.xingdun_friend_not_found_detail)
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(0, 8.dp(), 0, 0)
+        })
+    }
+
+    private fun friendRelationshipText(value: String): String = getString(when (value) {
+        "self" -> R.string.xingdun_friend_relationship_self
+        "friend" -> R.string.xingdun_friend_relationship_friend
+        "outgoing_pending" -> R.string.xingdun_friend_relationship_outgoing
+        "incoming_pending" -> R.string.xingdun_friend_relationship_incoming
+        "blocked" -> R.string.xingdun_friend_relationship_blocked
+        else -> R.string.xingdun_friend_relationship_none
+    })
 
     private fun loadCustomerServiceSessionInfo(timUserID: String) {
         setBusy(true)
@@ -6548,6 +6752,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_WORKSPACE_CREATE -> R.string.xingdun_workspace_create
         MODE_CUSTOMER_SERVICE -> R.string.xingdun_customer_service
         MODE_CUSTOMER_SERVICE_GROUP -> R.string.xingdun_customer_service_group_management
+        MODE_FRIEND_SEARCH -> R.string.xingdun_add_friend_title
         MODE_INVITE -> R.string.xingdun_share_poster
         MODE_FEEDBACK -> R.string.xingdun_feedback
         MODE_VERSION -> R.string.xingdun_version
@@ -6613,6 +6818,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_WORKSPACE_CREATE = "workspace_create"
         const val MODE_CUSTOMER_SERVICE = "customer_service"
         const val MODE_CUSTOMER_SERVICE_GROUP = "customer_service_group"
+        const val MODE_FRIEND_SEARCH = "friend_search"
         const val MODE_INVITE = "invite"
         const val MODE_FEEDBACK = "feedback"
         const val MODE_VERSION = "version"
@@ -6643,6 +6849,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val PERMISSION_PREFERENCES = "xingdun_permission_ui"
         private const val REPORT_PAGE_SIZE = 20
         private const val FAVORITE_PAGE_SIZE = 20
+        private const val FRIEND_APPLICATION_TAG = "xingdun_friend_application"
 
         fun start(context: Context, mode: String, itemId: Int = 0) {
             context.startActivity(Intent(context, XingDunFeatureActivity::class.java).apply {
