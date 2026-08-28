@@ -176,6 +176,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var favoriteLoading = false
     private var favoriteTouchStartY = 0f
     private var accountSecurityTouchStartY = 0f
+    private var accountSecurityLoading = false
     private var storageTouchStartY = 0f
     private var helpCustomerServiceTouchStartY = 0f
     private var helpCustomerServiceLoading = false
@@ -208,6 +209,8 @@ open class XingDunFeatureActivity : BaseActivity() {
         get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_INVITE_POSTER_FIXTURE, false)
     private val debugFavoritesFixtureEnabled: Boolean
         get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_FAVORITES_FIXTURE, false)
+    private val debugAccountSecurityFixtureEnabled: Boolean
+        get() = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_ACCOUNT_SECURITY_FIXTURE, false)
 
     private data class FavoriteAudioVisual(
         val icon: TextView,
@@ -3321,6 +3324,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showAccountSecurity() {
+        if (accountSecurityLoading) return
         applyNotificationSettingsChrome()
         scrollView.setOnTouchListener { _, event ->
             when (event.actionMasked) {
@@ -3334,16 +3338,38 @@ open class XingDunFeatureActivity : BaseActivity() {
             }
             false
         }
+        if (debugAccountSecurityFixtureEnabled) {
+            renderAccountSecurity(JsonObject().apply {
+                addProperty("username", "xingdun_user")
+                addProperty("phone", "13800138000")
+                addProperty("email", "user@xingdunim.com")
+            })
+            return
+        }
+        val session = XingDunSessionManager.currentSession() ?: run {
+            showFailure(IllegalStateException(getString(R.string.xingdun_session_expired)))
+            return
+        }
+        accountSecurityLoading = true
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
                 XingDunSessionManager.apiClient().get<JsonObject>(
-                    requireSession(), "user/profile", emptyMap(), JsonObject::class.java
-                )
+                    session, "user/profile", emptyMap(), JsonObject::class.java
+                ).also { profile ->
+                    profile.string("company_code")?.let { returnedCompanyCode ->
+                        check(returnedCompanyCode.equals(session.companyCode, ignoreCase = true))
+                    }
+                    profile.string("tim_user_id")?.let { returnedTimUserID ->
+                        check(returnedTimUserID == session.timUserId)
+                    }
+                }
             }.onSuccess { profile ->
+                accountSecurityLoading = false
                 setBusy(false)
                 renderAccountSecurity(profile)
             }.onFailure {
+                accountSecurityLoading = false
                 setBusy(false)
                 content.addView(LinearLayout(this@XingDunFeatureActivity).apply {
                     orientation = LinearLayout.VERTICAL
@@ -3379,7 +3405,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         addNotificationSectionHeader(R.string.xingdun_account_login_section)
         content.addView(accountSecurityCard(
             accountSecurityRow(
-                icon = "👤",
+                icon = R.drawable.xingdun_ic_settings_account,
                 title = R.string.xingdun_username,
                 value = if (isDeviceAccount) getString(R.string.xingdun_not_bound) else username,
                 action = if (isDeviceAccount) { { openAccountChild(MODE_UPGRADE_ACCOUNT) } } else null,
@@ -3390,14 +3416,14 @@ open class XingDunFeatureActivity : BaseActivity() {
         addNotificationSectionHeader(R.string.xingdun_account_contact_section)
         content.addView(accountSecurityCard(
             accountSecurityRow(
-                "☎",
+                R.drawable.xingdun_ic_account_phone,
                 R.string.xingdun_phone,
                 maskPhone(profile.string("phone")),
                 action = { openAccountChild(MODE_BIND_PHONE) },
             ),
             notificationDivider(),
             accountSecurityRow(
-                "✉",
+                R.drawable.xingdun_ic_account_email,
                 R.string.xingdun_email,
                 maskEmail(profile.string("email")),
                 action = { openAccountChild(MODE_BIND_EMAIL) },
@@ -3410,7 +3436,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         } else {
             content.addView(accountSecurityCard(
                 accountSecurityRow(
-                    "🔐",
+                    R.drawable.xingdun_ic_password,
                     R.string.xingdun_change_password,
                     null,
                     action = { openAccountChild(MODE_CHANGE_PASSWORD) },
@@ -3424,10 +3450,10 @@ open class XingDunFeatureActivity : BaseActivity() {
         } else {
             content.addView(accountSecurityCard(
                 accountSecurityRow(
-                    "⚠",
+                    R.drawable.xingdun_ic_account_deactivate,
                     R.string.xingdun_deactivate_account,
                     null,
-                    action = { start(this@XingDunFeatureActivity, MODE_DEACTIVATE) },
+                    action = { openAccountChild(MODE_DEACTIVATE) },
                     danger = true,
                 ),
             ), notificationSectionLayoutParams())
@@ -3437,6 +3463,9 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun openAccountChild(childMode: String) {
         accountChildResult.launch(Intent(this, XingDunFeatureActivity::class.java).apply {
             putExtra(EXTRA_MODE, childMode)
+            if (BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false)) {
+                putExtra(EXTRA_DEBUG_BYPASS_LOGIN, true)
+            }
         })
     }
 
@@ -3535,7 +3564,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun accountSecurityRow(
-        icon: String,
+        icon: Int,
         title: Int,
         value: String?,
         action: (() -> Unit)? = null,
@@ -3543,11 +3572,13 @@ open class XingDunFeatureActivity : BaseActivity() {
     ): View = LinearLayout(this).apply {
         gravity = Gravity.CENTER_VERTICAL
         setPadding(14.dp(), 0, 10.dp(), 0)
-        addView(TextView(context).apply {
-            text = icon
-            textSize = 18f
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(34.dp(), 56.dp()))
+        addView(ImageView(context).apply {
+            setImageResource(icon)
+            imageTintList = ColorStateList.valueOf(if (danger) 0xFFD93025.toInt() else 0xFF23B39C.toInt())
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+        }, LinearLayout.LayoutParams(24.dp(), 24.dp()).apply {
+            marginEnd = 12.dp()
+        })
         addView(TextView(context).apply {
             setText(title)
             textSize = 16f
@@ -6563,6 +6594,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val EXTRA_DEBUG_PERSONAL_QR_FIXTURE = "debug_personal_qr_fixture"
         private const val EXTRA_DEBUG_INVITE_POSTER_FIXTURE = "debug_invite_poster_fixture"
         private const val EXTRA_DEBUG_FAVORITES_FIXTURE = "debug_favorites_fixture"
+        private const val EXTRA_DEBUG_ACCOUNT_SECURITY_FIXTURE = "debug_account_security_fixture"
         private const val EXTRA_DEBUG_LEGAL_URL = "debug_legal_url"
         private const val EXTRA_INITIAL_REPORT_JSON = "initial_report_json"
         private const val EXTRA_ITEM_ID = "item_id"
