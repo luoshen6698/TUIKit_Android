@@ -13,7 +13,7 @@ if (file("mcs-services.json").isFile) {
 val appVersionCode = (findProperty("VERSION_CODE") as String?
     ?: System.getenv("VERSION_CODE"))?.toIntOrNull() ?: 1
 val appVersionName = (findProperty("VERSION_NAME") as String?
-    ?: System.getenv("VERSION_NAME")) ?: "1.0"
+    ?: System.getenv("VERSION_NAME")) ?: "1.0.0"
 val apiBaseUrl = (findProperty("XINGDUN_API_BASE_URL") as String?
     ?: System.getenv("XINGDUN_API_BASE_URL")) ?: "https://api.xingdunim.com/prod/im/v1"
 val honorAppId = (findProperty("HONOR_APPID") as String?
