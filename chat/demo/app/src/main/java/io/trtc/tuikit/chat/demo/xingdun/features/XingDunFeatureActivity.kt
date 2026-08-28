@@ -2898,12 +2898,24 @@ open class XingDunFeatureActivity : BaseActivity() {
             getString(R.string.xingdun_report_target_team),
             getString(R.string.xingdun_report_target_message_short),
         )
-        val targetTypeSelector = Spinner(this).apply {
-            adapter = ArrayAdapter(
-                this@XingDunFeatureActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                targetLabels,
-            )
+        val targetTypeSegments = mutableListOf<TextView>()
+        lateinit var selectTargetType: (Int) -> Unit
+        val targetTypeSelector = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            background = roundedDrawable(0xFFEDEEF0.toInt(), 11f)
+            setPadding(4.dp(), 4.dp(), 4.dp(), 4.dp())
+            targetLabels.forEachIndexed { index, label ->
+                addView(TextView(context).apply {
+                    text = label
+                    textSize = 14f
+                    gravity = Gravity.CENTER
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { selectTargetType(index) }
+                    targetTypeSegments += this
+                }, LinearLayout.LayoutParams(0, 42.dp(), 1f))
+            }
         }
         val targetIdentifier = if (hasFixedTarget) null else input(
             R.string.xingdun_report_target_user_id_hint,
@@ -2975,17 +2987,16 @@ open class XingDunFeatureActivity : BaseActivity() {
                     ))
                 } else {
                     addView(LinearLayout(context).apply {
-                        gravity = Gravity.CENTER_VERTICAL
-                        minimumHeight = 48.dp()
+                        orientation = LinearLayout.VERTICAL
                         addView(TextView(context).apply {
                             setText(R.string.xingdun_report_target_type)
-                            textSize = 16f
+                            textSize = 14f
                             setTextColor(0xFF1C1C1E.toInt())
-                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                            setPadding(0, 4.dp(), 0, 8.dp())
+                        })
                         addView(targetTypeSelector, LinearLayout.LayoutParams(
-                            0,
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                            1.6f,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            50.dp(),
                         ))
                     })
                     addView(reportDivider())
@@ -3081,7 +3092,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                     submitting = false
                     setBusy(false)
                     reason.isEnabled = false
-                    targetTypeSelector.isEnabled = false
+                    targetTypeSegments.forEach { it.isEnabled = false }
                     targetIdentifier?.isEnabled = false
                     description.isEnabled = false
                     val message = if (submission.duplicate == true) {
@@ -3111,27 +3122,37 @@ open class XingDunFeatureActivity : BaseActivity() {
             descriptionCount.setTextColor(if (count > 500) 0xFFD93025.toInt() else 0xFF8A8A8F.toInt())
             addImageButton.isEnabled = result == null && attachments.size < XingDunAttachmentResolver.MAX_COUNT && !submitting
             val hasTargetIdentifier = hasFixedTarget || !targetIdentifier?.text?.toString()?.trim().isNullOrEmpty()
-            targetTypeSelector.isEnabled = !hasFixedTarget && result == null && !submitting
+            val targetSelectionEnabled = !hasFixedTarget && result == null && !submitting
+            targetTypeSegments.forEach {
+                it.isEnabled = targetSelectionEnabled
+                it.alpha = if (targetSelectionEnabled) 1f else 0.55f
+            }
             targetIdentifier?.isEnabled = result == null && !submitting
             submitButton.isEnabled = result != null || (hasTargetIdentifier && count in 1..500 && !submitting)
             submitButton.setText(if (submitting) R.string.xingdun_workspace_processing else if (result != null) R.string.xingdun_complete else R.string.xingdun_report_submit)
         }
-        targetTypeSelector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                selectedTargetType = targetValues[position.coerceIn(targetValues.indices)]
-                targetIdentifier?.setHint(when (selectedTargetType) {
-                    "team" -> R.string.xingdun_report_target_team_id_hint
-                    "message" -> R.string.xingdun_report_target_message_id_hint
-                    else -> R.string.xingdun_report_target_user_id_hint
-                })
-                if (formReady) updateState()
+        selectTargetType = { requestedPosition ->
+            val position = requestedPosition.coerceIn(targetValues.indices)
+            selectedTargetType = targetValues[position]
+            targetTypeSegments.forEachIndexed { index, segment ->
+                val selected = index == position
+                segment.isSelected = selected
+                segment.setTextColor(if (selected) 0xFF0B6B60.toInt() else 0xFF5C6966.toInt())
+                segment.setTypeface(null, if (selected) Typeface.BOLD else Typeface.NORMAL)
+                segment.background = if (selected) roundedDrawable(Color.WHITE, 9f) else null
+                ViewCompat.setElevation(segment, if (selected) 2.dp().toFloat() else 0f)
             }
-
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            targetIdentifier?.setHint(when (selectedTargetType) {
+                "team" -> R.string.xingdun_report_target_team_id_hint
+                "message" -> R.string.xingdun_report_target_message_id_hint
+                else -> R.string.xingdun_report_target_user_id_hint
+            })
+            if (formReady) updateState()
         }
         targetIdentifier?.doAfterTextChanged { if (formReady) updateState() }
         description.doAfterTextChanged { updateState() }
         formReady = true
+        selectTargetType(0)
         renderAttachments()
         updateState()
     }
