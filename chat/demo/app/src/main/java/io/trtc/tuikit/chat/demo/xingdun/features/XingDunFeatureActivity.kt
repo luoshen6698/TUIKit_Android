@@ -5197,6 +5197,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
         (headerBar.getChildAt(1) as? TextView)?.apply {
             setTextColor(Color.BLACK)
+            textSize = 17f
             gravity = Gravity.CENTER
         }
     }
@@ -5212,30 +5213,30 @@ open class XingDunFeatureActivity : BaseActivity() {
             if (index != entries.lastIndex) group.addView(helpDivider())
         }
         content.addView(group, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = 12.dp()
+            bottomMargin = 10.dp()
         })
     }
 
     private fun addHelpSectionHeader(title: Int) {
         content.addView(TextView(this).apply {
             setText(title)
-            textSize = 14f
+            textSize = 13f
             setTextColor(0xFF8A8A8F.toInt())
-            setPadding(14.dp(), 12.dp(), 8.dp(), 8.dp())
+            setPadding(14.dp(), 8.dp(), 8.dp(), 6.dp())
         })
     }
 
     private fun helpDisclosureRow(question: Int, answer: Int): View {
         val detail = TextView(this).apply {
             setText(answer)
-            textSize = 14f
+            textSize = 13f
             setTextColor(0xFF6D6D72.toInt())
-            setPadding(0, 0, 32.dp(), 13.dp())
+            setPadding(0, 0, 28.dp(), 10.dp())
             visibility = View.GONE
         }
         val arrow = TextView(this).apply {
             text = "›"
-            textSize = 28f
+            textSize = 22f
             gravity = Gravity.CENTER
             setTextColor(Color.BLACK)
         }
@@ -5246,10 +5247,10 @@ open class XingDunFeatureActivity : BaseActivity() {
                 gravity = Gravity.CENTER_VERTICAL
                 addView(TextView(context).apply {
                     setText(question)
-                    textSize = 16f
+                    textSize = 15f
                     setTextColor(Color.BLACK)
-                }, LinearLayout.LayoutParams(0, 56.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
-                addView(arrow, LinearLayout.LayoutParams(28.dp(), 56.dp()))
+                }, LinearLayout.LayoutParams(0, 46.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
+                addView(arrow, LinearLayout.LayoutParams(24.dp(), 46.dp()))
             })
             addView(detail)
             isClickable = true
@@ -5304,15 +5305,15 @@ open class XingDunFeatureActivity : BaseActivity() {
                 addView(ImageView(context).apply {
                     setImageResource(it)
                     imageTintList = android.content.res.ColorStateList.valueOf(0xFF28B7A2.toInt())
-                }, LinearLayout.LayoutParams(22.dp(), 22.dp()).apply {
+                }, LinearLayout.LayoutParams(20.dp(), 20.dp()).apply {
                     marginEnd = 12.dp()
                 })
             }
             addView(TextView(context).apply {
                 setText(title)
-                textSize = 16f
+                textSize = 15f
                 setTextColor(Color.BLACK)
-            }, LinearLayout.LayoutParams(0, 56.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
+            }, LinearLayout.LayoutParams(0, 48.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
             detail?.let {
                 addView(TextView(context).apply {
                     setText(it)
@@ -5323,10 +5324,10 @@ open class XingDunFeatureActivity : BaseActivity() {
             }
             addView(TextView(context).apply {
                 text = "›"
-                textSize = 28f
+                textSize = 22f
                 gravity = Gravity.CENTER
                 setTextColor(0xFF8A8A8F.toInt())
-            }, LinearLayout.LayoutParams(28.dp(), 56.dp()))
+            }, LinearLayout.LayoutParams(24.dp(), 48.dp()))
             isClickable = true
             isFocusable = true
             setOnClickListener { action() }
