@@ -6795,6 +6795,8 @@ open class XingDunFeatureActivity : BaseActivity() {
         }.apply {
             setTextColor(Color.WHITE)
             backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF28B7A2.toInt())
+            compoundDrawablePadding = 8.dp()
+            setCompoundDrawablesWithIntrinsicBounds(R.drawable.xingdun_ic_save_image, 0, 0, 0)
         }
         personalQRCodeSaveButton = saveButton
         content.addView(saveButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()).apply {
