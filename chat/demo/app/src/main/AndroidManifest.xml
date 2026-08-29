@@ -229,6 +229,12 @@
             android:theme="@style/Chat_UIKit_Theme"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.search.XingDunChatHistoryCategoryActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.xingdun.files"

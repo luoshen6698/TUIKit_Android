@@ -20,6 +20,7 @@ import io.trtc.tuikit.chat.uikit.components.search.utils.messageSenderAvatarUrl
 import io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageInConversationViewModel
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
+import io.trtc.tuikit.chat.uikit.components.widgets.SearchBarConfig
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.search.MessageSearchResultItem
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +44,8 @@ class SearchMessageInConversationPage(
     private val recyclerView = RecyclerView(context)
     private val loadingView: ProgressBar
     private val emptyText: TextView
+    private var blankContent: View? = null
+    private var requestKeyboardOnStart = true
     private var viewScope: CoroutineScope? = null
     private var searchQuery = ""
     private var conversationID = ""
@@ -54,6 +57,33 @@ class SearchMessageInConversationPage(
     var onBack: (() -> Unit)? = null
 
     private var currentConversation: MessageSearchResultItem? = null
+
+    /** Product landing configuration used by XingDun's iOS-aligned chat-history page. */
+    fun configureHistoryLanding(content: View, hint: CharSequence) {
+        blankContent?.let(::removeView)
+        blankContent = content
+        addView(content, indexOfChild(divider) + 1, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        conversationCard.visibility = View.GONE
+        divider.visibility = View.GONE
+        requestKeyboardOnStart = false
+        searchBar.configure(
+            SearchBarConfig(
+                showBack = false,
+                showCancel = false,
+                inputHeightDp = 48,
+                hint = hint,
+                debounceMs = 300L,
+                paddingHorizontalDp = 16,
+                paddingVerticalDp = 10,
+                paddingBottomDp = 16,
+                inputCornerRadiusDp = 24,
+                searchIconMarginStartDp = 14,
+                inputTextPaddingStartDp = 38,
+                expandTouchTargets = true,
+            )
+        )
+        updateResults(emptyList())
+    }
 
     init {
         orientation = VERTICAL
@@ -229,7 +259,7 @@ class SearchMessageInConversationPage(
         }
 
         viewModel.updateSearchQuery(conversationID, keyword)
-        searchBar.requestFocusAndShowKeyboard()
+        if (requestKeyboardOnStart) searchBar.requestFocusAndShowKeyboard()
     }
 
     private fun stopCollectingUiState() {
@@ -243,7 +273,12 @@ class SearchMessageInConversationPage(
     }
 
     private fun updateResults(messages: List<MessageInfo>) {
-        if (messages.isEmpty() && searchQuery.isNotBlank()) {
+        val isBlank = searchQuery.isBlank()
+        blankContent?.visibility = if (isBlank) View.VISIBLE else View.GONE
+        if (isBlank) {
+            emptyText.visibility = View.GONE
+            recyclerView.visibility = View.GONE
+        } else if (messages.isEmpty()) {
             emptyText.visibility = View.VISIBLE
             recyclerView.visibility = View.GONE
         } else {

@@ -1303,4 +1303,25 @@
     <string name="xingdun_unblock_success">已解除拉黑，好友关系已恢复。</string>
     <string name="xingdun_unblock_failed">解除拉黑失败，请稍后重试。</string>
     <string name="xingdun_group_avatar_invalid">群头像须为不超过 5 MB 的有效图片。</string>
+    <string name="xingdun_chat_history_title">聊天记录</string>
+    <string name="xingdun_chat_history_search_hint">查找聊天记录</string>
+    <string name="xingdun_chat_history_member">成员</string>
+    <string name="xingdun_chat_history_image">图片</string>
+    <string name="xingdun_chat_history_video">视频</string>
+    <string name="xingdun_chat_history_file">文件</string>
+    <string name="xingdun_chat_history_date">日期</string>
+    <string name="xingdun_chat_history_by_member">按成员查看</string>
+    <string name="xingdun_chat_history_by_date">按日期查看</string>
+    <string name="xingdun_chat_history_date_hint">选择日期后查看当天的聊天记录。</string>
+    <string name="xingdun_chat_history_view_messages">查看消息</string>
+    <string name="xingdun_chat_history_no_members">暂无群成员</string>
+    <string name="xingdun_chat_history_no_members_hint">当前聊天记录中没有可筛选的成员消息。</string>
+    <string name="xingdun_chat_history_no_images">暂无图片消息</string>
+    <string name="xingdun_chat_history_no_videos">暂无视频消息</string>
+    <string name="xingdun_chat_history_no_files">暂无文件消息</string>
+    <string name="xingdun_chat_history_no_date_messages">当天暂无聊天记录</string>
+    <string name="xingdun_chat_history_no_messages">暂无聊天记录</string>
+    <string name="xingdun_chat_history_empty_hint">请返回选择其他分类或日期。</string>
+    <string name="xingdun_chat_history_message">消息</string>
+    <string name="xingdun_chat_history_load_failed">聊天记录加载失败，请稍后重试。</string>
 </resources>

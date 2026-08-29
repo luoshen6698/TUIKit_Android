@@ -124,5 +124,11 @@
             android:exported="true"
             android:theme="@style/Chat_UIKit_Theme"
             android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.search.XingDunConversationSearchPreviewActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>

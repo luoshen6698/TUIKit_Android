@@ -1318,4 +1318,25 @@
     <string name="xingdun_unblock_success">Unblocked. The friendship has been restored.</string>
     <string name="xingdun_unblock_failed">Could not unblock this contact. Try again later.</string>
     <string name="xingdun_group_avatar_invalid">The group avatar must be a valid image no larger than 5 MB.</string>
+    <string name="xingdun_chat_history_title">Chat History</string>
+    <string name="xingdun_chat_history_search_hint">Search chat history</string>
+    <string name="xingdun_chat_history_member">Members</string>
+    <string name="xingdun_chat_history_image">Photos</string>
+    <string name="xingdun_chat_history_video">Videos</string>
+    <string name="xingdun_chat_history_file">Files</string>
+    <string name="xingdun_chat_history_date">Date</string>
+    <string name="xingdun_chat_history_by_member">View by Member</string>
+    <string name="xingdun_chat_history_by_date">View by Date</string>
+    <string name="xingdun_chat_history_date_hint">Select a date to view messages from that day.</string>
+    <string name="xingdun_chat_history_view_messages">View Messages</string>
+    <string name="xingdun_chat_history_no_members">No Members</string>
+    <string name="xingdun_chat_history_no_members_hint">No member messages are available in the current history.</string>
+    <string name="xingdun_chat_history_no_images">No Photo Messages</string>
+    <string name="xingdun_chat_history_no_videos">No Video Messages</string>
+    <string name="xingdun_chat_history_no_files">No File Messages</string>
+    <string name="xingdun_chat_history_no_date_messages">No Messages That Day</string>
+    <string name="xingdun_chat_history_no_messages">No Chat History</string>
+    <string name="xingdun_chat_history_empty_hint">Go back and choose another category or date.</string>
+    <string name="xingdun_chat_history_message">Message</string>
+    <string name="xingdun_chat_history_load_failed">Couldn’t load chat history. Try again.</string>
 </resources>
