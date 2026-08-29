@@ -141,6 +141,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private lateinit var content: LinearLayout
     private lateinit var status: TextView
     private lateinit var scrollView: ScrollView
+    private lateinit var fixedActionContainer: LinearLayout
     private lateinit var headerBar: FrameLayout
     private lateinit var headerTitle: TextView
     private val mode: String by lazy { intent.getStringExtra(EXTRA_MODE).orEmpty() }
@@ -414,6 +415,16 @@ open class XingDunFeatureActivity : BaseActivity() {
             addView(content)
         }
         root.addView(scrollView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        fixedActionContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18.dp(), 8.dp(), 18.dp(), 10.dp())
+            setBackgroundColor(Color.WHITE)
+            visibility = View.GONE
+        }
+        root.addView(
+            fixedActionContainer,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
         status = TextView(this).apply {
             setPadding(18.dp(), 10.dp(), 18.dp(), 10.dp())
             textSize = 14f
@@ -1272,6 +1283,9 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun renderWorkspaceForm(types: List<XingDunWorkspaceType>) {
         setBusy(false)
         content.removeAllViews()
+        fixedActionContainer.removeAllViews()
+        fixedActionContainer.visibility = View.GONE
+        status.visibility = View.GONE
         val availableTypes = types.filter(XingDunWorkspaceType::available)
         val selected = if (targetID.isNotBlank()) {
             availableTypes.firstOrNull { it.type == targetID }
@@ -1330,7 +1344,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         val basicCard = formCard()
         val title = EditText(this).apply {
             setHint(R.string.xingdun_workspace_form_title)
-            setText(typeTitle)
+            setText(getString(R.string.xingdun_workspace_default_title, typeTitle))
             textSize = 16f
             setTextColor(0xFF1C1C1E.toInt())
             setHintTextColor(0xFFAEAEB2.toInt())
@@ -1546,10 +1560,11 @@ open class XingDunFeatureActivity : BaseActivity() {
                 }
             }
         }
-        content.addView(submitButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()).apply {
-            topMargin = 10.dp()
-            bottomMargin = 12.dp()
-        })
+        fixedActionContainer.addView(
+            submitButton,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()),
+        )
+        fixedActionContainer.visibility = View.VISIBLE
     }
 
     private fun showWorkspaceDateTimePicker(calendar: Calendar, onSelected: () -> Unit) {
@@ -1583,6 +1598,9 @@ open class XingDunFeatureActivity : BaseActivity() {
         SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(calendar.time)
 
     private fun renderWorkspaceFormLoadFailure() {
+        fixedActionContainer.removeAllViews()
+        fixedActionContainer.visibility = View.GONE
+        status.visibility = View.GONE
         content.removeAllViews()
         content.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
