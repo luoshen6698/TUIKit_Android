@@ -42,7 +42,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-class ChatSettingActivity : BaseActivity() {
+open class ChatSettingActivity : BaseActivity() {
+
+    override val requiresLogin: Boolean get() = !intent.getBooleanExtra(EXTRA_DEBUG_PREVIEW, false)
 
     private var activityScope: CoroutineScope? = null
     private val themeStore by lazy { ThemeStore.shared(this) }
@@ -53,6 +55,7 @@ class ChatSettingActivity : BaseActivity() {
         private const val EXTRA_USER_ID = "user_id"
         private const val EXTRA_GROUP_ID = "group_id"
         private const val EXTRA_NEED_NAVIGATE_TO_CHAT = "need_navigate_to_chat"
+        const val EXTRA_DEBUG_PREVIEW = "xingdun_debug_chat_setting_preview"
 
         fun startC2C(
             context: Context,
@@ -133,7 +136,8 @@ class ChatSettingActivity : BaseActivity() {
                 onContactDeleted = {
                     EventBus.post(Event.ContactDeleted(userID))
                     finish()
-                }
+                },
+                showChatBackground = false,
             )
         } else if (!groupID.isNullOrEmpty()) {
             tvTitle.text = getString(R.string.demo_chat_setting_group_settings)

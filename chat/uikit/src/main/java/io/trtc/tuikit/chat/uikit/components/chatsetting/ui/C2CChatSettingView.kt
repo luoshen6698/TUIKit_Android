@@ -47,6 +47,7 @@ class C2CChatSettingView @JvmOverloads constructor(
     private var onAutoDeleteClick: (() -> Unit)? = null
     private var autoDeleteTitle: String? = null
     private var onContactDeleted: (() -> Unit)? = null
+    private var showChatBackground = true
 
     private var viewModel: C2CChatSettingViewModel? = null
     private var viewScope: CoroutineScope? = null
@@ -86,7 +87,8 @@ class C2CChatSettingView @JvmOverloads constructor(
         onVideoCallClick: (() -> Unit)? = null,
         autoDeleteTitle: String? = null,
         onAutoDeleteClick: (() -> Unit)? = null,
-        onContactDeleted: (() -> Unit)? = null
+        onContactDeleted: (() -> Unit)? = null,
+        showChatBackground: Boolean = true,
     ) {
         this.onSendMessageClick = onSendMessageClick
         this.onVoiceCallClick = onVoiceCallClick
@@ -94,6 +96,7 @@ class C2CChatSettingView @JvmOverloads constructor(
         this.autoDeleteTitle = autoDeleteTitle
         this.onAutoDeleteClick = onAutoDeleteClick
         this.onContactDeleted = onContactDeleted
+        this.showChatBackground = showChatBackground
 
         val owner = context.findViewModelStoreOwner() ?: return
 
@@ -219,16 +222,17 @@ class C2CChatSettingView @JvmOverloads constructor(
         }
         contentLayout.addView(pinRow)
 
-        addSpacer(contentLayout)
-
-        chatBackgroundRow = SettingRowNavigate(context).apply {
-            setTitle(context.getString(R.string.chat_setting_chat_background))
-            setShowArrow(true)
-            setOnClickListener {
-                viewModel?.let { vm -> showChatBackgroundPicker(vm) }
+        if (showChatBackground) {
+            addSpacer(contentLayout)
+            chatBackgroundRow = SettingRowNavigate(context).apply {
+                setTitle(context.getString(R.string.chat_setting_chat_background))
+                setShowArrow(true)
+                setOnClickListener {
+                    viewModel?.let { vm -> showChatBackgroundPicker(vm) }
+                }
             }
+            contentLayout.addView(chatBackgroundRow)
         }
-        contentLayout.addView(chatBackgroundRow)
 
         if (onAutoDeleteClick != null && !autoDeleteTitle.isNullOrBlank()) {
             addSpacer(contentLayout)
@@ -453,9 +457,11 @@ class C2CChatSettingView @JvmOverloads constructor(
         scope.launch {
             vm.isPinned.collectLatest { pinRow.setChecked(it) }
         }
-        scope.launch {
-            vm.chatBackgroundImageUri.collectLatest { imageUri ->
-                updateChatBackgroundRow(imageUri)
+        if (showChatBackground) {
+            scope.launch {
+                vm.chatBackgroundImageUri.collectLatest { imageUri ->
+                    updateChatBackgroundRow(imageUri)
+                }
             }
         }
         scope.launch {

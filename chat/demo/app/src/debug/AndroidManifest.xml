@@ -5,6 +5,11 @@
     <application>
         <!-- Debug-only ADB entry for device UI verification without test-account credentials. -->
         <activity
+            android:name="io.trtc.tuikit.chat.demo.chat.XingDunC2CChatSettingPreviewActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme" />
+        <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity"
             android:exported="true"
             tools:replace="android:exported" />
