@@ -969,7 +969,7 @@
     <string name="xingdun_open_system_settings">打开系统设置</string>
     <string name="xingdun_about_description">星盾是企业即时通讯与协作客户端。实际能力以企业配置和账号权限为准。</string>
     <string name="xingdun_check_updates">检查更新</string>
-    <string name="xingdun_about_title_format">关于%1$s</string>
+    <string name="xingdun_about_title_format">关于 %1$s</string>
     <string name="xingdun_about_version">版本 %1$s</string>
     <string name="xingdun_about_product_information">产品信息</string>
     <string name="xingdun_about_official_website">官方网站</string>
