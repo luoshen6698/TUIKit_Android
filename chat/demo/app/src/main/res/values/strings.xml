@@ -489,6 +489,8 @@
     <string name="xingdun_profile_birthday_cleared">Birthday will be cleared after saving.</string>
     <string name="xingdun_profile_nickname_required">Nickname cannot be empty.</string>
     <string name="xingdun_profile_load_failed">Unable to load your profile. Try again later.</string>
+    <string name="xingdun_profile_loading">Loading profile…</string>
+    <string name="xingdun_profile_saving">Saving…</string>
     <string name="xingdun_profile_copy_account">Copy</string>
     <string name="xingdun_profile_account_copied">Account ID copied.</string>
     <string name="xingdun_profile_account_hint">Account ID must contain 3–32 letters, numbers, or underscores. Changes may be subject to a cooldown period.</string>

@@ -54,7 +54,7 @@ open class SelfDetailActivity : BaseActivity() {
     private val themeStore by lazy { ThemeStore.shared(this) }
     private var activityScope: CoroutineScope? = null
 
-    private lateinit var rootContainer: LinearLayout
+    private lateinit var rootContainer: FrameLayout
     private lateinit var headerContainer: LinearLayout
     private lateinit var tvTitle: TextView
     private lateinit var btnBack: ImageView
@@ -65,6 +65,9 @@ open class SelfDetailActivity : BaseActivity() {
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var scrollView: ScrollView
     private lateinit var contentColumn: LinearLayout
+    private lateinit var busyOverlay: FrameLayout
+    private lateinit var busyCard: LinearLayout
+    private lateinit var busyMessage: TextView
 
     private lateinit var avatar: Avatar
     private lateinit var avatarRow: LinearLayout
@@ -73,6 +76,7 @@ open class SelfDetailActivity : BaseActivity() {
     private lateinit var identityContainer: LinearLayout
     private lateinit var detailContainer: LinearLayout
     private lateinit var detailsTitle: TextView
+    private lateinit var errorBanner: TextView
 
     private lateinit var accountItem: SettingsEntry
     private lateinit var nicknameItem: SettingsEntry
@@ -89,6 +93,9 @@ open class SelfDetailActivity : BaseActivity() {
     private var cachedBirthday: Long? = null
     private var cachedAvatarUrl: String? = null
     private var cachedCustomID: String = ""
+    private var activeOperations = 0
+    private var isProfileLoading = false
+    private var hasResumedOnce = false
     private val isDebugPreview: Boolean
         get() = !requiresLogin && intent.getBooleanExtra(EXTRA_DEBUG_PREVIEW, false)
 
@@ -154,6 +161,9 @@ open class SelfDetailActivity : BaseActivity() {
         swipeRefresh = findViewById(R.id.demo_selfDetailSwipeRefresh)
         scrollView = findViewById(R.id.demo_selfDetailScrollView)
         contentColumn = findViewById(R.id.demo_selfDetailContent)
+        busyOverlay = findViewById(R.id.demo_selfDetailBusyOverlay)
+        busyCard = findViewById(R.id.demo_selfDetailBusyCard)
+        busyMessage = findViewById(R.id.demo_selfDetailBusyMessage)
 
         ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { _, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -196,6 +206,10 @@ open class SelfDetailActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (!hasResumedOnce) {
+            hasResumedOnce = true
+            return
+        }
         if (!isDebugPreview && ::phoneItem.isInitialized) activityScope?.launch { loadServerProfile() }
     }
 
@@ -292,6 +306,18 @@ open class SelfDetailActivity : BaseActivity() {
         detailContainer.addView(birthdayItem.view, entryLayoutParams())
         detailContainer.addView(phoneItem.view, entryLayoutParams())
         detailContainer.addView(emailItem.view, entryLayoutParams())
+
+        errorBanner = TextView(this).apply {
+            visibility = View.GONE
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setPadding(16.dp(), 13.dp(), 16.dp(), 13.dp())
+        }
+        contentColumn.addView(
+            errorBanner,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = 14.dp()
+            },
+        )
     }
 
     private fun buildAvatarRow() {
@@ -338,6 +364,10 @@ open class SelfDetailActivity : BaseActivity() {
         identityContainer.background = roundedBackground(colors.bgColorOperate, 18f)
         detailContainer.background = roundedBackground(colors.bgColorOperate, 18f)
         detailsTitle.setTextColor(colors.textColorSecondary)
+        busyCard.background = roundedBackground(colors.bgColorOperate, 14f)
+        busyMessage.setTextColor(colors.textColorPrimary)
+        errorBanner.setTextColor(0xFF9A4B00.toInt())
+        errorBanner.background = roundedBackground(0xFFFFF0D7.toInt(), 14f)
         (avatarRow.getChildAt(0) as? TextView)?.setTextColor(colors.textColorPrimary)
         avatarArrow.setColorFilter(colors.textColorTertiary)
         avatarDivider.setBackgroundColor(colors.strokeColorPrimary)
@@ -371,11 +401,15 @@ open class SelfDetailActivity : BaseActivity() {
     }
 
     private suspend fun loadServerProfile(showFailure: Boolean = false) {
+        if (isProfileLoading) return
+        isProfileLoading = true
+        beginOperation(R.string.xingdun_profile_loading)
+        clearProfileError()
         val session = XingDunSessionManager.currentSession() ?: run {
             swipeRefresh.isRefreshing = false
-            if (showFailure) {
-                Toast.makeText(this, R.string.xingdun_session_expired, Toast.LENGTH_LONG).show()
-            }
+            showProfileError(IllegalStateException(getString(R.string.xingdun_session_expired)), showToast = showFailure)
+            isProfileLoading = false
+            endOperation()
             return
         }
         runCatching {
@@ -406,15 +440,11 @@ open class SelfDetailActivity : BaseActivity() {
             emailItem.setValue(profile.string("email") ?: getString(R.string.xingdun_not_bound))
             renderCachedProfile()
         }.onFailure { error ->
-            if (showFailure) {
-                Toast.makeText(
-                    this,
-                    error.localizedMessage ?: getString(R.string.xingdun_profile_load_failed),
-                    Toast.LENGTH_LONG,
-                ).show()
-            }
+            showProfileError(error, fallbackRes = R.string.xingdun_profile_load_failed, showToast = showFailure)
         }
         swipeRefresh.isRefreshing = false
+        isProfileLoading = false
+        endOperation()
     }
 
     private fun renderCachedProfile() {
@@ -474,6 +504,8 @@ open class SelfDetailActivity : BaseActivity() {
 
     private fun saveCustomID(value: String) {
         activityScope?.launch {
+            beginOperation(R.string.xingdun_profile_saving)
+            clearProfileError()
             runCatching {
                 XingDunSessionManager.apiClient().postEmpty(
                     XingDunSessionManager.currentSession() ?: error(getString(R.string.xingdun_session_expired)),
@@ -485,6 +517,7 @@ open class SelfDetailActivity : BaseActivity() {
                 accountItem.setValue(value)
                 Toast.makeText(this@SelfDetailActivity, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
             }.onFailure(::showProfileError)
+            endOperation()
         }
     }
 
@@ -530,6 +563,8 @@ open class SelfDetailActivity : BaseActivity() {
     private suspend fun removeAvatar() {
         val session = XingDunSessionManager.currentSession()
             ?: return showProfileError(IllegalStateException(getString(R.string.xingdun_session_expired)))
+        beginOperation(R.string.xingdun_profile_saving)
+        clearProfileError()
         runCatching {
             XingDunSessionManager.apiClient().postMultipartEmpty(
                 session,
@@ -542,9 +577,12 @@ open class SelfDetailActivity : BaseActivity() {
             renderCachedProfile()
             Toast.makeText(this, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
         }.onFailure(::showProfileError)
+        endOperation()
     }
 
     private suspend fun uploadAvatar(uri: android.net.Uri) {
+        beginOperation(R.string.xingdun_profile_saving)
+        clearProfileError()
         val bytes = runCatching {
             withContext(Dispatchers.IO) {
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -562,10 +600,13 @@ open class SelfDetailActivity : BaseActivity() {
             }
         }.getOrElse {
             showProfileError(it)
+            endOperation()
             return
         }
         if (bytes.isEmpty() || bytes.size > 5 * 1024 * 1024) {
             Toast.makeText(this, R.string.xingdun_avatar_invalid, Toast.LENGTH_LONG).show()
+            showProfileError(IllegalArgumentException(getString(R.string.xingdun_avatar_invalid)), showToast = false)
+            endOperation()
             return
         }
         runCatching {
@@ -579,10 +620,34 @@ open class SelfDetailActivity : BaseActivity() {
             loadServerProfile()
             Toast.makeText(this, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
         }.onFailure(::showProfileError)
+        endOperation()
     }
 
-    private fun showProfileError(error: Throwable) {
-        Toast.makeText(this, error.localizedMessage ?: getString(R.string.xingdun_action_failed), Toast.LENGTH_LONG).show()
+    private fun showProfileError(
+        error: Throwable,
+        fallbackRes: Int = R.string.xingdun_action_failed,
+        showToast: Boolean = true,
+    ) {
+        val message = error.localizedMessage?.takeIf { it.isNotBlank() } ?: getString(fallbackRes)
+        errorBanner.text = message
+        errorBanner.visibility = View.VISIBLE
+        if (showToast) Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    private fun clearProfileError() {
+        errorBanner.text = ""
+        errorBanner.visibility = View.GONE
+    }
+
+    private fun beginOperation(messageRes: Int) {
+        activeOperations += 1
+        busyMessage.setText(messageRes)
+        busyOverlay.visibility = View.VISIBLE
+    }
+
+    private fun endOperation() {
+        activeOperations = (activeOperations - 1).coerceAtLeast(0)
+        if (activeOperations == 0) busyOverlay.visibility = View.GONE
     }
 
     private fun JsonObject.string(name: String): String? =
@@ -613,18 +678,15 @@ open class SelfDetailActivity : BaseActivity() {
             return
         }
         activityScope?.launch {
+            beginOperation(R.string.xingdun_profile_saving)
+            clearProfileError()
             runCatching {
                 XingDunSessionManager.apiClient().postEmpty(session, "user/updateProfile", fields)
             }.onSuccess {
                 loadServerProfile()
                 Toast.makeText(this@SelfDetailActivity, R.string.xingdun_profile_updated, Toast.LENGTH_SHORT).show()
-            }.onFailure { error ->
-                Toast.makeText(
-                    this@SelfDetailActivity,
-                    error.localizedMessage ?: getString(R.string.xingdun_action_failed),
-                    Toast.LENGTH_LONG
-                ).show()
-            }
+            }.onFailure(::showProfileError)
+            endOperation()
         }
     }
 
