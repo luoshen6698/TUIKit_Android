@@ -1135,6 +1135,7 @@
     <string name="xingdun_group_members_title_count">群成员 (%1$d)</string>
     <string name="xingdun_group_members_loading">正在加载群成员</string>
     <string name="xingdun_group_members_load_failed">群成员加载失败</string>
+    <string name="xingdun_group_members_pagination_failed">群成员分页数据异常，请下拉刷新后重试。</string>
     <string name="xingdun_group_members_search">搜索成员</string>
     <string name="xingdun_group_members_empty">暂无群成员</string>
     <string name="xingdun_group_members_no_match">未找到群成员</string>

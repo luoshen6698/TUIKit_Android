@@ -1141,6 +1141,7 @@
     <string name="xingdun_group_members_title_count">Group Members (%1$d)</string>
     <string name="xingdun_group_members_loading">Loading group members</string>
     <string name="xingdun_group_members_load_failed">Unable to load group members</string>
+    <string name="xingdun_group_members_pagination_failed">Group member pagination returned invalid data. Pull to refresh and try again.</string>
     <string name="xingdun_group_members_search">Search members</string>
     <string name="xingdun_group_members_empty">No group members</string>
     <string name="xingdun_group_members_no_match">No members found</string>
