@@ -26,4 +26,9 @@
             android:paddingBottom="24dp" />
     </ScrollView>
 
+    <io.trtc.tuikit.chat.demo.xingdun.features.XingDunChildBottomNavigation
+        android:id="@+id/xingdun_profileEditorBottomNavigation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
 </LinearLayout>

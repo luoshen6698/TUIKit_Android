@@ -38,6 +38,8 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.login.UserProfile
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunChildBottomNavigation
+import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunUploadFile
 import kotlinx.coroutines.CoroutineScope
@@ -68,6 +70,7 @@ open class SelfDetailActivity : BaseActivity() {
     private lateinit var busyOverlay: FrameLayout
     private lateinit var busyCard: LinearLayout
     private lateinit var busyMessage: TextView
+    private lateinit var bottomNavigation: XingDunChildBottomNavigation
 
     private lateinit var avatar: Avatar
     private lateinit var avatarRow: LinearLayout
@@ -164,11 +167,13 @@ open class SelfDetailActivity : BaseActivity() {
         busyOverlay = findViewById(R.id.demo_selfDetailBusyOverlay)
         busyCard = findViewById(R.id.demo_selfDetailBusyCard)
         busyMessage = findViewById(R.id.demo_selfDetailBusyMessage)
+        bottomNavigation = findViewById(R.id.demo_selfDetailBottomNavigation)
+        bottomNavigation.bind(this, MainActivity.TAB_PROFILE)
 
         ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { _, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             headerContainer.updatePadding(top = systemBars.top)
-            scrollView.updatePadding(bottom = systemBars.bottom)
+            rootContainer.updatePadding(bottom = systemBars.bottom)
             insets
         }
 

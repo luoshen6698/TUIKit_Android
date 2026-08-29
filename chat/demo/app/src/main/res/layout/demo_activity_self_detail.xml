@@ -38,6 +38,11 @@
 
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
+        <io.trtc.tuikit.chat.demo.xingdun.features.XingDunChildBottomNavigation
+            android:id="@+id/demo_selfDetailBottomNavigation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
     </LinearLayout>
 
     <FrameLayout

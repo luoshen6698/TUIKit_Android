@@ -34,6 +34,8 @@ import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.main.MainActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunChildBottomNavigation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -63,6 +65,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
     private lateinit var divider: View
     private lateinit var scroll: ScrollView
     private lateinit var content: LinearLayout
+    private lateinit var bottomNavigation: XingDunChildBottomNavigation
     private lateinit var card: LinearLayout
     private var counter: TextView? = null
     private var editor: EditText? = null
@@ -112,10 +115,12 @@ class XingDunProfileEditorActivity : BaseActivity() {
         divider = findViewById(R.id.demo_headerDivider)
         scroll = findViewById(R.id.xingdun_profileEditorScroll)
         content = findViewById(R.id.xingdun_profileEditorContent)
+        bottomNavigation = findViewById(R.id.xingdun_profileEditorBottomNavigation)
+        bottomNavigation.bind(this, MainActivity.TAB_PROFILE)
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             header.updatePadding(top = bars.top)
-            scroll.updatePadding(bottom = bars.bottom)
+            root.updatePadding(bottom = bars.bottom)
             insets
         }
     }

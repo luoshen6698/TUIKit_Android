@@ -419,6 +419,15 @@ open class XingDunFeatureActivity : BaseActivity() {
             textSize = 14f
         }
         root.addView(status)
+        root.addView(
+            XingDunChildBottomNavigation(this).apply {
+                bind(
+                    this@XingDunFeatureActivity,
+                    childSelectedTab(),
+                )
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.setPadding(0, systemBars.top, 0, systemBars.bottom)
@@ -7022,6 +7031,14 @@ open class XingDunFeatureActivity : BaseActivity() {
         get(name)?.takeUnless(JsonElement::isJsonNull)?.takeIf(JsonElement::isJsonArray)?.asJsonArray ?: JsonArray()
 
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
+
+    private fun childSelectedTab(): String = when (mode) {
+        MODE_WORKSPACE_LIST,
+        MODE_WORKSPACE_PENDING,
+        MODE_WORKSPACE_DETAIL,
+        MODE_WORKSPACE_CREATE -> MainActivity.TAB_WORKSPACE
+        else -> MainActivity.TAB_PROFILE
+    }
 
     companion object {
         private const val EXTRA_MODE = "mode"
