@@ -650,10 +650,10 @@
     <string name="xingdun_login_account">登录账号</string>
     <string name="xingdun_device_account">设备账号</string>
     <string name="xingdun_device_account_hint">绑定用户名和密码后，才能在其他设备登录或申请注销账号。</string>
-    <string name="xingdun_upgrade_device_account">绑定用户名和密码</string>
+    <string name="xingdun_upgrade_device_account">升级设备账号</string>
     <string name="xingdun_username_placeholder">3–20 位字母、数字或下划线</string>
-    <string name="xingdun_confirm_account_upgrade">确认绑定</string>
-    <string name="xingdun_device_account_upgrade_hint">绑定后可使用该用户名和密码在其他设备登录。</string>
+    <string name="xingdun_confirm_account_upgrade">完成账号升级</string>
+    <string name="xingdun_device_account_upgrade_hint">用户名为 3–20 位字母、数字或下划线，且不能以 dev_ 开头；两次密码输入必须一致。升级后可在其他设备登录。</string>
     <string name="xingdun_account_upgrade_failed">账号绑定失败，请稍后重试。</string>
     <string name="xingdun_username">用户名</string>
     <string name="xingdun_phone">手机号</string>

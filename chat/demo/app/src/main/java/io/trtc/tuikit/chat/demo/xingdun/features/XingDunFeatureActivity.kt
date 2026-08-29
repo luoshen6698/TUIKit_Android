@@ -419,15 +419,17 @@ open class XingDunFeatureActivity : BaseActivity() {
             textSize = 14f
         }
         root.addView(status)
-        root.addView(
-            XingDunChildBottomNavigation(this).apply {
-                bind(
-                    this@XingDunFeatureActivity,
-                    childSelectedTab(),
-                )
-            },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
-        )
+        if (mode != MODE_PERSONAL_QR && mode != MODE_INVITE) {
+            root.addView(
+                XingDunChildBottomNavigation(this).apply {
+                    bind(
+                        this@XingDunFeatureActivity,
+                        childSelectedTab(),
+                    )
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
+        }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.setPadding(0, systemBars.top, 0, systemBars.bottom)

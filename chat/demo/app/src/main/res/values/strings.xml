@@ -656,10 +656,10 @@
     <string name="xingdun_login_account">Login account</string>
     <string name="xingdun_device_account">Device account</string>
     <string name="xingdun_device_account_hint">Bind a username and password before signing in on another device or deactivating this account.</string>
-    <string name="xingdun_upgrade_device_account">Bind username and password</string>
+    <string name="xingdun_upgrade_device_account">Upgrade Device Account</string>
     <string name="xingdun_username_placeholder">3–20 letters, numbers, or underscores</string>
-    <string name="xingdun_confirm_account_upgrade">Confirm binding</string>
-    <string name="xingdun_device_account_upgrade_hint">After binding, use this username and password to sign in on other devices.</string>
+    <string name="xingdun_confirm_account_upgrade">Complete Account Upgrade</string>
+    <string name="xingdun_device_account_upgrade_hint">Use 3–20 letters, numbers, or underscores; the username cannot start with dev_. Both password entries must match. After upgrading, you can sign in on other devices.</string>
     <string name="xingdun_account_upgrade_failed">Could not bind the login account. Try again later.</string>
     <string name="xingdun_username">Username</string>
     <string name="xingdun_phone">Phone</string>
