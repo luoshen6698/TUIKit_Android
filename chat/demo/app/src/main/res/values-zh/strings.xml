@@ -1140,6 +1140,12 @@
     <string name="xingdun_group_administrator_limit">%1$d/%2$d</string>
     <string name="xingdun_group_administrator_search">搜索群成员</string>
     <string name="xingdun_group_administrator_no_candidates">没有匹配的群成员</string>
+    <string name="xingdun_group_administrator_recent">最近</string>
+    <string name="xingdun_group_administrator_contacts">联系人</string>
+    <string name="xingdun_group_administrator_recent_loading">正在加载最近会话…</string>
+    <string name="xingdun_group_administrator_recent_load_failed">最近会话加载失败，点击重试。</string>
+    <string name="xingdun_group_administrator_recent_empty">暂无最近会话</string>
+    <string name="xingdun_group_administrator_switch_contacts">可切换到联系人查找群成员。</string>
     <string name="xingdun_group_administrator_remove">移除</string>
     <string name="xingdun_group_administrator_remove_title">取消管理员</string>
     <string name="xingdun_group_administrator_remove_message">确定取消“%1$s”的管理员身份？该成员将恢复为普通群成员。</string>

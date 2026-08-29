@@ -26,13 +26,17 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.tencent.imsdk.v2.V2TIMConversation
+import com.tencent.imsdk.v2.V2TIMConversationResult
+import com.tencent.imsdk.v2.V2TIMManager
+import com.tencent.imsdk.v2.V2TIMValueCallback
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMember
-import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPage
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import kotlinx.coroutines.CoroutineScope
@@ -146,13 +150,13 @@ open class XingDunGroupAdministratorsActivity : BaseActivity() {
                     mapOf("team_id" to groupID),
                     XingDunGroupDetail::class.java,
                 )
-                val page = XingDunSessionManager.apiClient().get<XingDunGroupMemberPage>(
-                    session,
-                    "team/members",
-                    mapOf("team_id" to groupID, "page" to "1", "pageSize" to "200"),
-                    XingDunGroupMemberPage::class.java,
+                val loadedMembers = XingDunGroupMemberPager.loadAll(
+                    client = XingDunSessionManager.apiClient(),
+                    session = session,
+                    groupID = groupID,
+                    invalidPaginationMessage = getString(R.string.xingdun_group_members_pagination_failed),
                 )
-                loadedDetail to page.list.sortedWith(memberComparator)
+                loadedDetail to loadedMembers.sortedWith(memberComparator)
             }
             refresh.isRefreshing = false
             result.onSuccess { (loadedDetail, loadedMembers) ->
@@ -329,10 +333,33 @@ open class XingDunGroupAdministratorsActivity : BaseActivity() {
         val candidates = members.filter { it.role == ROLE_MEMBER }
         if (candidates.isEmpty()) return
         val current = colors()
+        var selectedTab = CandidateTab.RECENT
+        var query = ""
+        var recentUserIDs: List<String>? = null
+        var recentLoadError = false
         val wrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20.dp(), 4.dp(), 20.dp(), 8.dp())
         }
+        val tabs = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = rounded(current.bgColorInput, 18f)
+            setPadding(2.dp(), 2.dp(), 2.dp(), 2.dp())
+        }
+        val recentTab = TextView(this).apply {
+            setText(R.string.xingdun_group_administrator_recent)
+            gravity = Gravity.CENTER
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            isClickable = true
+        }
+        val contactsTab = TextView(this).apply {
+            setText(R.string.xingdun_group_administrator_contacts)
+            gravity = Gravity.CENTER
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            isClickable = true
+        }
+        tabs.addView(recentTab, LinearLayout.LayoutParams(0, 42.dp(), 1f))
+        tabs.addView(contactsTab, LinearLayout.LayoutParams(0, 42.dp(), 1f))
         val search = EditText(this).apply {
             setSingleLine(true)
             setHint(R.string.xingdun_group_administrator_search)
@@ -345,23 +372,64 @@ open class XingDunGroupAdministratorsActivity : BaseActivity() {
         val scrollView = ScrollView(this).apply {
             addView(list)
         }
-        wrapper.addView(search, matchWrap())
+        wrapper.addView(tabs, matchWrap())
+        wrapper.addView(search, matchWrap().apply { topMargin = 10.dp() })
         wrapper.addView(scrollView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 360.dp()).apply { topMargin = 10.dp() })
 
         lateinit var dialog: AlertDialog
-        fun renderCandidates(query: String) {
+        fun updateTabAppearance() {
+            listOf(CandidateTab.RECENT to recentTab, CandidateTab.CONTACTS to contactsTab).forEach { (tab, view) ->
+                val selected = selectedTab == tab
+                view.setTextColor(if (selected) current.textColorPrimary else current.textColorSecondary)
+                view.setTypeface(view.typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
+                view.background = if (selected) rounded(current.bgColorOperate, 16f) else null
+            }
+        }
+        fun statusView(textResource: Int, retry: Boolean = false): TextView = TextView(this).apply {
+            setText(textResource)
+            gravity = Gravity.CENTER
+            setTextColor(if (retry) BRAND else current.textColorTertiary)
+            setPadding(12.dp(), 36.dp(), 12.dp(), 36.dp())
+        }
+        fun renderCandidates() {
+            updateTabAppearance()
             list.removeAllViews()
-            val visible = candidates.filter {
+            if (selectedTab == CandidateTab.RECENT && recentUserIDs == null) {
+                list.addView(statusView(
+                    if (recentLoadError) R.string.xingdun_group_administrator_recent_load_failed
+                    else R.string.xingdun_group_administrator_recent_loading,
+                    retry = recentLoadError,
+                ).apply {
+                    if (recentLoadError) setOnClickListener { loadRecentConversations { ids, failed ->
+                        recentUserIDs = ids
+                        recentLoadError = failed
+                        renderCandidates()
+                    } }
+                })
+                return
+            }
+            val baseCandidates = if (selectedTab == CandidateTab.RECENT) {
+                val candidateByID = candidates.associateBy { it.userId }
+                recentUserIDs.orEmpty().mapNotNull(candidateByID::get)
+            } else {
+                candidates
+            }
+            val visible = baseCandidates.filter {
                 query.isBlank() || it.displayName().contains(query, ignoreCase = true) ||
                     it.userId.contains(query, ignoreCase = true)
             }
             if (visible.isEmpty()) {
-                list.addView(TextView(this).apply {
-                    setText(R.string.xingdun_group_administrator_no_candidates)
-                    gravity = Gravity.CENTER
-                    setTextColor(current.textColorTertiary)
-                    setPadding(12.dp(), 36.dp(), 12.dp(), 36.dp())
-                })
+                val emptyText = if (selectedTab == CandidateTab.RECENT && query.isBlank()) {
+                    R.string.xingdun_group_administrator_recent_empty
+                } else {
+                    R.string.xingdun_group_administrator_no_candidates
+                }
+                list.addView(statusView(emptyText))
+                if (selectedTab == CandidateTab.RECENT && query.isBlank()) {
+                    list.addView(statusView(R.string.xingdun_group_administrator_switch_contacts).apply {
+                        setPadding(12.dp(), 0, 12.dp(), 36.dp())
+                    })
+                }
             } else {
                 visible.forEachIndexed { index, member ->
                     if (index > 0) list.addView(rowDivider(current))
@@ -381,16 +449,54 @@ open class XingDunGroupAdministratorsActivity : BaseActivity() {
         }
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = renderCandidates(s?.toString().orEmpty())
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                query = s?.toString().orEmpty()
+                renderCandidates()
+            }
             override fun afterTextChanged(s: Editable?) = Unit
         })
+        recentTab.setOnClickListener {
+            selectedTab = CandidateTab.RECENT
+            renderCandidates()
+        }
+        contactsTab.setOnClickListener {
+            selectedTab = CandidateTab.CONTACTS
+            renderCandidates()
+        }
         dialog = AlertDialog.Builder(this)
             .setTitle(R.string.xingdun_group_administrator_add)
             .setView(wrapper)
             .setNegativeButton(android.R.string.cancel, null)
             .create()
-        renderCandidates("")
+        renderCandidates()
         dialog.show()
+        loadRecentConversations { ids, failed ->
+            recentUserIDs = ids
+            recentLoadError = failed
+            renderCandidates()
+        }
+    }
+
+    private fun loadRecentConversations(onLoaded: (List<String>?, Boolean) -> Unit) {
+        V2TIMManager.getConversationManager().getConversationList(
+            0,
+            RECENT_CONVERSATION_LIMIT,
+            object : V2TIMValueCallback<V2TIMConversationResult> {
+                override fun onSuccess(result: V2TIMConversationResult?) {
+                    val userIDs = result?.conversationList.orEmpty()
+                        .asSequence()
+                        .filter { it.type == V2TIMConversation.V2TIM_C2C }
+                        .mapNotNull { it.userID?.takeIf(String::isNotBlank) }
+                        .distinct()
+                        .toList()
+                    onLoaded(userIDs, false)
+                }
+
+                override fun onError(code: Int, description: String?) {
+                    onLoaded(null, true)
+                }
+            },
+        )
     }
 
     private fun confirmRemoveAdministrator(member: XingDunGroupMember) {
@@ -530,12 +636,15 @@ open class XingDunGroupAdministratorsActivity : BaseActivity() {
         private const val EXTRA_GROUP_ID = "group_id"
         const val EXTRA_DEBUG_PREVIEW = "xingdun_debug_group_administrators_preview"
         private const val ADMINISTRATOR_LIMIT = 10
+        private const val RECENT_CONVERSATION_LIMIT = 100
         private const val ROLE_OWNER = "owner"
         private const val ROLE_ADMINISTRATOR = "administrator"
         private const val ROLE_MEMBER = "member"
         private const val BRAND = 0xFF23B39C.toInt()
         private const val WARNING = 0xFFB36A00.toInt()
         private const val DANGER = 0xFFE34D59.toInt()
+
+        private enum class CandidateTab { RECENT, CONTACTS }
 
         private val memberComparator = compareBy<XingDunGroupMember> {
             when (it.role) {

@@ -1146,6 +1146,12 @@
     <string name="xingdun_group_administrator_limit">%1$d/%2$d</string>
     <string name="xingdun_group_administrator_search">Search group members</string>
     <string name="xingdun_group_administrator_no_candidates">No matching group members</string>
+    <string name="xingdun_group_administrator_recent">Recent</string>
+    <string name="xingdun_group_administrator_contacts">Contacts</string>
+    <string name="xingdun_group_administrator_recent_loading">Loading recent conversations…</string>
+    <string name="xingdun_group_administrator_recent_load_failed">Unable to load recent conversations. Tap to retry.</string>
+    <string name="xingdun_group_administrator_recent_empty">No recent conversations</string>
+    <string name="xingdun_group_administrator_switch_contacts">Switch to Contacts to find group members.</string>
     <string name="xingdun_group_administrator_remove">Remove</string>
     <string name="xingdun_group_administrator_remove_title">Remove Administrator</string>
     <string name="xingdun_group_administrator_remove_message">Remove administrator access from “%1$s”? This person will return to the member role.</string>
