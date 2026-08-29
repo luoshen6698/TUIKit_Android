@@ -7056,7 +7056,9 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_WORKSPACE_LIST,
         MODE_WORKSPACE_PENDING,
         MODE_WORKSPACE_DETAIL,
-        MODE_WORKSPACE_CREATE -> MainActivity.TAB_WORKSPACE
+        MODE_WORKSPACE_CREATE,
+        MODE_CUSTOMER_SERVICE,
+        MODE_CUSTOMER_SERVICE_GROUP -> MainActivity.TAB_WORKSPACE
         else -> MainActivity.TAB_PROFILE
     }
 
