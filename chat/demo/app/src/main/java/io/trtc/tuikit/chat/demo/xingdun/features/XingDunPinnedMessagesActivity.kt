@@ -8,7 +8,9 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
@@ -18,7 +20,6 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -56,6 +57,7 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
     private lateinit var header: LinearLayout
     private lateinit var title: TextView
     private lateinit var back: ImageView
+    private lateinit var done: TextView
     private lateinit var divider: View
     private lateinit var scroll: ScrollView
     private lateinit var content: LinearLayout
@@ -107,9 +109,22 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
         divider = findViewById(R.id.demo_headerDivider)
         scroll = findViewById(R.id.xingdun_profileEditorScroll)
         content = findViewById(R.id.xingdun_profileEditorContent)
-        findViewById<ImageView>(R.id.demo_btnMore).visibility = View.GONE
+        val more = findViewById<ImageView>(R.id.demo_btnMore)
+        more.visibility = View.GONE
         findViewById<FrameLayout>(R.id.demo_badgeContainer).visibility = View.GONE
-        findViewById<LinearLayout>(R.id.demo_leftContainer).setOnClickListener { if (!isUpdating) finish() }
+        findViewById<LinearLayout>(R.id.demo_leftContainer).visibility = View.INVISIBLE
+        done = TextView(this).apply {
+            setText(R.string.xingdun_complete)
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(12.dp(), 0, 0, 0)
+            setOnClickListener { if (!isUpdating) finish() }
+        }
+        (more.parent as FrameLayout).addView(
+            done,
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END),
+        )
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             header.updatePadding(top = bars.top)
@@ -237,37 +252,99 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
         }, matchWrap())
     }
 
-    private fun pinRow(pin: XingDunPinnedMessage): View = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(18.dp(), 15.dp(), 16.dp(), 13.dp())
-        background = rounded(colors().bgColorOperate, 18f)
-        isClickable = true
-        isFocusable = true
-        contentDescription = summary(pin)
-        setOnClickListener { locate(pin) }
-        addView(TextView(this@XingDunPinnedMessagesActivity).apply {
-            text = summary(pin)
-            maxLines = 3
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            setTypeface(typeface, Typeface.BOLD)
-            tag = TAG_PRIMARY
-        }, matchWrap())
-        addView(TextView(this@XingDunPinnedMessagesActivity).apply {
-            text = actionDescription(pin)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setPadding(0, 7.dp(), 0, 0)
-            tag = TAG_SECONDARY
-        }, matchWrap())
-        if (canManage) {
-            addView(TextView(this@XingDunPinnedMessagesActivity).apply {
+    private fun pinRow(pin: XingDunPinnedMessage): View = FrameLayout(this).apply {
+        val actionWidth = 104.dp()
+        val action = if (canManage) {
+            TextView(this@XingDunPinnedMessagesActivity).apply {
                 setText(R.string.xingdun_pinned_unpin)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
                 setTypeface(typeface, Typeface.BOLD)
-                setTextColor(DESTRUCTIVE)
-                gravity = Gravity.END
-                setPadding(12.dp(), 10.dp(), 0, 2.dp())
-                setOnClickListener { confirmUnpin(pin) }
+                setTextColor(0xFFFFFFFF.toInt())
+                setBackgroundColor(DESTRUCTIVE)
+                gravity = Gravity.CENTER
+                visibility = View.INVISIBLE
+                setOnClickListener { unpin(pin) }
+            }.also {
+                addView(it, FrameLayout.LayoutParams(actionWidth, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END))
+            }
+        } else null
+        val card = LinearLayout(this@XingDunPinnedMessagesActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18.dp(), 15.dp(), 16.dp(), 13.dp())
+            background = rounded(colors().bgColorOperate, 18f)
+            isClickable = true
+            isFocusable = true
+            contentDescription = summary(pin)
+            setOnClickListener {
+                if (translationX < 0f) {
+                    animate().translationX(0f).setDuration(SWIPE_ANIMATION_MS)
+                        .withEndAction { action?.visibility = View.INVISIBLE }
+                        .start()
+                }
+                else locate(pin)
+            }
+            addView(TextView(this@XingDunPinnedMessagesActivity).apply {
+                text = summary(pin)
+                maxLines = 3
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                setTypeface(typeface, Typeface.BOLD)
+                tag = TAG_PRIMARY
             }, matchWrap())
+            addView(TextView(this@XingDunPinnedMessagesActivity).apply {
+                text = actionDescription(pin)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                setPadding(0, 7.dp(), 0, 0)
+                tag = TAG_SECONDARY
+            }, matchWrap())
+        }
+        addView(card, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        if (action != null) attachSwipe(card, action, actionWidth)
+    }
+
+    private fun attachSwipe(card: View, action: View, actionWidth: Int) {
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        var downX = 0f
+        var startTranslation = 0f
+        var moved = false
+        card.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    startTranslation = view.translationX
+                    moved = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val delta = event.rawX - downX
+                    if (kotlin.math.abs(delta) > touchSlop) {
+                        moved = true
+                        if (delta < 0f || startTranslation < 0f) action.visibility = View.VISIBLE
+                        view.parent.requestDisallowInterceptTouchEvent(true)
+                    }
+                    view.translationX = (startTranslation + delta).coerceIn(-actionWidth.toFloat(), 0f)
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    view.parent.requestDisallowInterceptTouchEvent(false)
+                    if (!moved) {
+                        view.performClick()
+                    } else {
+                        val target = if (view.translationX <= -actionWidth / 2f) -actionWidth.toFloat() else 0f
+                        val animation = view.animate().translationX(target).setDuration(SWIPE_ANIMATION_MS)
+                        if (target == 0f) animation.withEndAction { action.visibility = View.INVISIBLE }
+                        animation.start()
+                    }
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    view.parent.requestDisallowInterceptTouchEvent(false)
+                    view.animate().translationX(0f).setDuration(SWIPE_ANIMATION_MS)
+                        .withEndAction { action.visibility = View.INVISIBLE }
+                        .start()
+                    true
+                }
+                else -> false
+            }
         }
     }
 
@@ -283,16 +360,6 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
             pin.version,
         )
         finish()
-    }
-
-    private fun confirmUnpin(pin: XingDunPinnedMessage) {
-        if (isUpdating) return
-        AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_pinned_unpin_confirm_title)
-            .setMessage(R.string.xingdun_pinned_unpin_confirm_message)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.xingdun_pinned_unpin) { _, _ -> unpin(pin) }
-            .show()
     }
 
     private fun unpin(pin: XingDunPinnedMessage) {
@@ -369,6 +436,7 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
         title.setTextColor(colors.textColorPrimary)
         back.imageTintList = ColorStateList.valueOf(colors.textColorSecondary)
         divider.setBackgroundColor(colors.strokeColorPrimary)
+        done.setTextColor(BRAND)
         status.setTextColor(WARNING)
         recolor(content, colors)
     }
@@ -417,6 +485,8 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
         const val EXTRA_DEBUG_PREVIEW = "xingdun_debug_pinned_messages_preview"
         private const val TAG_PRIMARY = "pinned_primary"
         private const val TAG_SECONDARY = "pinned_secondary"
+        private const val SWIPE_ANIMATION_MS = 160L
+        private const val BRAND = 0xFF23B39C.toInt()
         private const val DESTRUCTIVE = 0xFFD83B32.toInt()
         private const val WARNING = 0xFFB36A00.toInt()
 
