@@ -6599,24 +6599,11 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
         when (route) {
             is XingDunQRCodeRoute.User -> {
-                setBusy(true)
-                ContactStore.shared.getContactInfo(
-                    listOf(route.userID),
-                    object : GetContactInfoCompletionHandler {
-                        override fun onSuccess(contactInfoList: List<ContactInfo>) {
-                            setBusy(false)
-                            val info = contactInfoList.firstOrNull()
-                            if (info == null) status.setText(R.string.xingdun_qr_user_not_found)
-                            else io.trtc.tuikit.chat.uikit.components.contactlist.ui.ContactFlowLauncher
-                                .showAddFriendForContact(this@XingDunFeatureActivity, info)
-                        }
-
-                        override fun onFailure(code: Int, desc: String) {
-                            setBusy(false)
-                            status.setText(R.string.xingdun_qr_user_not_found)
-                        }
-                    }
-                )
+                // Match iOS: resolve a scanned TIM user ID through the tenant-scoped
+                // business search before offering any friend action. This is required
+                // when multiple enterprises share one Tencent IM application.
+                start(this, MODE_FRIEND_SEARCH, route.userID)
+                finish()
             }
             is XingDunQRCodeRoute.Group -> {
                 setBusy(true)
