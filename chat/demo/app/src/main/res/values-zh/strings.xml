@@ -584,8 +584,8 @@
     <string name="xingdun_disable_mute_all">关闭全员禁言</string>
     <string name="xingdun_group_members_count">%1$d 名成员</string>
     <string name="xingdun_member_management">成员管理</string>
-    <string name="xingdun_mute_member">禁言成员</string>
-    <string name="xingdun_unmute_member">解除禁言</string>
+    <string name="xingdun_mute_member">禁言</string>
+    <string name="xingdun_unmute_member">解禁</string>
     <string name="xingdun_set_administrator">设为管理员</string>
     <string name="xingdun_remove_administrator">取消管理员</string>
     <string name="xingdun_remove_member">移出群聊</string>

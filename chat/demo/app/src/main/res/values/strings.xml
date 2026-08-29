@@ -590,8 +590,8 @@
     <string name="xingdun_disable_mute_all">Disable mute all</string>
     <string name="xingdun_group_members_count">%1$d members</string>
     <string name="xingdun_member_management">Member management</string>
-    <string name="xingdun_mute_member">Mute member</string>
-    <string name="xingdun_unmute_member">Unmute member</string>
+    <string name="xingdun_mute_member">Ban</string>
+    <string name="xingdun_unmute_member">Lift the ban</string>
     <string name="xingdun_set_administrator">Set as administrator</string>
     <string name="xingdun_remove_administrator">Remove administrator</string>
     <string name="xingdun_remove_member">Remove member</string>
