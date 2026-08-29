@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -50,6 +51,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import kotlin.math.abs
 
 open class SelfDetailActivity : BaseActivity() {
 
@@ -326,6 +328,25 @@ open class SelfDetailActivity : BaseActivity() {
     }
 
     private fun buildAvatarRow() {
+        var touchStartX = 0f
+        var touchStartY = 0f
+        val avatarGesture = View.OnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    touchStartX = event.x
+                    touchStartY = event.y
+                }
+                MotionEvent.ACTION_UP -> {
+                    val deltaX = event.x - touchStartX
+                    val deltaY = event.y - touchStartY
+                    if (deltaX < -72.dp() && abs(deltaX) > abs(deltaY) && !cachedAvatarUrl.isNullOrBlank()) {
+                        confirmRemoveAvatar()
+                        return@OnTouchListener true
+                    }
+                }
+            }
+            false
+        }
         avatarRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -333,7 +354,8 @@ open class SelfDetailActivity : BaseActivity() {
             minimumHeight = 76.dp()
             isClickable = true
             isFocusable = true
-            setOnClickListener { showAvatarActions() }
+            setOnClickListener { avatarPicker.launch("image/*") }
+            setOnTouchListener(avatarGesture)
         }
         avatarRow.addView(TextView(this).apply {
             setText(R.string.xingdun_profile_avatar)
@@ -341,7 +363,8 @@ open class SelfDetailActivity : BaseActivity() {
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         avatar = Avatar(this).apply {
             setSize(Avatar.AvatarSize.L)
-            setOnAvatarClickListener { showAvatarActions() }
+            setOnAvatarClickListener { avatarPicker.launch("image/*") }
+            setOnTouchListener(avatarGesture)
         }
         avatarRow.addView(avatar)
         avatarArrow = ImageView(this).apply { setImageResource(R.drawable.demo_ic_arrow_right) }
@@ -524,18 +547,6 @@ open class SelfDetailActivity : BaseActivity() {
             }.onFailure(::showProfileError)
             endOperation()
         }
-    }
-
-    private fun showAvatarActions() {
-        val actions = mutableListOf(getString(R.string.xingdun_profile_choose_avatar))
-        if (!cachedAvatarUrl.isNullOrBlank()) actions += getString(R.string.xingdun_profile_remove_avatar)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_profile_avatar)
-            .setItems(actions.toTypedArray()) { _, which ->
-                if (which == 0) avatarPicker.launch("image/*") else confirmRemoveAvatar()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
     }
 
     private fun showAvatarPreview(uri: Uri) {
