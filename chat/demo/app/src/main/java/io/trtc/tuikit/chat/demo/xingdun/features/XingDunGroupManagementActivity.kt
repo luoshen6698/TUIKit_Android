@@ -16,6 +16,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.RadioButton
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -31,7 +32,7 @@ import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.uikit.components.common.EventBus
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
-import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPage
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionCompletion
@@ -149,15 +150,13 @@ open class XingDunGroupManagementActivity : BaseActivity() {
                     mapOf("team_id" to groupID),
                     XingDunGroupDetail::class.java,
                 )
-                val members = runCatching {
-                    XingDunSessionManager.apiClient().get<XingDunGroupMemberPage>(
-                        session,
-                        "team/members",
-                        mapOf("team_id" to groupID, "page" to "1", "pageSize" to "200"),
-                        XingDunGroupMemberPage::class.java,
-                    )
-                }.getOrNull()
-                loadedDetail to members.orEmptyAdministratorCount()
+                val members = XingDunGroupMemberPager.loadAll(
+                    XingDunSessionManager.apiClient(),
+                    session,
+                    groupID,
+                    getString(R.string.xingdun_group_members_pagination_failed),
+                )
+                loadedDetail to members.count { it.role == "administrator" }
             }
             refresh.isRefreshing = false
             result.onSuccess { (loadedDetail, loadedAdministratorCount) ->
@@ -168,9 +167,6 @@ open class XingDunGroupManagementActivity : BaseActivity() {
             }.onFailure(::showLoadError)
         }
     }
-
-    private fun XingDunGroupMemberPage?.orEmptyAdministratorCount(): Int =
-        this?.list.orEmpty().count { it.role == "administrator" }
 
     private fun showLoading() {
         content.removeAllViews()
@@ -402,15 +398,69 @@ open class XingDunGroupManagementActivity : BaseActivity() {
     private fun showPermissionDialog(field: PolicyField, current: XingDunGroupDetail) {
         val currentMode = field.value(current)
         var selectedMode = currentMode
-        val labels = arrayOf(
-            getString(R.string.xingdun_group_permission_everyone_detail, getString(field.titleRes)),
-            getString(R.string.xingdun_group_permission_administrators_detail, getString(field.titleRes)),
-        )
+        val options = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(4.dp(), 4.dp(), 4.dp(), 4.dp())
+        }
+        lateinit var everyone: RadioButton
+        lateinit var administrators: RadioButton
+        fun option(mode: Int, titleRes: Int, detailRes: Int, expectationRes: Int): View =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(14.dp(), 12.dp(), 14.dp(), 12.dp())
+                background = rounded(colors().bgColorOperate, 12f)
+                val header = LinearLayout(this@XingDunGroupManagementActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                val radio = RadioButton(this@XingDunGroupManagementActivity).apply {
+                    isChecked = currentMode == mode
+                    isClickable = false
+                }
+                if (mode == MODE_ALL) everyone = radio else administrators = radio
+                header.addView(radio)
+                header.addView(TextView(this@XingDunGroupManagementActivity).apply {
+                    setText(titleRes)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(colors().textColorPrimary)
+                })
+                addView(header, matchWrap())
+                addView(TextView(this@XingDunGroupManagementActivity).apply {
+                    setText(detailRes)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                    setTextColor(colors().textColorSecondary)
+                    setPadding(50.dp(), 2.dp(), 4.dp(), 0)
+                }, matchWrap())
+                addView(TextView(this@XingDunGroupManagementActivity).apply {
+                    setText(expectationRes)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                    setTextColor(BRAND)
+                    setPadding(50.dp(), 6.dp(), 4.dp(), 0)
+                }, matchWrap())
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    selectedMode = mode
+                    everyone.isChecked = mode == MODE_ALL
+                    administrators.isChecked = mode == MODE_ADMINISTRATORS
+                }
+            }
+        options.addView(option(
+            MODE_ALL,
+            R.string.xingdun_group_permission_everyone,
+            field.everyoneDetailRes,
+            field.everyoneExpectationRes,
+        ), matchWrap())
+        options.addView(option(
+            MODE_ADMINISTRATORS,
+            R.string.xingdun_group_permission_administrators,
+            field.administratorsDetailRes,
+            field.administratorsExpectationRes,
+        ), matchWrap().apply { topMargin = 10.dp() })
         val dialog = AlertDialog.Builder(this)
             .setTitle(field.titleRes)
-            .setSingleChoiceItems(labels, if (currentMode == MODE_ALL) 0 else 1) { _, which ->
-                selectedMode = if (which == 0) MODE_ALL else MODE_ADMINISTRATORS
-            }
+            .setView(options)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.xingdun_group_permission_save, null)
             .create()
@@ -640,12 +690,54 @@ open class XingDunGroupManagementActivity : BaseActivity() {
 
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
 
-    private enum class PolicyField(val titleRes: Int, val serverField: String) {
-        UPDATE_INFO(R.string.xingdun_group_permission_update_info, "update_team_mode"),
-        INVITE(R.string.xingdun_group_permission_invite, "invite_mode"),
-        MENTION_ALL(R.string.xingdun_group_permission_mention_all, "at_all_mode"),
-        VIEW_MEMBER_CARD(R.string.xingdun_group_permission_view_member_card, "view_member_card_mode"),
-        PIN_MESSAGE(R.string.xingdun_group_permission_pin_message, "pin_message_mode");
+    private enum class PolicyField(
+        val titleRes: Int,
+        val serverField: String,
+        val everyoneDetailRes: Int,
+        val administratorsDetailRes: Int,
+        val everyoneExpectationRes: Int,
+        val administratorsExpectationRes: Int,
+    ) {
+        UPDATE_INFO(
+            R.string.xingdun_group_permission_update_info,
+            "update_team_mode",
+            R.string.xingdun_group_permission_update_info_everyone_detail,
+            R.string.xingdun_group_permission_update_info_administrators_detail,
+            R.string.xingdun_group_permission_update_info_everyone_expectation,
+            R.string.xingdun_group_permission_update_info_administrators_expectation,
+        ),
+        INVITE(
+            R.string.xingdun_group_permission_invite,
+            "invite_mode",
+            R.string.xingdun_group_permission_invite_everyone_detail,
+            R.string.xingdun_group_permission_invite_administrators_detail,
+            R.string.xingdun_group_permission_invite_everyone_expectation,
+            R.string.xingdun_group_permission_invite_administrators_expectation,
+        ),
+        MENTION_ALL(
+            R.string.xingdun_group_permission_mention_all,
+            "at_all_mode",
+            R.string.xingdun_group_permission_mention_all_everyone_detail,
+            R.string.xingdun_group_permission_mention_all_administrators_detail,
+            R.string.xingdun_group_permission_mention_all_everyone_expectation,
+            R.string.xingdun_group_permission_mention_all_administrators_expectation,
+        ),
+        VIEW_MEMBER_CARD(
+            R.string.xingdun_group_permission_view_member_card,
+            "view_member_card_mode",
+            R.string.xingdun_group_permission_view_member_card_everyone_detail,
+            R.string.xingdun_group_permission_view_member_card_administrators_detail,
+            R.string.xingdun_group_permission_view_member_card_everyone_expectation,
+            R.string.xingdun_group_permission_view_member_card_administrators_expectation,
+        ),
+        PIN_MESSAGE(
+            R.string.xingdun_group_permission_pin_message,
+            "pin_message_mode",
+            R.string.xingdun_group_permission_pin_message_everyone_detail,
+            R.string.xingdun_group_permission_pin_message_administrators_detail,
+            R.string.xingdun_group_permission_pin_message_everyone_expectation,
+            R.string.xingdun_group_permission_pin_message_administrators_expectation,
+        );
 
         fun value(detail: XingDunGroupDetail): Int = when (this) {
             UPDATE_INFO -> detail.updateTeamMode

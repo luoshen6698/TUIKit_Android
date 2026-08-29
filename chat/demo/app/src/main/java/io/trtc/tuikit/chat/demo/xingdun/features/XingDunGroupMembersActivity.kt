@@ -33,8 +33,7 @@ import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMember
-import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPage
-import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionCompletion
@@ -154,7 +153,13 @@ open class XingDunGroupMembersActivity : BaseActivity() {
                     mapOf("team_id" to groupID),
                     XingDunGroupDetail::class.java,
                 )
-                loadedDetail to loadAllMembers(session)
+                val loadedMembers = XingDunGroupMemberPager.loadAll(
+                    XingDunSessionManager.apiClient(),
+                    session,
+                    groupID,
+                    getString(R.string.xingdun_group_members_pagination_failed),
+                )
+                loadedDetail to loadedMembers.sortedWith(memberComparator)
             }
             refresh.isRefreshing = false
             result.onSuccess { (loadedDetail, loadedMembers) ->
@@ -164,37 +169,6 @@ open class XingDunGroupMembersActivity : BaseActivity() {
                 render(loadedDetail)
             }.onFailure(::showLoadError)
         }
-    }
-
-    private suspend fun loadAllMembers(session: XingDunStoredSession): List<XingDunGroupMember> {
-        val membersByID = linkedMapOf<String, XingDunGroupMember>()
-        var pageNumber = 1
-        while (pageNumber <= MAX_MEMBER_PAGE_COUNT) {
-            val page = XingDunSessionManager.apiClient().get<XingDunGroupMemberPage>(
-                session,
-                "team/members",
-                mapOf(
-                    "team_id" to groupID,
-                    "page" to pageNumber.toString(),
-                    "pageSize" to MEMBER_PAGE_SIZE.toString(),
-                ),
-                XingDunGroupMemberPage::class.java,
-            )
-            val previousSize = membersByID.size
-            page.list.forEach { member ->
-                member.userId.takeIf(String::isNotBlank)?.let { membersByID[it] = member }
-            }
-            val reachedReportedTotal = page.total > 0 && membersByID.size >= page.total
-            val reachedLastPage = page.list.size < MEMBER_PAGE_SIZE
-            if (page.list.isEmpty() || reachedReportedTotal || reachedLastPage) {
-                return membersByID.values.sortedWith(memberComparator)
-            }
-            if (membersByID.size == previousSize) {
-                error(getString(R.string.xingdun_group_members_pagination_failed))
-            }
-            pageNumber += 1
-        }
-        error(getString(R.string.xingdun_group_members_pagination_failed))
     }
 
     private fun showLoading() {
@@ -499,8 +473,6 @@ open class XingDunGroupMembersActivity : BaseActivity() {
         private const val EXTRA_GROUP_ID = "group_id"
         const val EXTRA_DEBUG_PREVIEW = "xingdun_debug_group_members_preview"
         private const val PREVIEW_CURRENT_USER_ID = "xd_owner"
-        private const val MEMBER_PAGE_SIZE = 200
-        private const val MAX_MEMBER_PAGE_COUNT = 100
         private const val BRAND = 0xFF23B39C.toInt()
         private const val WARNING = 0xFFB36A00.toInt()
         private const val DANGER = 0xFFE34D59.toInt()
