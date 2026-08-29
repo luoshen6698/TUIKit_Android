@@ -154,6 +154,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             ?.let { value -> runCatching { JsonParser.parseString(value).asJsonObject }.getOrNull() }
     }
     private var attachmentSelectionHandler: ((List<XingDunAttachment>) -> Unit)? = null
+    private var attachmentFailureHandler: ((Throwable) -> Unit)? = null
     private var pendingInvitePoster: Bitmap? = null
     private var invitePosterSaving = false
     private var invitePosterSaveButton: Button? = null
@@ -226,7 +227,9 @@ open class XingDunFeatureActivity : BaseActivity() {
         lifecycleScope.launch {
             runCatching { XingDunAttachmentResolver.metadata(this@XingDunFeatureActivity, uris) }
                 .onSuccess { attachmentSelectionHandler?.invoke(it) }
-                .onFailure(::showAttachmentFailure)
+                .onFailure { error ->
+                    attachmentFailureHandler?.invoke(error) ?: showAttachmentFailure(error)
+                }
         }
     }
 
@@ -358,6 +361,8 @@ open class XingDunFeatureActivity : BaseActivity() {
             destroy()
         }
         legalWebView = null
+        attachmentSelectionHandler = null
+        attachmentFailureHandler = null
         super.onDestroy()
     }
 
@@ -2648,6 +2653,21 @@ open class XingDunFeatureActivity : BaseActivity() {
             gravity = Gravity.END
         }
         val contact = input(R.string.xingdun_feedback_contact_hint)
+        val feedbackError = TextView(this).apply {
+            visibility = View.GONE
+            textSize = 13f
+            setTextColor(0xFF9A3412.toInt())
+            background = roundedDrawable(0xFFFFF4E5.toInt(), 12f)
+            setPadding(14.dp(), 12.dp(), 14.dp(), 12.dp())
+        }
+        val setFeedbackError: (CharSequence?) -> Unit = { message ->
+            feedbackError.text = message?.toString().orEmpty()
+            feedbackError.visibility = if (message.isNullOrBlank()) View.GONE else View.VISIBLE
+        }
+        attachmentFailureHandler = { error ->
+            setBusy(false)
+            setFeedbackError(getString(attachmentFailureMessage(error)))
+        }
         var attachments = emptyList<XingDunAttachment>()
         var result: FeedbackSubmissionResult? = null
         var submitting = false
@@ -2707,9 +2727,10 @@ open class XingDunFeatureActivity : BaseActivity() {
                 attachmentSelectionHandler = { selected ->
                     val combined = (attachments + selected).distinctBy(XingDunAttachment::uri)
                     if (combined.size > XingDunAttachmentResolver.MAX_COUNT) {
-                        showAttachmentFailure(XingDunAttachmentException(XingDunAttachmentError.TOO_MANY))
+                        attachmentFailureHandler?.invoke(XingDunAttachmentException(XingDunAttachmentError.TOO_MANY))
                     } else {
                         attachments = combined
+                        setFeedbackError(null)
                         renderAttachments()
                         updateState()
                     }
@@ -2739,6 +2760,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 })
             },
         )
+        content.addView(feedbackError, feedbackSectionLayoutParams())
 
         submitButton = actionButton(R.string.xingdun_feedback_submit) {
             result?.let {
@@ -2748,14 +2770,15 @@ open class XingDunFeatureActivity : BaseActivity() {
             val normalizedDescription = description.text.toString().trim()
             val normalizedContact = contact.text.toString().trim()
             if (normalizedDescription.length !in 10..2_000) {
-                status.setText(R.string.xingdun_feedback_content_required)
+                setFeedbackError(getString(R.string.xingdun_feedback_content_required))
                 return@actionButton
             }
             if (normalizedContact.length > 128) {
-                status.setText(R.string.xingdun_feedback_contact_too_long)
+                setFeedbackError(getString(R.string.xingdun_feedback_contact_too_long))
                 return@actionButton
             }
             submitting = true
+            setFeedbackError(null)
             updateState()
             setBusy(true)
             lifecycleScope.launch {
@@ -2791,14 +2814,21 @@ open class XingDunFeatureActivity : BaseActivity() {
                         submission.feedbackNo,
                     )
                     status.text = message
+                    setFeedbackError(null)
                     Toast.makeText(this@XingDunFeatureActivity, message, Toast.LENGTH_LONG).show()
                     submitButton.setText(R.string.xingdun_complete)
                     renderAttachments()
                     updateState()
                 }.onFailure { error ->
                     submitting = false
+                    setBusy(false)
                     updateState()
-                    if (error is XingDunAttachmentException) showAttachmentFailure(error) else showFailure(error)
+                    val message = if (error is XingDunAttachmentException) {
+                        getString(attachmentFailureMessage(error))
+                    } else {
+                        error.localizedMessage ?: getString(R.string.xingdun_action_failed)
+                    }
+                    setFeedbackError(message)
                 }
             }
         }
@@ -6879,16 +6909,18 @@ open class XingDunFeatureActivity : BaseActivity() {
     }.ifBlank { getString(R.string.xingdun_no_attachments) }
 
     private fun showAttachmentFailure(error: Throwable) {
-        val message = when ((error as? XingDunAttachmentException)?.reason) {
+        setBusy(false)
+        status.setText(attachmentFailureMessage(error))
+    }
+
+    private fun attachmentFailureMessage(error: Throwable): Int =
+        when ((error as? XingDunAttachmentException)?.reason) {
             XingDunAttachmentError.TOO_MANY -> R.string.xingdun_attachment_too_many
             XingDunAttachmentError.INVALID_TYPE -> R.string.xingdun_attachment_invalid_type
             XingDunAttachmentError.TOO_LARGE -> R.string.xingdun_attachment_too_large
             XingDunAttachmentError.EMPTY -> R.string.xingdun_attachment_empty
             else -> R.string.xingdun_attachment_unreadable
         }
-        setBusy(false)
-        status.setText(message)
-    }
 
     private fun submitEmpty(path: String, body: Any, successMessage: Int) {
         setBusy(true)

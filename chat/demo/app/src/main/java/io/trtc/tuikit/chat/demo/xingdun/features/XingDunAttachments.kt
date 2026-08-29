@@ -48,7 +48,19 @@ internal object XingDunAttachmentResolver {
                 }
             }
             val size = values?.second ?: -1L
+            if (size == 0L) throw XingDunAttachmentException(XingDunAttachmentError.EMPTY)
             if (size > MAX_BYTES) throw XingDunAttachmentException(XingDunAttachmentError.TOO_LARGE)
+            val header = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    val bytes = ByteArray(12)
+                    val count = input.read(bytes)
+                    if (count <= 0) ByteArray(0) else bytes.copyOf(count)
+                }
+            }.getOrElse {
+                throw XingDunAttachmentException(XingDunAttachmentError.UNREADABLE)
+            } ?: throw XingDunAttachmentException(XingDunAttachmentError.UNREADABLE)
+            if (header.isEmpty()) throw XingDunAttachmentException(XingDunAttachmentError.EMPTY)
+            if (imageFormat(header) == null) throw XingDunAttachmentException(XingDunAttachmentError.INVALID_TYPE)
             XingDunAttachment(
                 uri = uri,
                 displayName = values?.first?.takeIf(String::isNotBlank) ?: "image",
