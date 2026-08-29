@@ -12,6 +12,11 @@
     <string name="chat_setting_clear_history_messages">Clear Chat History</string>
     <string name="chat_setting_clear_contact_history_messages_tips">Confirm to delete chat history with this contact</string>
     <string name="chat_setting_clear_group_history_messages_tips">Confirm to delete this group\'s chat history</string>
+    <string name="chat_setting_clear_history_confirmation_title">Clear Chat History?</string>
+    <string name="chat_setting_clear_history_confirmation_message">This only clears local chat history on this device. It does not delete the conversation or cloud history. Continue?</string>
+    <string name="chat_setting_clear_history_confirm">Clear</string>
+    <string name="chat_setting_clear_history_success">Local chat history on this device has been cleared</string>
+    <string name="chat_setting_clear_history_failed">Couldn’t clear chat history. Check your connection and try again.</string>
     <string name="chat_setting_delete_contact">Delete Contact</string>
     <string name="chat_setting_delete_contact_tips">Confirm to delete this contact</string>
     <string name="chat_setting_group_notice">Group Announcement</string>

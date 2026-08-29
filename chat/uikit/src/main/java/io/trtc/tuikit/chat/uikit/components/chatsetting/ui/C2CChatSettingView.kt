@@ -352,9 +352,35 @@ class C2CChatSettingView @JvmOverloads constructor(
             setOnClickListener {
                 AtomicAlertDialog(context).apply {
                     init {
-                        content = context.getString(R.string.chat_setting_clear_contact_history_messages_tips)
-                        confirmButton(context.getString(R.string.uikit_confirm)) { _ ->
-                            viewModel?.clearChatHistory()
+                        title = context.getString(R.string.chat_setting_clear_history_confirmation_title)
+                        content = context.getString(R.string.chat_setting_clear_history_confirmation_message)
+                        autoDismiss = true
+                        confirmButton(
+                            context.getString(R.string.chat_setting_clear_history_confirm),
+                            type = AtomicAlertDialog.TextColorPreset.RED,
+                        ) { _ ->
+                            isEnabled = false
+                            alpha = 0.6f
+                            viewModel?.clearChatHistory(
+                                onSuccess = {
+                                    isEnabled = true
+                                    alpha = 1f
+                                    AtomicToast.show(
+                                        context,
+                                        context.getString(R.string.chat_setting_clear_history_success),
+                                        style = AtomicToast.Style.SUCCESS,
+                                    )
+                                },
+                                onFailure = { _, _ ->
+                                    isEnabled = true
+                                    alpha = 1f
+                                    AtomicToast.show(
+                                        context,
+                                        context.getString(R.string.chat_setting_clear_history_failed),
+                                        style = AtomicToast.Style.ERROR,
+                                    )
+                                },
+                            )
                         }
                         cancelButton(context.getString(R.string.uikit_cancel))
                     }

@@ -12,6 +12,11 @@
     <string name="chat_setting_clear_history_messages">清空聊天记录</string>
     <string name="chat_setting_clear_contact_history_messages_tips">确认删除与该联系人的聊天记录</string>
     <string name="chat_setting_clear_group_history_messages_tips">确认删除该群的聊天记录</string>
+    <string name="chat_setting_clear_history_confirmation_title">清空聊天记录？</string>
+    <string name="chat_setting_clear_history_confirmation_message">仅清空当前设备上的本地聊天记录，不会删除会话，也不会删除云端历史。确认继续？</string>
+    <string name="chat_setting_clear_history_confirm">清空</string>
+    <string name="chat_setting_clear_history_success">已清空当前设备本地聊天记录</string>
+    <string name="chat_setting_clear_history_failed">聊天记录清空失败，请检查网络后重试。</string>
     <string name="chat_setting_delete_contact">删除联系人</string>
     <string name="chat_setting_delete_contact_tips">确认删除联系人</string>
     <string name="chat_setting_group_notice">群公告</string>

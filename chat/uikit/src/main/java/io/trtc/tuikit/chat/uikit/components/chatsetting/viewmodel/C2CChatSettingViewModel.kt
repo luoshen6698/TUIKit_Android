@@ -147,8 +147,17 @@ class C2CChatSettingViewModel(
         _contactStore.setFriendRemark(userID, remark, emptyHandler())
     }
 
-    fun clearChatHistory() {
-        _conversationListStore.clearConversationMessages(conversationID, emptyHandler())
+    fun clearChatHistory(
+        onSuccess: (() -> Unit)? = null,
+        onFailure: ((Int, String) -> Unit)? = null,
+    ) {
+        _conversationListStore.clearConversationMessages(
+            conversationID,
+            object : CompletionHandler {
+                override fun onSuccess() = onSuccess?.invoke() ?: Unit
+                override fun onFailure(code: Int, desc: String) = onFailure?.invoke(code, desc) ?: Unit
+            },
+        )
     }
 
     fun setChatBackground(imageUri: String?) {
