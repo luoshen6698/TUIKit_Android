@@ -3443,6 +3443,10 @@ open class XingDunFeatureActivity : BaseActivity() {
             }
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         addView(reportStatusBadge(record.int("status"), record.string("status_text")))
+        addView(ImageView(context).apply {
+            setImageResource(R.drawable.demo_ic_arrow_right)
+            imageTintList = android.content.res.ColorStateList.valueOf(0xFF8A8A8F.toInt())
+        }, LinearLayout.LayoutParams(7.dp(), 12.dp()).apply { marginStart = 10.dp() })
     }.also { row ->
         row.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = 10.dp()
@@ -3627,10 +3631,13 @@ open class XingDunFeatureActivity : BaseActivity() {
                             setTextIsSelectable(true)
                         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.25f))
                     }
-                    if (index < visibleRows.lastIndex) {
-                        setBackgroundColor(Color.TRANSPARENT)
-                    }
                 })
+                if (index < visibleRows.lastIndex) {
+                    addView(View(context).apply { setBackgroundColor(0xFFE5E5EA.toInt()) }, LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        1.dp(),
+                    ))
+                }
             }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = 12.dp()
