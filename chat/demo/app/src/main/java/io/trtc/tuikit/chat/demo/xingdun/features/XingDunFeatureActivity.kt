@@ -2679,7 +2679,15 @@ open class XingDunFeatureActivity : BaseActivity() {
         val types = resources.getStringArray(R.array.xingdun_feedback_type_values)
         val labels = resources.getStringArray(R.array.xingdun_feedback_type_labels)
         val type = Spinner(this).apply {
-            adapter = ArrayAdapter(this@XingDunFeatureActivity, android.R.layout.simple_spinner_dropdown_item, labels.toList())
+            adapter = ArrayAdapter(
+                this@XingDunFeatureActivity,
+                android.R.layout.simple_spinner_item,
+                labels.toList(),
+            ).apply {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            minimumHeight = 0
+            setPadding(0, 0, 0, 0)
         }
         val description = input(R.string.xingdun_feedback_content, multiline = true).apply {
             minHeight = 150.dp()
@@ -2737,7 +2745,23 @@ open class XingDunFeatureActivity : BaseActivity() {
             attachmentScroll.visibility = if (attachments.isEmpty()) View.GONE else View.VISIBLE
         }
 
-        addFeedbackSection(R.string.xingdun_feedback_type_title, type)
+        addFeedbackSection(
+            R.string.xingdun_feedback_type_title,
+            LinearLayout(this).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                addView(TextView(context).apply {
+                    setText(R.string.xingdun_feedback_type_title)
+                    textSize = 15f
+                    setTextColor(Color.BLACK)
+                }, LinearLayout.LayoutParams(0, 44.dp(), 1f).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                })
+                addView(type, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    44.dp(),
+                ))
+            },
+        )
         addFeedbackSection(
             R.string.xingdun_feedback_description_title,
             LinearLayout(this).apply {
@@ -2781,8 +2805,13 @@ open class XingDunFeatureActivity : BaseActivity() {
                 compoundDrawablePadding = 8.dp()
                 setCompoundDrawablesWithIntrinsicBounds(R.drawable.xingdun_ic_feedback_add_image, 0, 0, 0)
                 elevation = 0f
+                minHeight = 0
+                minimumHeight = 0
             }
-            addView(addImageButton)
+            addView(addImageButton, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                42.dp(),
+            ))
         }, feedbackSectionLayoutParams())
 
         addFeedbackSection(
@@ -2898,6 +2927,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         content.setPadding(20.dp(), 8.dp(), 20.dp(), 32.dp())
         status.setBackgroundColor(background)
         status.setTextColor(0xFF8A8A8F.toInt())
+        (headerBar.getChildAt(1) as? TextView)?.textSize = 17f
     }
 
     private fun addFeedbackSection(title: Int, child: View) {
@@ -2911,16 +2941,16 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun addFeedbackSectionHeader(header: TextView) {
-        header.textSize = 14f
+        header.textSize = 13f
         header.setTextColor(0xFF8A8A8F.toInt())
-        header.setPadding(14.dp(), 10.dp(), 8.dp(), 8.dp())
+        header.setPadding(14.dp(), 8.dp(), 8.dp(), 6.dp())
         content.addView(header)
     }
 
     private fun feedbackSectionLayoutParams() = LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT,
         ViewGroup.LayoutParams.WRAP_CONTENT,
-    ).apply { bottomMargin = 12.dp() }
+    ).apply { bottomMargin = 10.dp() }
 
     private fun feedbackAttachmentPreview(
         attachment: XingDunAttachment,
