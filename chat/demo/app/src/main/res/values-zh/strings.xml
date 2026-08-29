@@ -160,6 +160,7 @@
     <string name="demo_chat_setting_group_info">群组信息</string>
     <string name="demo_chat_setting_group_settings">群设置</string>
     <string name="xingdun_report_group">举报该群</string>
+    <string name="xingdun_search_chat_content">查找聊天内容</string>
     <string name="demo_message_input_hint">输入消息…</string>
     <string name="demo_chat_custom_message_menu_title">自定义消息</string>
     <string name="demo_chat_custom_message_content">欢迎加入云通信IM大家庭！</string>

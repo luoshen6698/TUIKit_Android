@@ -162,6 +162,7 @@
     <string name="demo_chat_setting_group_info">Group Info</string>
     <string name="demo_chat_setting_group_settings">Group Settings</string>
     <string name="xingdun_report_group">Report this group</string>
+    <string name="xingdun_search_chat_content">Search chat content</string>
     <string name="demo_message_input_hint">Type a message…</string>
     <string name="demo_chat_custom_message_menu_title">Custom Message</string>
     <string name="demo_chat_custom_message_content">Welcome to the Cloud Communication IM family!</string>

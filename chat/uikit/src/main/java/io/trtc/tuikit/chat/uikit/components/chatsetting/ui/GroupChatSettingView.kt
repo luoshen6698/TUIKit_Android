@@ -58,6 +58,10 @@ class GroupChatSettingView @JvmOverloads constructor(
     private var autoDeleteTitle: String? = null
     private var onPinnedMessagesClick: (() -> Unit)? = null
     private var pinnedMessagesTitle: String? = null
+    private var onSearchMessagesClick: (() -> Unit)? = null
+    private var searchMessagesTitle: String? = null
+    private var showGroupPolicySummary = true
+    private var showChatBackground = true
     private var isAssignedCustomerService = false
     private var onGroupDeleted: (() -> Unit)? = null
 
@@ -93,6 +97,10 @@ class GroupChatSettingView @JvmOverloads constructor(
         onAutoDeleteClick: (() -> Unit)? = null,
         pinnedMessagesTitle: String? = null,
         onPinnedMessagesClick: (() -> Unit)? = null,
+        searchMessagesTitle: String? = null,
+        onSearchMessagesClick: (() -> Unit)? = null,
+        showGroupPolicySummary: Boolean = true,
+        showChatBackground: Boolean = true,
         onGroupDeleted: (() -> Unit)? = null
     ) {
         this.onSendMessageClick = onSendMessageClick
@@ -108,6 +116,10 @@ class GroupChatSettingView @JvmOverloads constructor(
         this.onAutoDeleteClick = onAutoDeleteClick
         this.pinnedMessagesTitle = pinnedMessagesTitle
         this.onPinnedMessagesClick = onPinnedMessagesClick
+        this.searchMessagesTitle = searchMessagesTitle
+        this.onSearchMessagesClick = onSearchMessagesClick
+        this.showGroupPolicySummary = showGroupPolicySummary
+        this.showChatBackground = showChatBackground
         this.onGroupDeleted = onGroupDeleted
 
         val owner = context.findViewModelStoreOwner() ?: return
@@ -174,6 +186,10 @@ class GroupChatSettingView @JvmOverloads constructor(
             isAssignedCustomerServiceProvider = { isAssignedCustomerService },
             pinnedMessagesTitle = pinnedMessagesTitle,
             onOpenPinnedMessages = onPinnedMessagesClick,
+            searchMessagesTitle = searchMessagesTitle,
+            onOpenSearchMessages = onSearchMessagesClick,
+            showGroupPolicySummary = showGroupPolicySummary,
+            showChatBackground = showChatBackground,
             onShowJoinMethod = ::showJoinMethodActionSheet,
             onShowInviteMethod = ::showInviteMethodActionSheet,
             onShowChatBackgroundPicker = ::showChatBackgroundPicker
@@ -215,6 +231,10 @@ class GroupChatSettingView @JvmOverloads constructor(
     fun refreshSelfNameCard() {
         viewModel?.refreshSelfNameCard()
     }
+
+    fun currentGroupDisplayName(): String = viewModel?.groupName?.value.orEmpty()
+
+    fun currentGroupAvatarURL(): String? = viewModel?.avatarURL?.value
 
     fun setAssignedCustomerService(value: Boolean) {
         if (isAssignedCustomerService == value) return

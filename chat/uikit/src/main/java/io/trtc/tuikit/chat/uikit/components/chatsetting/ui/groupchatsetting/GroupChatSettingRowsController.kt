@@ -24,6 +24,10 @@ internal class GroupChatSettingRowsController(
     private val isAssignedCustomerServiceProvider: () -> Boolean,
     private val pinnedMessagesTitle: String?,
     private val onOpenPinnedMessages: (() -> Unit)?,
+    private val searchMessagesTitle: String?,
+    private val onOpenSearchMessages: (() -> Unit)?,
+    private val showGroupPolicySummary: Boolean,
+    private val showChatBackground: Boolean,
     private val onShowJoinMethod: (GroupChatSettingViewModel) -> Unit,
     private val onShowInviteMethod: (GroupChatSettingViewModel) -> Unit,
     private val onShowChatBackgroundPicker: (GroupChatSettingViewModel) -> Unit
@@ -46,6 +50,7 @@ internal class GroupChatSettingRowsController(
     private lateinit var groupManageRow: SettingRowNavigate
     private lateinit var autoDeleteRow: SettingRowNavigate
     private lateinit var pinnedMessagesRow: SettingRowNavigate
+    private lateinit var searchMessagesRow: SettingRowNavigate
     private lateinit var chatBackgroundRow: SettingRowNavigate
     private lateinit var doNotDisturbRow: SettingRowToggle
     private lateinit var pinRow: SettingRowToggle
@@ -75,15 +80,24 @@ internal class GroupChatSettingRowsController(
             visibility = if (onOpenPinnedMessages != null && !pinnedMessagesTitle.isNullOrBlank()) View.VISIBLE else View.GONE
             setOnClickListener { onOpenPinnedMessages?.invoke() }
         }
+        searchMessagesRow = SettingRowNavigate(context).apply {
+            setTitle(searchMessagesTitle.orEmpty())
+            setShowArrow(true)
+            visibility = if (onOpenSearchMessages != null && !searchMessagesTitle.isNullOrBlank()) View.VISIBLE else View.GONE
+            setOnClickListener { onOpenSearchMessages?.invoke() }
+        }
         groupTypeRow = SettingRowNavigate(context).apply {
             setTitle(context.getString(R.string.chat_setting_group_type))
             setShowArrow(false)
+            visibility = if (showGroupPolicySummary) View.VISIBLE else View.GONE
         }
         joinMethodRow = SettingRowNavigate(context).apply {
             setTitle(context.getString(R.string.chat_setting_join_group_method))
+            visibility = if (showGroupPolicySummary) View.VISIBLE else View.GONE
         }
         inviteMethodRow = SettingRowNavigate(context).apply {
             setTitle(context.getString(R.string.chat_setting_group_invited_method))
+            visibility = if (showGroupPolicySummary) View.VISIBLE else View.GONE
         }
         rebuildSettingsSection()
 
@@ -91,7 +105,7 @@ internal class GroupChatSettingRowsController(
         myAliasRow = SettingRowNavigate(context).apply {
             setTitle(context.getString(R.string.chat_setting_my_alias_in_group))
         }
-        rebuildSection(aliasSection, listOf(myAliasRow))
+        rebuildSection(aliasSection, listOf(myAliasRow, pinnedMessagesRow, searchMessagesRow))
 
         switchSection = createSectionContainer()
         doNotDisturbRow = SettingRowToggle(context).apply {
@@ -111,6 +125,7 @@ internal class GroupChatSettingRowsController(
             setOnClickListener {
                 viewModelProvider()?.let(onShowChatBackgroundPicker)
             }
+            visibility = if (showChatBackground) View.VISIBLE else View.GONE
         }
         rebuildSection(backgroundSection, listOf(chatBackgroundRow))
 
@@ -193,6 +208,15 @@ internal class GroupChatSettingRowsController(
         pinnedMessagesRow.isClickable = pinnedMessagesRow.visibility == View.VISIBLE
         pinnedMessagesRow.setOnClickListener { onOpenPinnedMessages?.invoke() }
 
+        searchMessagesRow.visibility = if (onOpenSearchMessages != null && !searchMessagesTitle.isNullOrBlank()) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        searchMessagesRow.isClickable = searchMessagesRow.visibility == View.VISIBLE
+        searchMessagesRow.setOnClickListener { onOpenSearchMessages?.invoke() }
+
+        groupTypeRow.visibility = if (showGroupPolicySummary) View.VISIBLE else View.GONE
         groupTypeRow.setValue(
             context.getString(GroupChatSettingTextMapper.groupTypeTextRes(state.groupType))
         )
@@ -200,6 +224,7 @@ internal class GroupChatSettingRowsController(
         groupTypeRow.setCustomAccessory(null)
         groupTypeRow.isClickable = false
 
+        joinMethodRow.visibility = if (showGroupPolicySummary) View.VISIBLE else View.GONE
         joinMethodRow.setValue(
             GroupChatSettingTextMapper.joinOptionTextRes(state.joinOption)?.let { context.getString(it) } ?: ""
         )
@@ -213,6 +238,7 @@ internal class GroupChatSettingRowsController(
             joinMethodRow.setOnClickListener(null)
         }
 
+        inviteMethodRow.visibility = if (showGroupPolicySummary) View.VISIBLE else View.GONE
         inviteMethodRow.setValue(
             GroupChatSettingTextMapper.inviteOptionTextRes(state.inviteOption)?.let { context.getString(it) } ?: ""
         )
@@ -272,7 +298,7 @@ internal class GroupChatSettingRowsController(
         chatBackgroundRow.setOnClickListener { onShowChatBackgroundPicker(viewModel) }
 
         rebuildSettingsSection()
-        rebuildSection(aliasSection, listOf(myAliasRow))
+        rebuildSection(aliasSection, listOf(myAliasRow, pinnedMessagesRow, searchMessagesRow))
         rebuildSection(switchSection, listOf(doNotDisturbRow, pinRow))
         rebuildSection(backgroundSection, listOf(chatBackgroundRow))
     }
@@ -295,7 +321,7 @@ internal class GroupChatSettingRowsController(
     private fun rebuildSettingsSection() {
         rebuildSection(
             settingsSection,
-            listOf(groupNoticeRow, groupQRCodeRow, groupManageRow, pinnedMessagesRow, autoDeleteRow, groupTypeRow, joinMethodRow, inviteMethodRow)
+            listOf(groupNoticeRow, groupQRCodeRow, groupManageRow, autoDeleteRow, groupTypeRow, joinMethodRow, inviteMethodRow)
         )
     }
 }

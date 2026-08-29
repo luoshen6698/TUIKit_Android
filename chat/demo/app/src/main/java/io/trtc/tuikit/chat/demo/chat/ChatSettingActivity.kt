@@ -31,6 +31,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupTransferOwnerActivi
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupNicknameActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunAutoDeleteActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagesActivity
+import io.trtc.tuikit.chat.demo.search.ConversationSearchActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.app.R
@@ -183,6 +184,18 @@ class ChatSettingActivity : BaseActivity() {
                 } else {
                     null
                 },
+                searchMessagesTitle = getString(R.string.xingdun_search_chat_content),
+                onSearchMessagesClick = {
+                    ConversationSearchActivity.start(
+                        context = this,
+                        conversationID = "group_$groupID",
+                        displayName = groupSettingView?.currentGroupDisplayName().orEmpty()
+                            .ifBlank { getString(R.string.demo_chat_setting_group_settings) },
+                        avatarURL = groupSettingView?.currentGroupAvatarURL()
+                    )
+                },
+                showGroupPolicySummary = false,
+                showChatBackground = false,
                 onGroupDeleted = {
                     EventBus.post(Event.GroupDeleted(groupID))
                     finish()

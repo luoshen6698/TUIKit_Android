@@ -165,14 +165,34 @@ class SearchMessageInConversationPage(
 
     fun start(conversation: MessageSearchResultItem, keyword: String) {
         currentConversation = conversation
-        conversationID = conversation.conversationID
-        searchQuery = keyword
-        searchBar.setQuery(keyword)
-
+        conversationArrow.visibility = View.VISIBLE
+        conversationCard.isClickable = true
         conversationAvatar.setContent(
             Avatar.AvatarContent.Image(conversation.conversationAvatarURL, conversation.displayName)
         )
         conversationName.text = conversation.displayName
+
+        start(conversation.conversationID, keyword)
+    }
+
+    fun start(
+        conversationID: String,
+        displayName: String,
+        avatarURL: String?,
+        keyword: String = ""
+    ) {
+        currentConversation = null
+        conversationAvatar.setContent(Avatar.AvatarContent.Image(avatarURL, displayName))
+        conversationName.text = displayName
+        conversationArrow.visibility = View.GONE
+        conversationCard.isClickable = false
+        start(conversationID, keyword)
+    }
+
+    private fun start(conversationID: String, keyword: String) {
+        this.conversationID = conversationID
+        searchQuery = keyword
+        searchBar.setQuery(keyword)
 
         if (viewScope != null) {
             viewModel.updateSearchQuery(conversationID, keyword)
