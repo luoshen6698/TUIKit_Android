@@ -29,6 +29,7 @@ import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMetadata
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
@@ -154,6 +155,12 @@ class XingDunGroupListActivity : BaseActivity() {
         }
         pageBody.addView(status, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         root.addView(pageBody, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(
+            XingDunChildBottomNavigation(this).apply {
+                bind(this@XingDunGroupListActivity, MainActivity.TAB_PROFILE)
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
