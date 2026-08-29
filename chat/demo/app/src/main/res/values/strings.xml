@@ -810,9 +810,9 @@
     <string name="xingdun_updated">Updated</string>
     <string name="xingdun_retry">Retry</string>
     <string name="xingdun_workspace_quick">Quick actions</string>
-    <string name="xingdun_workspace_category_attendance">Attendance</string>
+    <string name="xingdun_workspace_category_attendance">Attendance and Leave</string>
     <string name="xingdun_workspace_category_finance">Finance</string>
-    <string name="xingdun_workspace_category_hr">Human resources</string>
+    <string name="xingdun_workspace_category_hr">Human Resources</string>
     <string name="xingdun_workspace_progress">Application progress</string>
     <string name="xingdun_workspace_pending_with_count">Pending approvals · %1$d</string>
     <string name="xingdun_workspace_my_with_count">My applications · %1$d</string>
