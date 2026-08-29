@@ -26,6 +26,7 @@ import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunAutoDeleteConfiguration
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,7 +42,7 @@ open class XingDunAutoDeleteActivity : BaseActivity() {
         get() = !isDebugPreview
 
     private val conversationID by lazy { intent.getStringExtra(EXTRA_CONVERSATION_ID).orEmpty() }
-    private val canUpdate by lazy { intent.getBooleanExtra(EXTRA_CAN_UPDATE, false) }
+    private val previewCanUpdate by lazy { intent.getBooleanExtra(EXTRA_CAN_UPDATE, false) }
     private val isDebugPreview by lazy { intent.getBooleanExtra(EXTRA_DEBUG_PREVIEW, false) }
     private val themeStore by lazy { ThemeStore.shared(this) }
     private var activityScope: CoroutineScope? = null
@@ -59,6 +60,7 @@ open class XingDunAutoDeleteActivity : BaseActivity() {
     private lateinit var retry: Button
 
     private var configuration: XingDunAutoDeleteConfiguration? = null
+    private var canUpdate = false
     private var isLoading = false
     private var isUpdating = false
 
@@ -89,6 +91,7 @@ open class XingDunAutoDeleteActivity : BaseActivity() {
         }
         XingDunAutoDeleteRepository.addListener(configurationListener)
         if (isDebugPreview) {
+            canUpdate = previewCanUpdate
             configuration = previewConfiguration()
             render()
         } else {
@@ -171,6 +174,7 @@ open class XingDunAutoDeleteActivity : BaseActivity() {
         retry.visibility = View.GONE
         renderState()
         activityScope?.launch {
+            canUpdate = resolveUpdatePermission()
             runCatching { XingDunAutoDeleteRepository.load(conversationID, force = true) }
                 .onSuccess {
                     configuration = it
@@ -182,6 +186,34 @@ open class XingDunAutoDeleteActivity : BaseActivity() {
                     if (configuration == null) showError(R.string.xingdun_auto_delete_load_failed)
                     else renderState()
                 }
+        }
+    }
+
+    /**
+     * Mirrors the iOS page-level permission check instead of trusting the caller. A failed
+     * tenant-scoped group lookup is deliberately read-only.
+     */
+    private suspend fun resolveUpdatePermission(): Boolean {
+        return when {
+            conversationID.startsWith(C2C_PREFIX) -> true
+            conversationID.startsWith(GROUP_PREFIX) -> {
+                val groupID = conversationID.removePrefix(GROUP_PREFIX).takeIf { it.isNotBlank() }
+                    ?: return false
+                val session = XingDunSessionManager.currentSession() ?: return false
+                runCatching {
+                    XingDunSessionManager.apiClient().get<XingDunGroupDetail>(
+                        session,
+                        "team/detail",
+                        mapOf("team_id" to groupID),
+                        XingDunGroupDetail::class.java,
+                    )
+                }.getOrNull()?.let { detail ->
+                    detail.currentUserIsAssignedCs ||
+                        detail.currentUserRole == ROLE_OWNER ||
+                        detail.currentUserRole == ROLE_ADMINISTRATOR
+                } == true
+            }
+            else -> false
         }
     }
 
@@ -318,6 +350,10 @@ open class XingDunAutoDeleteActivity : BaseActivity() {
         private const val EXTRA_CONVERSATION_ID = "conversation_id"
         private const val EXTRA_CAN_UPDATE = "can_update"
         const val EXTRA_DEBUG_PREVIEW = "xingdun_debug_auto_delete_preview"
+        private const val C2C_PREFIX = "c2c_"
+        private const val GROUP_PREFIX = "group_"
+        private const val ROLE_OWNER = "owner"
+        private const val ROLE_ADMINISTRATOR = "administrator"
         private const val TAG_SECTION = "auto_delete_section"
         private const val TAG_OPTION_TEXT = "auto_delete_option_text"
         private const val TAG_DIVIDER = "auto_delete_divider"
