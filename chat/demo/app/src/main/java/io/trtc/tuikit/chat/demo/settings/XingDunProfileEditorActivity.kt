@@ -22,8 +22,6 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.RadioButton
-import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
@@ -68,7 +66,10 @@ class XingDunProfileEditorActivity : BaseActivity() {
     private lateinit var card: LinearLayout
     private var counter: TextView? = null
     private var editor: EditText? = null
-    private var genderGroup: RadioGroup? = null
+    private var selectedGenderValue = "0"
+    private val genderOptionTitles = mutableListOf<TextView>()
+    private val genderOptionChecks = mutableListOf<TextView>()
+    private val genderOptionDividers = mutableListOf<View>()
     private var datePicker: DatePicker? = null
     private var birthdayIsSet = true
     private var isCompleting = false
@@ -129,7 +130,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
     private fun buildContent() {
         card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(16.dp(), 8.dp(), 16.dp(), 8.dp())
+            setPadding(16.dp(), 0, 16.dp(), 0)
         }
         content.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
@@ -151,7 +152,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
             background = null
             filters = arrayOf(InputFilter.LengthFilter(limit))
             gravity = if (multiline) Gravity.TOP or Gravity.START else Gravity.CENTER_VERTICAL
-            minHeight = if (multiline) 150.dp() else 58.dp()
+            minHeight = if (multiline) 130.dp() else 48.dp()
             inputType = when (mode) {
                 MODE_ACCOUNT -> InputType.TYPE_CLASS_TEXT
                 MODE_SIGNATURE -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
@@ -184,12 +185,11 @@ class XingDunProfileEditorActivity : BaseActivity() {
                 gravity = Gravity.CENTER_VERTICAL
             }
             row.addView(editor, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            row.addView(TextView(this).apply {
-                setText(R.string.xingdun_profile_copy_account)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-                setTextColor(BRAND)
-                gravity = Gravity.CENTER
-                setPadding(14.dp(), 10.dp(), 0, 10.dp())
+            row.addView(ImageView(this).apply {
+                setImageResource(R.drawable.xingdun_ic_copy)
+                imageTintList = ColorStateList.valueOf(BRAND)
+                contentDescription = getString(R.string.xingdun_profile_copy_account)
+                setPadding(10.dp(), 10.dp(), 10.dp(), 10.dp())
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
@@ -203,7 +203,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
                         Toast.LENGTH_SHORT,
                     ).show()
                 }
-            })
+            }, LinearLayout.LayoutParams(44.dp(), 44.dp()))
             card.addView(
                 row,
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
@@ -214,47 +214,70 @@ class XingDunProfileEditorActivity : BaseActivity() {
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
             )
         }
-        counter = TextView(this).apply {
-            text = getString(R.string.xingdun_profile_character_count, initialValue.length, limit)
-            gravity = Gravity.END
-            setPadding(0, 6.dp(), 0, 6.dp())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+        if (mode != MODE_ACCOUNT) {
+            val counterView = TextView(this).apply {
+                text = getString(R.string.xingdun_profile_character_count, initialValue.length, limit)
+                gravity = Gravity.END
+                setPadding(0, 6.dp(), 4.dp(), 6.dp())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            }
+            counter = counterView
+            content.addView(
+                counterView,
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
         }
-        card.addView(counter, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         if (mode == MODE_ACCOUNT) {
-            card.addView(TextView(this).apply {
+            content.addView(TextView(this).apply {
                 setText(R.string.xingdun_profile_account_hint)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                setPadding(0, 8.dp(), 0, 6.dp())
+                setPadding(12.dp(), 8.dp(), 12.dp(), 6.dp())
                 setTextColor(themeStore.themeState.value.currentTheme.tokens.color.textColorSecondary)
             })
         }
     }
 
     private fun buildGenderEditor() {
-        genderGroup = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+        selectedGenderValue = initialValue.ifBlank { "0" }
         val values = listOf(
+            "0" to R.string.xingdun_not_set,
             "1" to R.string.demo_settings_self_detail_gender_male,
             "2" to R.string.demo_settings_self_detail_gender_female,
-            "0" to R.string.xingdun_not_set,
         )
-        values.forEach { (value, textRes) ->
-            val option = RadioButton(this).apply {
-                tag = value
-                setText(textRes)
+        values.forEachIndexed { index, (value, textRes) ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                minHeight = 56.dp()
-                isChecked = value == initialValue.ifBlank { "0" }
+                minimumHeight = 48.dp()
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    selectedGenderValue = value
+                    complete()
+                }
             }
-            genderGroup?.addView(option, RadioGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        }
-        genderGroup?.setOnCheckedChangeListener { group, checkedId ->
-            val selected = group.findViewById<RadioButton>(checkedId)?.tag?.toString()
-            if (selected != null && selected != initialValue.ifBlank { "0" }) {
-                complete()
+            val title = TextView(this).apply {
+                setText(textRes)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val check = TextView(this).apply {
+                text = "✓"
+                gravity = Gravity.CENTER
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                visibility = if (value == selectedGenderValue) View.VISIBLE else View.INVISIBLE
+            }
+            genderOptionTitles += title
+            genderOptionChecks += check
+            row.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+            row.addView(check, LinearLayout.LayoutParams(32.dp(), ViewGroup.LayoutParams.MATCH_PARENT))
+            card.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()))
+            if (index < values.lastIndex) {
+                val dividerView = View(this)
+                genderOptionDividers += dividerView
+                card.addView(dividerView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1.dp()))
             }
         }
-        card.addView(genderGroup, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
     private fun buildBirthdayEditor() {
@@ -296,7 +319,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
                 if (!it.matches(Regex("^[A-Za-z0-9_]{3,32}$"))) return showInvalid(R.string.xingdun_custom_id_invalid)
             }
             MODE_SIGNATURE -> editor?.text?.toString()?.trim().orEmpty()
-            MODE_GENDER -> genderGroup?.findViewById<RadioButton>(genderGroup?.checkedRadioButtonId ?: View.NO_ID)?.tag?.toString() ?: "0"
+            MODE_GENDER -> selectedGenderValue
             MODE_BIRTHDAY -> if (!birthdayIsSet) "" else datePicker?.let {
                 "%04d-%02d-%02d".format(Locale.US, it.year, it.month + 1, it.dayOfMonth)
             }.orEmpty()
@@ -330,14 +353,9 @@ class XingDunProfileEditorActivity : BaseActivity() {
         editor?.setTextColor(colors.textColorPrimary)
         editor?.setHintTextColor(colors.textColorTertiary)
         counter?.setTextColor(colors.textColorTertiary)
-        genderGroup?.let { group ->
-            for (index in 0 until group.childCount) {
-                (group.getChildAt(index) as? RadioButton)?.apply {
-                    setTextColor(colors.textColorPrimary)
-                    buttonTintList = ColorStateList.valueOf(BRAND)
-                }
-            }
-        }
+        genderOptionTitles.forEach { it.setTextColor(colors.textColorPrimary) }
+        genderOptionChecks.forEach { it.setTextColor(BRAND) }
+        genderOptionDividers.forEach { it.setBackgroundColor(colors.strokeColorPrimary) }
     }
 
     private fun rounded(color: Int, radiusDp: Float) = GradientDrawable().apply {
