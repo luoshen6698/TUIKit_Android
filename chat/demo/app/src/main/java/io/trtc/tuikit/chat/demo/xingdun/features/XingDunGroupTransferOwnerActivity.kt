@@ -34,7 +34,7 @@ import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMember
-import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPage
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionCompletion
@@ -157,13 +157,13 @@ open class XingDunGroupTransferOwnerActivity : BaseActivity() {
                 check(XingDunGroupMemberPolicy.canTransferOwner(loadedDetail)) {
                     getString(R.string.xingdun_group_transfer_owner_only_owner)
                 }
-                val page = XingDunSessionManager.apiClient().get<XingDunGroupMemberPage>(
-                    session,
-                    "team/members",
-                    mapOf("team_id" to groupID, "page" to "1", "pageSize" to "200"),
-                    XingDunGroupMemberPage::class.java,
+                val loadedMembers = XingDunGroupMemberPager.loadAll(
+                    client = XingDunSessionManager.apiClient(),
+                    session = session,
+                    groupID = groupID,
+                    invalidPaginationMessage = getString(R.string.xingdun_group_members_pagination_failed),
                 )
-                loadedDetail to page.list
+                loadedDetail to loadedMembers
                     .filterNot { it.role == XingDunGroupMemberPolicy.ROLE_OWNER || it.userId == loadedDetail.ownerUserId }
                     .sortedWith(memberComparator)
             }
