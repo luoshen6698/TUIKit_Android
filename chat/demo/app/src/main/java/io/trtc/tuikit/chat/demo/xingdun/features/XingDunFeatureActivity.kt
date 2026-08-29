@@ -3306,7 +3306,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         var initializedSelections = 0
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(14.dp(), 10.dp(), 14.dp(), 10.dp())
+            setPadding(14.dp(), 4.dp(), 14.dp(), 4.dp())
             background = roundedDrawable(Color.WHITE, 18f)
         }
         content.addView(TextView(this).apply {
@@ -3334,16 +3334,22 @@ open class XingDunFeatureActivity : BaseActivity() {
         LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = 52.dp()
+            minimumHeight = 44.dp()
             addView(TextView(context).apply {
                 setText(label)
-                textSize = 16f
+                textSize = 15f
                 setTextColor(Color.BLACK)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(Spinner(context).apply {
-                adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, values)
+                adapter = ArrayAdapter(context, android.R.layout.simple_spinner_item, values).also {
+                    it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                }
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF23B39C.toInt())
                 onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) = onSelected(position)
+                    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                        (view as? TextView)?.setTextColor(0xFF23B39C.toInt())
+                        onSelected(position)
+                    }
                     override fun onNothingSelected(parent: AdapterView<*>?) = Unit
                 }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
