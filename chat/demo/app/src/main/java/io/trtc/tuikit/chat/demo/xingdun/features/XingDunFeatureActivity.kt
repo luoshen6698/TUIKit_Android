@@ -2407,7 +2407,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 }
                 val nickname = profile.string("nickname") ?: session.nickname
                 Triple(invitation, session, nickname)
-            }.onSuccess { (invitation, session, nickname) ->
+            }.onSuccess { (invitation, _, nickname) ->
                 setBusy(false)
                 val qrBitmap = BarcodeEncoder().encodeBitmap(
                     invitation.qrPayload,
@@ -2419,7 +2419,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                     qrBitmap = qrBitmap,
                     inviteCode = invitation.inviteCode,
                     nickname = nickname,
-                    brandName = session.companyName.ifBlank { getString(R.string.xingdun_platform_brand_name) },
+                    brandName = getString(R.string.xingdun_platform_brand_name),
                 )
                 renderInvitePoster(poster, invitation.shareUrl)
             }.onFailure {
@@ -2434,7 +2434,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         val payload = "{\"version\":1,\"type\":\"xingdun_invite\",\"code\":\"$inviteCode\",\"company_code\":\"xc2026\"}"
         val qrBitmap = BarcodeEncoder().encodeBitmap(payload, BarcodeFormat.QR_CODE, 720, 720)
         renderInvitePoster(
-            poster = createInvitePoster(qrBitmap, inviteCode, "d001", "XingDunIM"),
+            poster = createInvitePoster(qrBitmap, inviteCode, "d001", getString(R.string.xingdun_platform_brand_name)),
             shareUrl = "https://api.xingdunim.com/prod/xingdun/share.html?code=$inviteCode&company_code=xc2026",
         )
     }
@@ -2511,8 +2511,17 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun invitePosterButton(label: Int, primary: Boolean, action: () -> Unit): Button =
         actionButton(label, action).apply {
-            setTextColor(if (primary) Color.WHITE else 0xFF28B7A2.toInt())
+            val foreground = if (primary) Color.WHITE else 0xFF28B7A2.toInt()
+            setTextColor(foreground)
             background = roundedDrawable(if (primary) 0xFF28B7A2.toInt() else 0xFF063B36.toInt(), 10f)
+            compoundDrawablePadding = 8.dp()
+            setCompoundDrawablesWithIntrinsicBounds(
+                if (primary) R.drawable.xingdun_ic_save_image else R.drawable.xingdun_ic_link,
+                0,
+                0,
+                0,
+            )
+            compoundDrawableTintList = android.content.res.ColorStateList.valueOf(foreground)
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()).apply {
                 topMargin = 12.dp()
                 marginStart = 30.dp()
