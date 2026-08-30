@@ -656,6 +656,10 @@
     <string name="xingdun_qr_camera_unavailable">无法使用相机</string>
     <string name="xingdun_qr_camera_permission_hint">请在系统设置中允许本应用访问相机后返回重试。</string>
     <string name="xingdun_cancel">取消</string>
+    <string name="xingdun_delete_conversation_title">删除会话</string>
+    <string name="xingdun_delete_conversation_keep_history">保留聊天记录并删除会话</string>
+    <string name="xingdun_delete_conversation_clear_history">清空聊天记录并删除会话</string>
+    <string name="xingdun_delete_conversation_failed">删除会话失败，请稍后重试。</string>
     <string name="xingdun_qr_manual_payload">粘贴二维码内容进行手动验证</string>
     <string name="xingdun_qr_unrecognized">无法识别此二维码，请使用星盾生成的二维码或邀请链接。</string>
     <string name="xingdun_qr_user_not_found">未找到二维码中的账号。</string>

@@ -38,6 +38,9 @@ import io.trtc.tuikit.chat.uikit.components.contactlist.ui.ContactFlowLauncher
 import io.trtc.tuikit.chat.uikit.components.contactlist.config.ChatContactListConfig
 import io.trtc.tuikit.chat.uikit.components.contactlist.model.ContactCustomItem
 import io.trtc.tuikit.chat.uikit.components.contactlist.model.ContactListItemIDs
+import io.trtc.tuikit.chat.uikit.components.conversationlist.config.ChatConversationActionConfig
+import io.trtc.tuikit.chat.uikit.components.conversationlist.model.ConversationActionIDs
+import io.trtc.tuikit.chat.uikit.components.conversationlist.utils.isUnread
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
@@ -752,6 +755,16 @@ class MainActivity : BaseActivity() {
 
     private fun createConversationsPage(): View {
         val page = ConversationsPageView(this)
+        val actionConfig = ChatConversationActionConfig(isSupportClearHistory = false).customizeActions {
+            if (!editorContext.conversation.isUnread) {
+                remove(ConversationActionIDs.MARK_UNREAD)
+            }
+            replace(ConversationActionIDs.DELETE) { action ->
+                action.copy(action = { conversation ->
+                    showDeleteConversationConfirmation(conversation.conversationID)
+                })
+            }
+        }
         val addButton = ImageView(this).apply {
             setImageResource(io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_add_circle)
             layoutParams = ViewGroup.LayoutParams(24.dpToPx(), 24.dpToPx())
@@ -790,6 +803,7 @@ class MainActivity : BaseActivity() {
             )
         }
         page.setup(
+            config = actionConfig,
             headerTitle = getString(R.string.demo_page_conversations_title),
             headerRightAction = addButton,
             onConversationClick = { conversationInfo ->
@@ -800,6 +814,43 @@ class MainActivity : BaseActivity() {
             }
         )
         return page
+    }
+
+    private fun showDeleteConversationConfirmation(conversationID: String) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle(R.string.xingdun_delete_conversation_title)
+            .setItems(
+                arrayOf(
+                    getString(R.string.xingdun_delete_conversation_keep_history),
+                    getString(R.string.xingdun_delete_conversation_clear_history),
+                )
+            ) { _, which ->
+                when (which) {
+                    0 -> conversationListStore.deleteConversation(conversationID)
+                    1 -> clearHistoryAndDeleteConversation(conversationID)
+                }
+            }
+            .setNegativeButton(R.string.xingdun_cancel, null)
+            .show()
+    }
+
+    private fun clearHistoryAndDeleteConversation(conversationID: String) {
+        conversationListStore.clearConversationMessages(
+            conversationID,
+            object : CompletionHandler {
+                override fun onSuccess() {
+                    conversationListStore.deleteConversation(conversationID)
+                }
+
+                override fun onFailure(code: Int, desc: String) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        desc.ifBlank { getString(R.string.xingdun_delete_conversation_failed) },
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
+        )
     }
 
     private fun createContactsPage(): View {
