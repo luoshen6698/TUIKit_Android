@@ -12,7 +12,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -49,6 +51,7 @@ class XingDunGroupListActivity : BaseActivity() {
     private lateinit var warning: TextView
     private lateinit var countHeader: TextView
     private lateinit var status: LinearLayout
+    private lateinit var statusProgress: ProgressBar
     private lateinit var statusTitle: TextView
     private lateinit var statusMessage: TextView
     private lateinit var retry: TextView
@@ -181,10 +184,15 @@ class XingDunGroupListActivity : BaseActivity() {
             setPadding(28.dp(), 10.dp(), 28.dp(), 18.dp())
         }
         retry = primaryButton(R.string.xingdun_retry) { refresh() }.apply { visibility = View.GONE }
+        statusProgress = ProgressBar(this).apply {
+            isIndeterminate = true
+            visibility = View.GONE
+        }
         status = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(24.dp(), 80.dp(), 24.dp(), 24.dp())
+            addView(statusProgress, LinearLayout.LayoutParams(36.dp(), 36.dp()).apply { bottomMargin = 14.dp() })
             addView(statusTitle)
             addView(statusMessage)
             addView(retry, LinearLayout.LayoutParams(150.dp(), 46.dp()))
@@ -346,6 +354,7 @@ class XingDunGroupListActivity : BaseActivity() {
         adapter.submit(emptyList())
         list.visibility = View.GONE
         status.visibility = View.VISIBLE
+        statusProgress.visibility = if (isLoading) View.VISIBLE else View.GONE
         when {
             isLoading -> {
                 statusTitle.setText(R.string.xingdun_group_list_loading)
@@ -468,14 +477,13 @@ class XingDunGroupListActivity : BaseActivity() {
                         setPadding(0, 3.dp(), 0, 0)
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                addView(TextView(context).apply {
+                addView(ImageView(context).apply {
                     id = ID_GROUP_MUTED
-                    text = "♩̸"
-                    textSize = 18f
-                    setTextColor(TEXT_TERTIARY)
+                    setImageResource(R.drawable.xingdun_ic_bell_slash)
+                    imageTintList = android.content.res.ColorStateList.valueOf(TEXT_TERTIARY)
                     contentDescription = getString(R.string.xingdun_group_list_muted)
-                    setPadding(10.dp(), 0, 0, 0)
-                })
+                    setPadding(8.dp(), 8.dp(), 8.dp(), 8.dp())
+                }, LinearLayout.LayoutParams(36.dp(), 36.dp()))
                 addView(TextView(context).apply {
                     text = "›"
                     textSize = 25f
@@ -495,7 +503,7 @@ class XingDunGroupListActivity : BaseActivity() {
             private val name: TextView = itemView.findViewById(ID_GROUP_NAME)
             private val badge: TextView = itemView.findViewById(ID_GROUP_BADGE)
             private val subtitle: TextView = itemView.findViewById(ID_GROUP_SUBTITLE)
-            private val muted: TextView = itemView.findViewById(ID_GROUP_MUTED)
+            private val muted: ImageView = itemView.findViewById(ID_GROUP_MUTED)
 
             fun bind(row: GroupRow) {
                 avatar.setContent(Avatar.AvatarContent.Image(row.avatar, row.name))
