@@ -7,6 +7,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -41,9 +42,14 @@ class GlobalSearchPage(
 
     private val searchBar = SearchBarView(context)
     private val recyclerView = RecyclerView(context)
+    private val emptyStateView: LinearLayout
+    private val emptyStateTitle: TextView
+    private val emptyStateMessage: TextView
     private val loadingView: ProgressBar
     private var viewScope: CoroutineScope? = null
     private var searchQuery = ""
+    private var latestCategories: List<SearchCategory> = emptyList()
+    private var isSearching = false
     private val themeStore = ThemeStore.shared(context)
 
     var onResultClick: ((Any) -> Unit)? = null
@@ -80,7 +86,26 @@ class GlobalSearchPage(
                 }
             }
         })
-        addView(recyclerView, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
+        emptyStateTitle = TextView(context).apply {
+            gravity = Gravity.CENTER
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+        }
+        emptyStateMessage = TextView(context).apply {
+            gravity = Gravity.CENTER
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setPadding(dpToPx(24), dpToPx(8), dpToPx(24), 0)
+        }
+        emptyStateView = LinearLayout(context).apply {
+            orientation = VERTICAL
+            gravity = Gravity.CENTER
+            addView(emptyStateTitle, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+            addView(emptyStateMessage, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        }
+        val contentFrame = FrameLayout(context).apply {
+            addView(recyclerView, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+            addView(emptyStateView, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        }
+        addView(contentFrame, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
 
         searchBar.onQueryChange = { query ->
             searchQuery = query
@@ -91,6 +116,7 @@ class GlobalSearchPage(
             } else {
                 viewModel.updateSearchQuery(query)
             }
+            updateEmptyState()
         }
         searchBar.onCancel = { onCancel?.invoke() }
 
@@ -112,9 +138,11 @@ class GlobalSearchPage(
         }
         scope.launch {
             viewModel.isSearching.collectLatest { searching ->
+                isSearching = searching
                 loadingView.visibility = if (searching) View.VISIBLE else View.GONE
                 if (searching) recyclerView.visibility = View.GONE
                 else recyclerView.visibility = View.VISIBLE
+                updateEmptyState()
             }
         }
         scope.launch {
@@ -138,6 +166,7 @@ class GlobalSearchPage(
     }
 
     private fun updateResults(categories: List<SearchCategory>) {
+        latestCategories = categories
         val adapter = SearchCategoryAdapter(
             context = context,
             categories = categories,
@@ -146,12 +175,31 @@ class GlobalSearchPage(
             onShowMore = { onShowMore?.invoke(it) }
         )
         recyclerView.adapter = adapter
+        updateEmptyState()
+    }
+
+    private fun updateEmptyState() {
+        when {
+            searchQuery.isBlank() -> {
+                emptyStateTitle.setText(R.string.search_global_empty_title)
+                emptyStateMessage.setText(R.string.search_global_empty_message)
+                emptyStateView.visibility = View.VISIBLE
+            }
+            !isSearching && latestCategories.isEmpty() -> {
+                emptyStateTitle.setText(R.string.search_global_no_result_title)
+                emptyStateMessage.setText(R.string.search_global_no_result_message)
+                emptyStateView.visibility = View.VISIBLE
+            }
+            else -> emptyStateView.visibility = View.GONE
+        }
     }
 
     private fun applyTheme() {
         val colors = themeStore.themeState.value.currentTheme.tokens.color
         setBackgroundColor(colors.bgColorDefault)
         searchBar.applyTheme()
+        emptyStateTitle.setTextColor(colors.textColorPrimary)
+        emptyStateMessage.setTextColor(colors.textColorSecondary)
     }
 
     private fun dpToPx(dp: Int): Int {

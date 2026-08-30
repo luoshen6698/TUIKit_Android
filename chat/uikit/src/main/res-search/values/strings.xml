@@ -13,4 +13,8 @@
     <string name="search_cannot_found_group">No related groups found</string>
     <string name="search_group_id">Group ID</string>
     <string name="search_include_member">Includes member %s</string>
+    <string name="search_global_empty_title">Global Search</string>
+    <string name="search_global_empty_message">Enter keywords to search users, group chats, and content.</string>
+    <string name="search_global_no_result_title">No Results</string>
+    <string name="search_global_no_result_message">Try a different keyword.</string>
 </resources>

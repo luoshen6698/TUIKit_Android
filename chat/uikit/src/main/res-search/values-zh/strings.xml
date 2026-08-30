@@ -13,4 +13,8 @@
     <string name="search_related_chat_record_count">%d条相关记录</string>
     <string name="search_group_id">群 ID</string>
     <string name="search_include_member">包含群成员%s</string>
+    <string name="search_global_empty_title">全局搜索</string>
+    <string name="search_global_empty_message">输入关键词搜索联系人、群聊和内容。</string>
+    <string name="search_global_no_result_title">未找到结果</string>
+    <string name="search_global_no_result_message">请更换关键词后重试。</string>
 </resources>
