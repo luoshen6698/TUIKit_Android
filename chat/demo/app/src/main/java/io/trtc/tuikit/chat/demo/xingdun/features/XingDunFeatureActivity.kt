@@ -2,6 +2,7 @@ package io.trtc.tuikit.chat.demo.xingdun.features
 
 import android.Manifest
 import android.app.DatePickerDialog
+import android.app.Dialog
 import android.app.NotificationManager
 import android.app.TimePickerDialog
 import android.content.ClipData
@@ -18,6 +19,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -28,6 +30,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -189,6 +192,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var workspaceApplicationCategory: String? = null
     private var workspaceDetailLoading = false
     private var workspaceDetailTouchStartY = 0f
+    private var workspaceDetailDialog: Dialog? = null
     private var workspaceFormLoading = false
     private var favoriteListContainer: LinearLayout? = null
     private val favoriteAudioPlayer: AudioPlayer by lazy { AudioPlayer.create() }
@@ -350,6 +354,8 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     override fun onDestroy() {
         if (mode == MODE_FAVORITES) favoriteAudioPlayer.stop()
+        workspaceDetailDialog?.dismiss()
+        workspaceDetailDialog = null
         attachmentSelectionHandler = null
         attachmentFailureHandler = null
         super.onDestroy()
@@ -672,7 +678,10 @@ open class XingDunFeatureActivity : BaseActivity() {
         })
         card.isClickable = true
         card.isFocusable = true
-        card.setOnClickListener { start(this@XingDunFeatureActivity, MODE_WORKSPACE_DETAIL, id) }
+        card.setOnClickListener {
+            if (path == "workspace/mine") showWorkspaceDetailSheet(id)
+            else start(this@XingDunFeatureActivity, MODE_WORKSPACE_DETAIL, id)
+        }
         if (path == "workspace/mine") {
             card.setOnLongClickListener {
                 showWorkspaceMineListActions(item, path, emptyMessage)
@@ -1010,6 +1019,105 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun renderWorkspaceDetail(item: JsonObject) {
         content.removeAllViews()
+        content.addView(
+            buildWorkspaceDetailCard(
+                item = item,
+                onClose = { finish() },
+                onAction = { confirmWorkspaceDetailAction(it) },
+            ),
+            workspaceListSectionLayoutParams(),
+        )
+    }
+
+    private fun showWorkspaceDetailSheet(id: Int) {
+        if (id <= 0) return
+        workspaceDetailDialog?.dismiss()
+        val dialog = Dialog(this)
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18.dp(), 8.dp(), 18.dp(), 22.dp())
+        }
+        val sheet = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedDrawable(0xFFF2F2F7.toInt(), 20f)
+            addView(View(context).apply {
+                background = roundedDrawable(0xFFB8B8BD.toInt(), 3f)
+            }, LinearLayout.LayoutParams(38.dp(), 5.dp()).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = 8.dp()
+                bottomMargin = 4.dp()
+            })
+            addView(ScrollView(context).apply {
+                isFillViewport = false
+                addView(body)
+            })
+        }
+        dialog.setContentView(sheet)
+        dialog.setOnDismissListener {
+            if (workspaceDetailDialog === dialog) workspaceDetailDialog = null
+        }
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            setGravity(Gravity.BOTTOM)
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply { dimAmount = 0.32f }
+        }
+        workspaceDetailDialog = dialog
+        loadWorkspaceDetailSheet(dialog, id, body)
+    }
+
+    private fun loadWorkspaceDetailSheet(dialog: Dialog, id: Int, body: LinearLayout) {
+        body.removeAllViews()
+        body.addView(TextView(this).apply {
+            setText(R.string.xingdun_loading)
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF8A8A8F.toInt())
+            setPadding(20.dp(), 42.dp(), 20.dp(), 42.dp())
+        })
+        lifecycleScope.launch {
+            runCatching {
+                XingDunSessionManager.apiClient().get<JsonObject>(
+                    requireSession(), "workspace/detail", mapOf("id" to id.toString()), JsonObject::class.java
+                )
+            }.onSuccess { item ->
+                if (!dialog.isShowing) return@onSuccess
+                body.removeAllViews()
+                body.addView(
+                    buildWorkspaceDetailCard(
+                        item = item,
+                        onClose = { dialog.dismiss() },
+                        onAction = { action -> confirmWorkspaceDetailSheetAction(dialog, id, action, body) },
+                    ),
+                    workspaceListSectionLayoutParams(),
+                )
+            }.onFailure {
+                if (!dialog.isShowing) return@onFailure
+                body.removeAllViews()
+                body.addView(LinearLayout(this@XingDunFeatureActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    background = roundedDrawable(Color.WHITE, 16f)
+                    setPadding(20.dp(), 32.dp(), 20.dp(), 32.dp())
+                    addView(TextView(context).apply {
+                        setText(R.string.xingdun_workspace_detail_load_failed)
+                        textSize = 14f
+                        gravity = Gravity.CENTER
+                        setTextColor(0xFF8A8A8F.toInt())
+                    })
+                    addView(actionButton(R.string.xingdun_retry) { loadWorkspaceDetailSheet(dialog, id, body) })
+                }, workspaceListSectionLayoutParams())
+            }
+        }
+    }
+
+    private fun buildWorkspaceDetailCard(
+        item: JsonObject,
+        onClose: () -> Unit,
+        onAction: (String) -> Unit,
+    ): LinearLayout {
         val applicationStatus = item.int("status") ?: 0
         val type = item.string("type").orEmpty()
         val typeColor = workspaceTypeColor(type)
@@ -1094,7 +1202,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                     R.string.xingdun_workspace_delete,
                     0xFFD93025.toInt(),
                     0xFFFFE9E7.toInt(),
-                ) { confirmWorkspaceDetailAction("delete") }, LinearLayout.LayoutParams(
+                ) { onAction("delete") }, LinearLayout.LayoutParams(
                     0,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     1f,
@@ -1104,7 +1212,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                     R.string.xingdun_workspace_withdraw,
                     0xFF168F83.toInt(),
                     0xFFE3F5F0.toInt(),
-                ) { confirmWorkspaceDetailAction("withdraw") }, LinearLayout.LayoutParams(
+                ) { onAction("withdraw") }, LinearLayout.LayoutParams(
                     0,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     1f,
@@ -1114,13 +1222,13 @@ open class XingDunFeatureActivity : BaseActivity() {
                 R.string.xingdun_workspace_close_detail,
                 Color.WHITE,
                 0xFF20A88F.toInt(),
-            ) { finish() }, LinearLayout.LayoutParams(
+            ) { onClose() }, LinearLayout.LayoutParams(
                 0,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 1f,
             ).apply { marginStart = if (childCount > 0) 6.dp() else 0 })
         })
-        content.addView(card, workspaceListSectionLayoutParams())
+        return card
     }
 
     private fun addWorkspaceDetailRow(container: LinearLayout, label: Int, value: String, valueColor: Int = 0xFF1C1C1E.toInt()) {
@@ -1211,6 +1319,49 @@ open class XingDunFeatureActivity : BaseActivity() {
                     if (action == "delete") R.string.xingdun_workspace_delete_failed
                     else R.string.xingdun_workspace_withdraw_failed,
                 )
+            }
+        }
+    }
+
+    private fun confirmWorkspaceDetailSheetAction(
+        dialog: Dialog,
+        id: Int,
+        action: String,
+        body: LinearLayout,
+    ) {
+        val delete = action == "delete"
+        AlertDialog.Builder(this)
+            .setMessage(if (delete) R.string.xingdun_workspace_confirm_delete else R.string.xingdun_workspace_confirm_withdraw)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(
+                if (delete) R.string.xingdun_workspace_confirm_delete_action else R.string.xingdun_workspace_confirm_withdraw_action,
+            ) { _, _ -> performWorkspaceDetailSheetAction(dialog, id, action, body) }
+            .show()
+    }
+
+    private fun performWorkspaceDetailSheetAction(
+        dialog: Dialog,
+        id: Int,
+        action: String,
+        body: LinearLayout,
+    ) {
+        lifecycleScope.launch {
+            runCatching {
+                if (action == "delete") {
+                    XingDunSessionManager.apiClient().deleteEmpty(requireSession(), "workspace/delete", mapOf("id" to id))
+                } else {
+                    XingDunSessionManager.apiClient().postEmpty(requireSession(), "workspace/withdraw", mapOf("id" to id))
+                }
+            }.onSuccess {
+                reloadWorkspaceApplications("workspace/mine", R.string.xingdun_workspace_empty)
+                if (action == "delete") dialog.dismiss() else loadWorkspaceDetailSheet(dialog, id, body)
+            }.onFailure {
+                Toast.makeText(
+                    this@XingDunFeatureActivity,
+                    if (action == "delete") R.string.xingdun_workspace_delete_failed
+                    else R.string.xingdun_workspace_withdraw_failed,
+                    Toast.LENGTH_SHORT,
+                ).show()
             }
         }
     }
