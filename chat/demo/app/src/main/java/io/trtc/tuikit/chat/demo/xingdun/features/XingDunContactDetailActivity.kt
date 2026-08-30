@@ -43,7 +43,6 @@ import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionCompletion
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionResult
-import io.trtc.tuikit.chat.uikit.components.messagelist.ui.forward.ForwardTargetSelectorDialog
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
@@ -67,6 +66,13 @@ class XingDunContactDetailActivity : BaseActivity() {
         ContactStore.shared.loadFriends()
         render()
         Toast.makeText(this, R.string.xingdun_contact_detail_remark_updated, Toast.LENGTH_SHORT).show()
+    }
+    private val contactForwardPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val conversationID = result.data
+            ?.getStringExtra(XingDunContactForwardPickerActivity.EXTRA_RESULT_CONVERSATION_ID)
+            .orEmpty()
+        if (conversationID.isNotBlank()) sendContactCard(listOf(conversationID))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -450,9 +456,9 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun showRecommendPicker() {
-        ForwardTargetSelectorDialog(this) { conversationIDs ->
-            sendContactCard(conversationIDs)
-        }.show()
+        contactForwardPicker.launch(
+            XingDunContactForwardPickerActivity.intent(this, "c2c_$timUserID")
+        )
     }
 
     private fun sendContactCard(conversationIDs: List<String>) {
