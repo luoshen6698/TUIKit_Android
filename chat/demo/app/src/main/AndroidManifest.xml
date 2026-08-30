@@ -91,6 +91,13 @@
             android:theme="@style/Chat_UIKit_Theme" />
 
         <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactRemarkActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Chat_UIKit_Theme"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupListActivity"
             android:exported="false"
             android:screenOrientation="portrait"

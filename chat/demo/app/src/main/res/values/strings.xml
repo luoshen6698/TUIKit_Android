@@ -618,9 +618,11 @@
     <string name="xingdun_contact_detail_delete">Delete Contact</string>
     <string name="xingdun_contact_detail_set_remark">Set Remark</string>
     <string name="xingdun_contact_detail_remark_hint">Friend remark</string>
+    <string name="xingdun_contact_detail_remark_help">Up to 96 bytes. Clear it to show the contact nickname again.</string>
     <string name="xingdun_contact_detail_save">Save</string>
     <string name="xingdun_contact_detail_remark_too_long">The remark can be at most 96 bytes.</string>
     <string name="xingdun_contact_detail_remark_updated">Remark updated.</string>
+    <string name="xingdun_contact_detail_remark_update_failed">Couldn’t update the remark. Try again later.</string>
     <string name="xingdun_contact_detail_block_title">Add to blacklist?</string>
     <string name="xingdun_contact_detail_block_message">Blocking limits this contact from reaching you while preserving the friendship.</string>
     <string name="xingdun_contact_detail_unblock_title">Remove from blacklist?</string>

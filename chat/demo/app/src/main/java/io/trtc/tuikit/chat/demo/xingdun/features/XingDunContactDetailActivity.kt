@@ -7,11 +7,9 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
-import android.text.InputFilter
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -22,6 +20,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
@@ -61,6 +60,14 @@ class XingDunContactDetailActivity : BaseActivity() {
     private var detail: XingDunContactDetail? = null
     private var isOperating = false
     private var relationshipState: String = RELATIONSHIP_UNKNOWN
+    private val remarkEditor = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val remark = result.data?.getStringExtra(XingDunContactRemarkActivity.EXTRA_RESULT_REMARK).orEmpty()
+        detail = detail?.copy(alias = remark.normalized())
+        ContactStore.shared.loadFriends()
+        render()
+        Toast.makeText(this, R.string.xingdun_contact_detail_remark_updated, Toast.LENGTH_SHORT).show()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -353,49 +360,7 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun showRemarkEditor() {
-        val input = EditText(this).apply {
-            setText(detail?.alias.orEmpty())
-            hint = getString(R.string.xingdun_contact_detail_remark_hint)
-            filters = arrayOf(InputFilter.LengthFilter(96))
-            setSelection(text.length)
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_contact_detail_set_remark)
-            .setView(FrameLayout(this).apply {
-                setPadding(22.dp(), 0, 22.dp(), 0)
-                addView(input, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            })
-            .setNegativeButton(R.string.xingdun_cancel, null)
-            .setPositiveButton(R.string.xingdun_contact_detail_save, null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val remark = input.text.toString().trim()
-                if (remark.toByteArray().size > 96) {
-                    input.error = getString(R.string.xingdun_contact_detail_remark_too_long)
-                } else {
-                    updateRemark(remark) { dialog.dismiss() }
-                }
-            }
-        }
-        dialog.show()
-    }
-
-    private fun updateRemark(remark: String, onSuccess: () -> Unit) {
-        if (isOperating) return
-        isOperating = true
-        val success = {
-            isOperating = false
-            detail = detail?.copy(alias = remark.normalized())
-            ContactStore.shared.loadFriends()
-            render()
-            Toast.makeText(this, R.string.xingdun_contact_detail_remark_updated, Toast.LENGTH_SHORT).show()
-            onSuccess()
-        }
-        val failure = { _: Int, _: String -> isOperating = false }
-        if (!dispatch(BusinessAction.SetFriendRemark(timUserID, remark), success, failure)) {
-            ContactStore.shared.setFriendRemark(timUserID, remark, completion(success, failure))
-        }
+        remarkEditor.launch(XingDunContactRemarkActivity.intent(this, timUserID, detail?.alias.orEmpty()))
     }
 
     private fun confirmBlacklist(enabled: Boolean) {

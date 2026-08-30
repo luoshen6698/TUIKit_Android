@@ -612,9 +612,11 @@
     <string name="xingdun_contact_detail_delete">删除联系人</string>
     <string name="xingdun_contact_detail_set_remark">设置备注</string>
     <string name="xingdun_contact_detail_remark_hint">好友备注</string>
+    <string name="xingdun_contact_detail_remark_help">最多 96 字节，清空后恢复显示联系人昵称。</string>
     <string name="xingdun_contact_detail_save">保存</string>
     <string name="xingdun_contact_detail_remark_too_long">备注最多 96 字节。</string>
     <string name="xingdun_contact_detail_remark_updated">备注已更新。</string>
+    <string name="xingdun_contact_detail_remark_update_failed">备注更新失败，请稍后重试。</string>
     <string name="xingdun_contact_detail_block_title">加入黑名单？</string>
     <string name="xingdun_contact_detail_block_message">拉黑后将限制对方继续联系你，但会保留好友关系。</string>
     <string name="xingdun_contact_detail_unblock_title">移出黑名单？</string>
