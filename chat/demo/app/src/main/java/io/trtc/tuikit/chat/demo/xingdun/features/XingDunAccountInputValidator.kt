@@ -23,7 +23,7 @@ internal object XingDunAccountInputValidator {
         val parts = normalized.split('@')
         val domain = parts.getOrNull(1).orEmpty()
         return if (
-            normalized.length <= 128 && parts.size == 2 && parts[0].isNotEmpty() &&
+            parts.size == 2 && parts[0].isNotEmpty() &&
             domain.contains('.') && !domain.startsWith('.') && !domain.endsWith('.') &&
             normalized.none(Char::isWhitespace)
         ) null else XingDunAccountInputError.EMAIL

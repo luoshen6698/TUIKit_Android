@@ -10,6 +10,7 @@ class XingDunAccountInputValidatorTest {
         assertNull(XingDunAccountInputValidator.phone("13800138000"))
         assertEquals(XingDunAccountInputError.PHONE, XingDunAccountInputValidator.phone("123"))
         assertNull(XingDunAccountInputValidator.email("user@example.com"))
+        assertNull(XingDunAccountInputValidator.email("${"a".repeat(128)}@example.com"))
         assertEquals(XingDunAccountInputError.EMAIL, XingDunAccountInputValidator.email("bad@"))
         assertNull(XingDunAccountInputValidator.username("xingdun_01"))
         assertEquals(XingDunAccountInputError.USERNAME, XingDunAccountInputValidator.username("dev_local"))
