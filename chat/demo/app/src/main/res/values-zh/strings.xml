@@ -366,6 +366,7 @@
     <string name="xingdun_workspace_title_required">请输入申请标题。</string>
     <string name="xingdun_workspace_submitted">申请已提交。</string>
     <string name="xingdun_customer_service">客户服务</string>
+    <string name="xingdun_my_customer_service_format">我的客服 · %1$s</string>
     <string name="xingdun_customer_service_agent">客服账号</string>
     <string name="xingdun_customer_service_user">企业用户</string>
     <string name="xingdun_customer_service_identity">客服身份</string>

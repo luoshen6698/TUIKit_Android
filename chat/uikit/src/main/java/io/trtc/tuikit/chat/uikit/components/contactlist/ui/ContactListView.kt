@@ -70,6 +70,7 @@ class ContactListView @JvmOverloads constructor(
     private var viewScope: CoroutineScope? = null
     private var searchQuery: String = ""
     private var allContacts: List<ContactInfo> = emptyList()
+    private var excludedContactIDs: Set<String> = emptySet()
     private var initialLoadFinished = false
     private val viewModelKey = "${ContactListViewModel::class.java.name}:${System.identityHashCode(this)}"
 
@@ -191,6 +192,7 @@ class ContactListView @JvmOverloads constructor(
     ) {
         this.onContactClick = onContactClick
         this.onGroupClick = onGroupClick
+        excludedContactIDs = config.excludedContactIDs
 
         appBarLayout.visibility = if (config.showSearchBar) View.VISIBLE else View.GONE
         if (!config.showSearchBar) {
@@ -364,7 +366,7 @@ class ContactListView @JvmOverloads constructor(
         }
 
         val filteredContacts = allContacts.filter { contact ->
-            contact.matchesSearchQuery(searchQuery)
+            contact.userID !in excludedContactIDs && contact.matchesSearchQuery(searchQuery)
         }
         azOrderedList.setDataSource(
             filteredContacts.map { contact ->

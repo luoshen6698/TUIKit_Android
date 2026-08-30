@@ -10,6 +10,9 @@ import io.trtc.tuikit.chat.uikit.components.contactlist.ui.ContactListView
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
+import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
+import io.trtc.tuikit.atomicxcore.api.group.GroupStore
+import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -77,5 +80,20 @@ class ContactsPageView @JvmOverloads constructor(
             onContactClick = onContactClick,
             onGroupClick = onGroupClick
         )
+    }
+
+    /** Reloads the official stores while keeping the page UI and custom actions intact. */
+    fun refresh(onComplete: () -> Unit = {}) {
+        ContactStore.shared.loadFriendApplications()
+        GroupStore.shared.loadApplications()
+        ContactStore.shared.loadFriends(object : CompletionHandler {
+            override fun onSuccess() {
+                post { onComplete() }
+            }
+
+            override fun onFailure(code: Int, desc: String) {
+                post { onComplete() }
+            }
+        })
     }
 }

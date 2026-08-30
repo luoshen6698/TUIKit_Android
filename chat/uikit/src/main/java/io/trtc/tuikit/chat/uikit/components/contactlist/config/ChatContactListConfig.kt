@@ -6,6 +6,8 @@ interface ContactListConfigProtocol {
     val showMyGroups: Boolean
     val showBlacklist: Boolean
     val showSearchBar: Boolean
+    val excludedContactIDs: Set<String>
+        get() = emptySet()
     val itemCustomizer: ContactListItemCustomizer?
         get() = null
 }
@@ -16,6 +18,7 @@ class ChatContactListConfig(
     override var showMyGroups: Boolean = true,
     override var showBlacklist: Boolean = true,
     override var showSearchBar: Boolean = true,
+    override var excludedContactIDs: Set<String> = emptySet(),
 ) : ContactListConfigProtocol {
 
     override var itemCustomizer: ContactListItemCustomizer? = null

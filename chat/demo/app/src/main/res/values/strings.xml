@@ -372,6 +372,7 @@
     <string name="xingdun_workspace_title_required">Enter an application title.</string>
     <string name="xingdun_workspace_submitted">Application submitted.</string>
     <string name="xingdun_customer_service">Customer service</string>
+    <string name="xingdun_my_customer_service_format">My customer service · %1$s</string>
     <string name="xingdun_customer_service_agent">Customer-service account</string>
     <string name="xingdun_customer_service_user">Enterprise user</string>
     <string name="xingdun_customer_service_identity">Customer-service identity</string>
