@@ -50,11 +50,13 @@ class XingDunBlacklistActivity : BaseActivity() {
     private lateinit var statusProgress: ProgressBar
     private lateinit var warning: TextView
     private lateinit var retry: TextView
+    private lateinit var refreshAction: TextView
     private val adapter = BlacklistAdapter(::openDetail, ::confirmUnblock)
     private var contacts: List<ContactInfo> = emptyList()
     private var loading = true
     private var loadError: String? = null
     private var operationError: String? = null
+    private var refreshing = false
     private val operatingUserIDs = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -166,21 +168,37 @@ class XingDunBlacklistActivity : BaseActivity() {
         addView(TextView(this@XingDunBlacklistActivity).apply {
             setText(R.string.xingdun_blacklist_title); textSize = 18f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; setTextColor(TEXT_PRIMARY)
         }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
-        addView(TextView(this@XingDunBlacklistActivity).apply {
+        refreshAction = TextView(this@XingDunBlacklistActivity).apply {
             text = "↻"; textSize = 25f; gravity = Gravity.CENTER; setTextColor(BRAND); contentDescription = getString(R.string.xingdun_refresh_blacklist)
             background = rounded(0xFFF0F8F6.toInt(), 22f)
             setOnClickListener { refresh() }
-        }, FrameLayout.LayoutParams(42.dp(), 42.dp(), Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = 5.dp() })
+        }
+        addView(refreshAction, FrameLayout.LayoutParams(42.dp(), 42.dp(), Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = 5.dp() })
     }
 
     private fun refresh() {
+        if (refreshing) return
+        refreshing = true
+        refreshAction.isEnabled = false
+        refreshAction.alpha = .35f
         loading = contacts.isEmpty()
         loadError = null
         render()
         contactStore.loadBlackList(object : CompletionHandler {
-            override fun onSuccess() { loading = false; swipeRefresh.isRefreshing = false; render() }
+            override fun onSuccess() {
+                refreshing = false
+                refreshAction.isEnabled = true
+                refreshAction.alpha = 1f
+                loading = false
+                swipeRefresh.isRefreshing = false
+                render()
+            }
             override fun onFailure(code: Int, desc: String) {
-                loading = false; swipeRefresh.isRefreshing = false
+                refreshing = false
+                refreshAction.isEnabled = true
+                refreshAction.alpha = 1f
+                loading = false
+                swipeRefresh.isRefreshing = false
                 loadError = desc.ifBlank { getString(R.string.xingdun_blacklist_load_failed_message) }
                 render()
             }
@@ -297,8 +315,15 @@ class XingDunBlacklistActivity : BaseActivity() {
             texts.addView(name); texts.addView(account)
             row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 12.dp(); marginEnd = 10.dp() })
             val unblock = button(getString(R.string.xingdun_unblock), false) {}
-            row.addView(unblock, LinearLayout.LayoutParams(72.dp(), 34.dp()))
-            return Holder(row, avatar, name, account, unblock)
+            val progress = ProgressBar(parent.context).apply {
+                isIndeterminate = true
+                visibility = View.GONE
+            }
+            row.addView(FrameLayout(parent.context).apply {
+                addView(unblock, FrameLayout.LayoutParams(72.dp(), 34.dp(), Gravity.CENTER))
+                addView(progress, FrameLayout.LayoutParams(26.dp(), 26.dp(), Gravity.CENTER))
+            }, LinearLayout.LayoutParams(72.dp(), 34.dp()))
+            return Holder(row, avatar, name, account, unblock, progress)
         }
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
@@ -312,12 +337,19 @@ class XingDunBlacklistActivity : BaseActivity() {
             holder.itemView.setOnClickListener { onOpen(item) }
             holder.unblock.setOnClickListener { onUnblock(item) }
             val operating = operatingUserIDs.contains(item.userID)
-            holder.unblock.isEnabled = !operating
-            holder.unblock.alpha = if (operating) 0.55f else 1f
+            holder.unblock.visibility = if (operating) View.GONE else View.VISIBLE
+            holder.progress.visibility = if (operating) View.VISIBLE else View.GONE
         }
 
         override fun getItemCount() = items.size
-        inner class Holder(itemView: View, val avatar: Avatar, val name: TextView, val account: TextView, val unblock: TextView) : RecyclerView.ViewHolder(itemView)
+        inner class Holder(
+            itemView: View,
+            val avatar: Avatar,
+            val name: TextView,
+            val account: TextView,
+            val unblock: TextView,
+            val progress: ProgressBar,
+        ) : RecyclerView.ViewHolder(itemView)
     }
 
     companion object {
