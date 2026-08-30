@@ -159,7 +159,11 @@ class XingDunProfileEditorActivity : BaseActivity() {
             setText(initialValue)
             setSelection(text.length)
             background = null
-            filters = if (mode == MODE_NICKNAME) emptyArray() else arrayOf(InputFilter.LengthFilter(limit))
+            filters = if (mode == MODE_NICKNAME || mode == MODE_SIGNATURE) {
+                emptyArray()
+            } else {
+                arrayOf(InputFilter.LengthFilter(limit))
+            }
             gravity = if (multiline) Gravity.TOP or Gravity.START else Gravity.CENTER_VERTICAL
             minHeight = if (multiline) 130.dp() else 48.dp()
             inputType = when (mode) {
@@ -329,7 +333,9 @@ class XingDunProfileEditorActivity : BaseActivity() {
             MODE_ACCOUNT -> editor?.text?.toString()?.trim().orEmpty().also {
                 if (!it.matches(Regex("^[A-Za-z0-9_]{3,32}$"))) return showInvalid(R.string.xingdun_custom_id_invalid)
             }
-            MODE_SIGNATURE -> editor?.text?.toString()?.trim().orEmpty()
+            MODE_SIGNATURE -> editor?.text?.toString()?.trim().orEmpty().also {
+                if (characterCount(it) > 255) return showInvalid(R.string.xingdun_profile_signature_too_long)
+            }
             MODE_GENDER -> selectedGenderValue
             MODE_BIRTHDAY -> if (!birthdayIsSet) "" else datePicker?.let {
                 "%04d-%02d-%02d".format(Locale.US, it.year, it.month + 1, it.dayOfMonth)
@@ -379,7 +385,11 @@ class XingDunProfileEditorActivity : BaseActivity() {
         val count = characterCount(value)
         counter?.text = getString(R.string.xingdun_profile_character_count, count, editorLimit)
         counter?.setTextColor(
-            if (mode == MODE_NICKNAME && count > editorLimit) colors.textColorError else colors.textColorTertiary,
+            if ((mode == MODE_NICKNAME || mode == MODE_SIGNATURE) && count > editorLimit) {
+                colors.textColorError
+            } else {
+                colors.textColorTertiary
+            },
         )
     }
 

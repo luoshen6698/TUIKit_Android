@@ -484,6 +484,7 @@
     <string name="xingdun_profile_clear_birthday">清除生日</string>
     <string name="xingdun_profile_birthday_cleared">保存后将清除生日。</string>
     <string name="xingdun_profile_nickname_required">昵称不能为空。</string>
+    <string name="xingdun_profile_signature_too_long">个性签名最多 255 个字符。</string>
     <string name="xingdun_profile_load_failed">个人资料加载失败，请稍后重试。</string>
     <string name="xingdun_profile_loading">正在加载个人资料</string>
     <string name="xingdun_profile_saving">正在保存</string>
