@@ -435,6 +435,7 @@
     <string name="xingdun_all">全部</string>
     <string name="xingdun_unknown">未知</string>
     <string name="xingdun_report_target_type">对象类型</string>
+    <string name="xingdun_report_fixed_target_type">类型</string>
     <string name="xingdun_report_processing_status">处理状态</string>
     <string name="xingdun_report_target_user">用户</string>
     <string name="xingdun_report_target_team">群聊</string>

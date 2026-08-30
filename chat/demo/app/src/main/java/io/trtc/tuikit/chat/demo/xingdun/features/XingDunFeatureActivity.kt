@@ -430,7 +430,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             textSize = 14f
         }
         root.addView(status)
-        if (mode != MODE_PERSONAL_QR && mode != MODE_INVITE) {
+        if (mode != MODE_PERSONAL_QR && mode != MODE_INVITE && mode != MODE_REPORT_CREATE) {
             root.addView(
                 XingDunChildBottomNavigation(this).apply {
                     bind(
@@ -3072,7 +3072,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 if (hasFixedTarget) {
-                    addView(reportTargetRow(R.string.xingdun_report_target_type, reportFormTargetText(targetType)))
+                    addView(reportTargetRow(R.string.xingdun_report_fixed_target_type, reportFormTargetText(targetType)))
                     addView(reportDivider())
                     addView(reportTargetRow(
                         R.string.xingdun_report_target_object,
