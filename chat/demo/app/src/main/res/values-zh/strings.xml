@@ -1301,11 +1301,14 @@
     <string name="xingdun_no_group_applications">暂无群申请或邀请</string>
     <string name="xingdun_no_group_applications_message">新的入群申请或群邀请将在这里显示。</string>
     <string name="xingdun_confirm_accept_friend">同意这条好友申请？</string>
-    <string name="xingdun_confirm_reject_friend">拒绝这条好友申请？</string>
+    <string name="xingdun_confirm_reject_friend">拒绝好友申请？</string>
+    <string name="xingdun_confirm_reject_friend_message">拒绝后仍可删除这条申请记录。</string>
     <string name="xingdun_confirm_accept_group">同意这条群申请或邀请？</string>
     <string name="xingdun_confirm_reject_group">拒绝这条群申请或邀请？</string>
-    <string name="xingdun_confirm_clear_applications">清空全部已处理的好友申请记录？</string>
-    <string name="xingdun_confirm_delete_application">删除这条已处理的好友申请记录？</string>
+    <string name="xingdun_confirm_clear_applications">清空已处理记录？</string>
+    <string name="xingdun_confirm_clear_applications_message">待处理申请会保留，已同意、已拒绝或已过期记录将被删除。</string>
+    <string name="xingdun_confirm_delete_application">删除申请记录？</string>
+    <string name="xingdun_confirm_delete_application_message">此操作不会删除已经建立的好友关系。</string>
     <string name="xingdun_delete">删除</string>
     <string name="xingdun_friend_accepted_auto_message">我通过了你的朋友验证，现在我们可以开始聊天了。</string>
     <string name="xingdun_friend_accepted_message_failed">已添加好友，但自动问候消息发送失败。</string>

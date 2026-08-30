@@ -79,6 +79,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     private var loadingMore = false
     private var loadError: String? = null
     private var groupPollingJob: Job? = null
+    private val operatingRowKeys = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -435,9 +436,11 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     }
 
     private fun respondToFriend(application: FriendApplication, approve: Boolean) {
-        confirm(if (approve) R.string.xingdun_confirm_accept_friend else R.string.xingdun_confirm_reject_friend) {
+        val operation: () -> Unit = {
+            val key = friendRowKey(application)
+            setRowOperating(key, true)
             lifecycleScope.launch {
-                runOperation {
+                try {
                     val session = requireNotNull(XingDunSessionManager.currentSession())
                     XingDunSessionManager.apiClient().postEmpty(
                         session, if (approve) "friend/agree" else "friend/reject", mapOf("apply_id" to application.id)
@@ -447,47 +450,69 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                         sendFriendAcceptedMessageAndOpen(application)
                     }
                     refresh()
+                } catch (error: Throwable) {
+                    showError(error.message.orEmpty())
+                } finally {
+                    setRowOperating(key, false)
                 }
             }
+        }
+        if (approve) {
+            operation()
+        } else {
+            confirm(
+                R.string.xingdun_confirm_reject_friend,
+                R.string.xingdun_confirm_reject_friend_message,
+                R.string.xingdun_reject,
+                operation,
+            )
         }
     }
 
     private fun respondToServerGroup(invitation: ServerGroupInvitation, approve: Boolean) {
-        confirm(if (approve) R.string.xingdun_confirm_accept_group else R.string.xingdun_confirm_reject_group) {
-            lifecycleScope.launch {
-                runOperation {
-                    val session = requireNotNull(XingDunSessionManager.currentSession())
-                    XingDunSessionManager.apiClient().postEmpty(
-                        session, "team/handleInvitation", mapOf("invitation_id" to invitation.id, "approve" to approve)
-                    )
-                    if (approve) {
-                        groupStore.loadJoinedGroups()
-                        ChatActivity.start(this@XingDunVerificationMessagesActivity, "group_${invitation.groupId}")
-                    }
-                    refresh()
+        val key = serverGroupRowKey(invitation)
+        setRowOperating(key, true)
+        lifecycleScope.launch {
+            try {
+                val session = requireNotNull(XingDunSessionManager.currentSession())
+                XingDunSessionManager.apiClient().postEmpty(
+                    session, "team/handleInvitation", mapOf("invitation_id" to invitation.id, "approve" to approve)
+                )
+                if (approve) {
+                    groupStore.loadJoinedGroups()
+                    ChatActivity.start(this@XingDunVerificationMessagesActivity, "group_${invitation.groupId}")
                 }
+                refresh()
+            } catch (error: Throwable) {
+                showError(error.message.orEmpty())
+            } finally {
+                setRowOperating(key, false)
             }
         }
     }
 
     private fun respondToNativeGroup(application: GroupApplicationInfo, approve: Boolean) {
-        confirm(if (approve) R.string.xingdun_confirm_accept_group else R.string.xingdun_confirm_reject_group) {
-            val completion = object : CompletionHandler {
-                override fun onSuccess() {
-                    if (approve) {
-                        groupStore.loadJoinedGroups()
-                        ChatActivity.start(
-                            this@XingDunVerificationMessagesActivity,
-                            "group_${application.groupID}",
-                        )
-                    }
-                    refreshNativeGroups()
+        val key = nativeGroupRowKey(application)
+        setRowOperating(key, true)
+        val completion = object : CompletionHandler {
+            override fun onSuccess() {
+                setRowOperating(key, false)
+                if (approve) {
+                    groupStore.loadJoinedGroups()
+                    ChatActivity.start(
+                        this@XingDunVerificationMessagesActivity,
+                        "group_${application.groupID}",
+                    )
                 }
-                override fun onFailure(code: Int, desc: String) = showError(desc)
+                refreshNativeGroups()
             }
-            if (approve) groupStore.acceptApplication(application, completion)
-            else groupStore.refuseApplication(application, completion)
+            override fun onFailure(code: Int, desc: String) {
+                setRowOperating(key, false)
+                showError(desc)
+            }
         }
+        if (approve) groupStore.acceptApplication(application, completion)
+        else groupStore.refuseApplication(application, completion)
     }
 
     private fun sendFriendAcceptedMessageAndOpen(application: FriendApplication) {
@@ -516,7 +541,8 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
 
     private fun confirmDeleteFriend(application: FriendApplication, position: Int) {
         AlertDialog.Builder(this)
-            .setMessage(R.string.xingdun_confirm_delete_application)
+            .setTitle(R.string.xingdun_confirm_delete_application)
+            .setMessage(R.string.xingdun_confirm_delete_application_message)
             .setNegativeButton(android.R.string.cancel) { _, _ -> adapter.notifyItemChanged(position) }
             .setOnCancelListener { adapter.notifyItemChanged(position) }
             .setPositiveButton(R.string.xingdun_delete) { _, _ ->
@@ -541,32 +567,53 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
             .show()
     }
 
-    private fun confirm(messageRes: Int, operation: () -> Unit) {
+    private fun confirm(titleRes: Int, messageRes: Int, positiveRes: Int, operation: () -> Unit) {
         AlertDialog.Builder(this)
+            .setTitle(titleRes)
             .setMessage(messageRes)
             .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(android.R.string.ok) { _, _ -> operation() }
+            .setPositiveButton(positiveRes) { _, _ -> operation() }
             .show()
     }
 
     private fun confirmClearResolvedFriends() {
         val resolved = friends.filter { it.status != STATUS_PENDING }
         if (resolved.isEmpty()) return
-        confirm(R.string.xingdun_confirm_clear_applications) {
+        confirm(
+            R.string.xingdun_confirm_clear_applications,
+            R.string.xingdun_confirm_clear_applications_message,
+            R.string.xingdun_clear,
+        ) {
             lifecycleScope.launch {
-                runOperation {
+                try {
                     val session = requireNotNull(XingDunSessionManager.currentSession())
                     resolved.forEach {
                         XingDunSessionManager.apiClient().postEmpty(session, "friend/deleteApply", mapOf("apply_id" to it.id))
                     }
                     refresh()
+                } catch (error: Throwable) {
+                    showError(error.message.orEmpty())
                 }
             }
         }
     }
 
-    private suspend fun runOperation(block: suspend () -> Unit) {
-        try { block() } catch (error: Throwable) { showError(error.message.orEmpty()) }
+    private fun setRowOperating(key: String, operating: Boolean) {
+        if (operating) operatingRowKeys += key else operatingRowKeys -= key
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun friendRowKey(application: FriendApplication) = "friend:${application.id}"
+
+    private fun serverGroupRowKey(invitation: ServerGroupInvitation) = "server-group:${invitation.id}"
+
+    private fun nativeGroupRowKey(application: GroupApplicationInfo) =
+        "native-group:${application.groupID}:${application.fromUser}"
+
+    private fun rowKey(row: VerificationRow) = when (row) {
+        is VerificationRow.Friend -> friendRowKey(row.value)
+        is VerificationRow.ServerGroup -> serverGroupRowKey(row.value)
+        is VerificationRow.NativeGroup -> nativeGroupRowKey(row.value)
     }
 
     private fun showError(message: String) {
@@ -682,9 +729,17 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
             actions.addView(reject, LinearLayout.LayoutParams(58.dp(), 34.dp()).apply { marginEnd = 8.dp() })
             actions.addView(accept, LinearLayout.LayoutParams(58.dp(), 34.dp()))
             val state = TextView(parent.context).apply { textSize = 13f; gravity = Gravity.CENTER; setTextColor(TEXT_SECONDARY) }
-            val accessory = FrameLayout(parent.context).apply { addView(actions); addView(state) }
+            val progress = ProgressBar(parent.context).apply {
+                isIndeterminate = true
+                visibility = View.GONE
+            }
+            val accessory = FrameLayout(parent.context).apply {
+                addView(actions)
+                addView(state)
+                addView(progress, FrameLayout.LayoutParams(26.dp(), 26.dp(), Gravity.CENTER))
+            }
             row.addView(accessory, LinearLayout.LayoutParams(124.dp(), 34.dp()))
-            return Holder(row, avatar, name, summary, actions, reject, accept, state)
+            return Holder(row, avatar, name, summary, actions, reject, accept, state, progress)
         }
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
@@ -700,8 +755,10 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
             )
             holder.name.text = presentation.name
             holder.summary.text = presentation.summary
-            holder.actions.visibility = if (presentation.canHandle) View.VISIBLE else View.GONE
-            holder.state.visibility = if (presentation.canHandle) View.GONE else View.VISIBLE
+            val operating = rowKey(row) in operatingRowKeys
+            holder.actions.visibility = if (presentation.canHandle && !operating) View.VISIBLE else View.GONE
+            holder.state.visibility = if (!presentation.canHandle && !operating) View.VISIBLE else View.GONE
+            holder.progress.visibility = if (operating) View.VISIBLE else View.GONE
             holder.state.text = listOf(presentation.statusIcon, presentation.status)
                 .filter(String::isNotEmpty)
                 .joinToString(" ")
@@ -726,7 +783,8 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
             val actions: LinearLayout,
             val reject: TextView,
             val accept: TextView,
-            val state: TextView
+            val state: TextView,
+            val progress: ProgressBar,
         ) : RecyclerView.ViewHolder(itemView)
     }
 

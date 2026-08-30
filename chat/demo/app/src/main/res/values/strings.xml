@@ -1316,11 +1316,14 @@
     <string name="xingdun_no_group_applications">No group applications or invitations</string>
     <string name="xingdun_no_group_applications_message">New group applications or invitations will appear here.</string>
     <string name="xingdun_confirm_accept_friend">Accept this friend application?</string>
-    <string name="xingdun_confirm_reject_friend">Reject this friend application?</string>
+    <string name="xingdun_confirm_reject_friend">Reject friend application?</string>
+    <string name="xingdun_confirm_reject_friend_message">You can still delete this application record after rejecting it.</string>
     <string name="xingdun_confirm_accept_group">Accept this group application or invitation?</string>
     <string name="xingdun_confirm_reject_group">Reject this group application or invitation?</string>
-    <string name="xingdun_confirm_clear_applications">Clear all processed friend application records?</string>
-    <string name="xingdun_confirm_delete_application">Delete this processed friend application record?</string>
+    <string name="xingdun_confirm_clear_applications">Clear processed records?</string>
+    <string name="xingdun_confirm_clear_applications_message">Pending applications are retained. Accepted, rejected, and expired records will be deleted.</string>
+    <string name="xingdun_confirm_delete_application">Delete application record?</string>
+    <string name="xingdun_confirm_delete_application_message">This does not remove an established friendship.</string>
     <string name="xingdun_delete">Delete</string>
     <string name="xingdun_friend_accepted_auto_message">I accepted your friend request. We can start chatting now.</string>
     <string name="xingdun_friend_accepted_message_failed">Friend added, but the automatic greeting could not be sent.</string>
