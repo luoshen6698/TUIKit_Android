@@ -69,6 +69,8 @@
     <string name="contact_list_group_type_text">群类型</string>
     <string name="contact_list_group_type_select_text">选择群类型</string>
     <string name="contact_list_group_avatar_text">群头像</string>
+    <string name="contact_list_group_avatar_choose_photo">从相册选择</string>
+    <string name="contact_list_group_avatar_invalid">请选择小于 5 MB 的图片。</string>
     <string name="contact_list_group_work_type">好友工作群(Work)</string>
     <string name="contact_list_group_work_des">好友工作群(Work）：类似普通微信群，创建后仅支持已在群内的好友邀请加群，且无需被邀请方同意或群主审批。</string>
     <string name="contact_list_group_public_type">陌生人社交群(Public)</string>

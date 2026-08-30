@@ -148,6 +148,10 @@ class ChatPageView @JvmOverloads constructor(
         messageListView.locateMessageByID(messageID, completion = completion)
     }
 
+    fun refreshMessagePresentation(messageID: String) {
+        messageListView.refreshMessagePresentation(messageID)
+    }
+
     fun showMentionMemberDialog() {
         messageInputView.showMentionMemberDialog()
     }

@@ -804,6 +804,10 @@ class MessageListView @JvmOverloads constructor(
         }
     }
 
+    fun refreshMessagePresentation(messageID: String) {
+        postRefreshMessages(listOf(messageID))
+    }
+
     private fun applyMessageListBackground() {
         val persistedBackground = currentConversationID
             ?.let { chatBackgroundStore.getImageUri(it) }

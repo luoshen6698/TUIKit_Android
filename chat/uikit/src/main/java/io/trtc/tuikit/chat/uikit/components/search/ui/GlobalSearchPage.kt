@@ -49,6 +49,7 @@ class GlobalSearchPage(
     private var viewScope: CoroutineScope? = null
     private var searchQuery = ""
     private var latestCategories: List<SearchCategory> = emptyList()
+    private var latestExtensionSections: List<GlobalSearchExtensionSection> = emptyList()
     private var isSearching = false
     private val themeStore = ThemeStore.shared(context)
 
@@ -56,6 +57,7 @@ class GlobalSearchPage(
     var onQueryChange: ((String) -> Unit)? = null
     var onShowMore: ((SearchType) -> Unit)? = null
     var onCancel: (() -> Unit)? = null
+    var onExtensionResultClick: ((GlobalSearchExtensionResult) -> Unit)? = null
 
     init {
         orientation = VERTICAL
@@ -112,6 +114,7 @@ class GlobalSearchPage(
             onQueryChange?.invoke(query)
             if (query.isBlank()) {
                 viewModel.updateSearchQuery(query)
+                latestExtensionSections = emptyList()
                 updateResults(emptyList())
             } else {
                 viewModel.updateSearchQuery(query)
@@ -170,12 +173,19 @@ class GlobalSearchPage(
         val adapter = SearchCategoryAdapter(
             context = context,
             categories = categories,
+            extensionSections = latestExtensionSections,
             keywords = searchQuery,
             onResultClick = { onResultClick?.invoke(it) },
+            onExtensionResultClick = { onExtensionResultClick?.invoke(it) },
             onShowMore = { onShowMore?.invoke(it) }
         )
         recyclerView.adapter = adapter
         updateEmptyState()
+    }
+
+    fun updateExtensionResults(sections: List<GlobalSearchExtensionSection>) {
+        latestExtensionSections = sections.filter { it.results.isNotEmpty() }
+        updateResults(latestCategories)
     }
 
     private fun updateEmptyState() {
@@ -185,7 +195,7 @@ class GlobalSearchPage(
                 emptyStateMessage.setText(R.string.search_global_empty_message)
                 emptyStateView.visibility = View.VISIBLE
             }
-            !isSearching && latestCategories.isEmpty() -> {
+            !isSearching && latestCategories.isEmpty() && latestExtensionSections.isEmpty() -> {
                 emptyStateTitle.setText(R.string.search_global_no_result_title)
                 emptyStateMessage.setText(R.string.search_global_no_result_message)
                 emptyStateView.visibility = View.VISIBLE
@@ -214,8 +224,10 @@ class GlobalSearchPage(
 private class SearchCategoryAdapter(
     private val context: Context,
     private val categories: List<SearchCategory>,
+    private val extensionSections: List<GlobalSearchExtensionSection>,
     private val keywords: String,
     private val onResultClick: (Any) -> Unit,
+    private val onExtensionResultClick: (GlobalSearchExtensionResult) -> Unit,
     private val onShowMore: (SearchType) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
@@ -225,12 +237,15 @@ private class SearchCategoryAdapter(
         private const val TYPE_GROUP = 2
         private const val TYPE_MESSAGE = 3
         private const val TYPE_MORE = 4
+        private const val TYPE_EXTENSION_HEADER = 5
+        private const val TYPE_EXTENSION_RESULT = 6
     }
 
     private data class Item(
         val type: Int,
         val category: SearchCategory? = null,
-        val data: Any? = null
+        val data: Any? = null,
+        val extensionTitle: String? = null,
     )
 
     private val items = mutableListOf<Item>()
@@ -251,6 +266,12 @@ private class SearchCategoryAdapter(
                 items.add(Item(type = TYPE_MORE, category = category))
             }
         }
+        extensionSections.forEach { section ->
+            items.add(Item(type = TYPE_EXTENSION_HEADER, extensionTitle = section.title))
+            section.results.forEach { result ->
+                items.add(Item(type = TYPE_EXTENSION_RESULT, data = result))
+            }
+        }
     }
 
     override fun getItemViewType(position: Int) = items[position].type
@@ -259,7 +280,7 @@ private class SearchCategoryAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         return when (viewType) {
-            TYPE_HEADER -> HeaderViewHolder(CategoryHeaderView(context))
+            TYPE_HEADER, TYPE_EXTENSION_HEADER -> HeaderViewHolder(CategoryHeaderView(context))
             TYPE_MORE -> MoreViewHolder(CategoryMoreView(context))
             else -> ResultViewHolder(SearchResultItemView(context))
         }
@@ -271,8 +292,8 @@ private class SearchCategoryAdapter(
 
         when (holder) {
             is HeaderViewHolder -> {
-                val category = item.category ?: return
-                holder.view.bind(category, context)
+                item.category?.let { holder.view.bind(it, context) }
+                    ?: holder.view.bindTitle(item.extensionTitle.orEmpty(), context)
             }
             is MoreViewHolder -> {
                 val category = item.category ?: return
@@ -291,6 +312,9 @@ private class SearchCategoryAdapter(
                     }
                     is MessageSearchResultItem -> holder.view.bindMessage(data, keywords, colors, context) {
                         onResultClick(data)
+                    }
+                    is GlobalSearchExtensionResult -> holder.view.bindExtension(data, keywords, colors) {
+                        onExtensionResultClick(data)
                     }
                 }
             }
@@ -336,6 +360,13 @@ private class CategoryHeaderView(context: Context) : LinearLayout(context) {
             SearchType.MESSAGE -> context.getString(R.string.search_category_chat_record)
             else -> ""
         }
+    }
+
+    fun bindTitle(title: String, context: Context) {
+        val colors = ThemeStore.shared(context).themeState.value.currentTheme.tokens.color
+        setBackgroundColor(colors.bgColorOperate)
+        titleText.setTextColor(colors.textColorSecondary)
+        titleText.text = title
     }
 
     private fun dpToPx(dp: Int): Int {
@@ -536,6 +567,29 @@ class SearchResultItemView(context: Context) : LinearLayout(context) {
                 }
             }
         }
+        setOnClickListener { onClick() }
+    }
+
+    fun bindExtension(
+        result: GlobalSearchExtensionResult,
+        keywords: String,
+        colors: io.trtc.tuikit.atomicx.theme.tokens.ColorTokens,
+        onClick: () -> Unit,
+    ) {
+        applyRowBackground(colors)
+        avatar.setContent(Avatar.AvatarContent.Image(null, result.title))
+        titleText.text = HighlightUtils.highlight(
+            result.title,
+            keywords,
+            colors.textColorLink,
+            colors.textColorPrimary,
+        )
+        subtitleText.text = HighlightUtils.highlight(
+            result.subtitle,
+            keywords,
+            colors.textColorLink,
+            colors.textColorTertiary,
+        )
         setOnClickListener { onClick() }
     }
 

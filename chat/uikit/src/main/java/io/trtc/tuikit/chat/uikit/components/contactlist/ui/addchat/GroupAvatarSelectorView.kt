@@ -21,7 +21,8 @@ internal class GroupAvatarSelectorView(
     displayedGroupName: String,
     selectedAvatarUrl: String?,
     avatarUrls: List<String>,
-    private val onAvatarSelected: (String?) -> Unit
+    private val onAvatarSelected: (String?) -> Unit,
+    private val onChooseCustomAvatar: (() -> Unit)? = null,
 ) : LinearLayout(context) {
 
     private companion object {
@@ -32,6 +33,8 @@ internal class GroupAvatarSelectorView(
     }
 
     private val wrapperViews = mutableMapOf<String?, FrameLayout>()
+    private val groupName = displayedGroupName
+    private val previewAvatar = Avatar(context)
 
     init {
         val colors = getColors()
@@ -43,6 +46,32 @@ internal class GroupAvatarSelectorView(
             LinearLayout.LayoutParams.WRAP_CONTENT
         )
         setBackgroundColor(colors.bgColorTopBar)
+
+        addView(LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(
+                dp2px(16f, dm).toInt(),
+                dp2px(14f, dm).toInt(),
+                dp2px(16f, dm).toInt(),
+                dp2px(6f, dm).toInt(),
+            )
+            previewAvatar.setSize(Avatar.AvatarSize.L)
+            previewAvatar.setShape(Avatar.AvatarShape.RoundRectangle)
+            addView(previewAvatar, LayoutParams(dp2px(72f, dm).toInt(), dp2px(72f, dm).toInt()))
+            addView(TextView(context).apply {
+                setText(R.string.contact_list_group_avatar_choose_photo)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setTextColor(colors.textColorLink)
+                gravity = android.view.Gravity.CENTER
+                isClickable = onChooseCustomAvatar != null
+                isFocusable = onChooseCustomAvatar != null
+                alpha = if (onChooseCustomAvatar == null) .45f else 1f
+                setOnClickListener { onChooseCustomAvatar?.invoke() }
+            }, LayoutParams(0, dp2px(44f, dm).toInt(), 1f).apply {
+                marginStart = dp2px(16f, dm).toInt()
+            })
+        })
 
         addView(TextView(context).apply {
             text = context.getString(R.string.contact_list_group_avatar_text)
@@ -71,6 +100,7 @@ internal class GroupAvatarSelectorView(
                 )
             }
         )
+        updateSelection(selectedAvatarUrl)
     }
 
     fun updateSelection(selectedAvatarUrl: String?) {
@@ -90,6 +120,13 @@ internal class GroupAvatarSelectorView(
                 null
             }
         }
+        previewAvatar.setContent(
+            if (selectedAvatarUrl.isNullOrEmpty()) {
+                Avatar.AvatarContent.Text(groupName.ifBlank { context.getString(R.string.contact_list_group_name) })
+            } else {
+                Avatar.AvatarContent.Image(selectedAvatarUrl, groupName)
+            }
+        )
     }
 
     private fun createAvatarGridSection(

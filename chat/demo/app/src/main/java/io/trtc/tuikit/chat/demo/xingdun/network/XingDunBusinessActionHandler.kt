@@ -1,6 +1,7 @@
 package io.trtc.tuikit.chat.demo.xingdun.network
 
 import android.content.Context
+import android.net.Uri
 import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.JsonArray
@@ -18,6 +19,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
@@ -203,6 +206,20 @@ class XingDunBusinessActionHandler(context: Context) : BusinessActionHandler {
     }
 
     private fun downloadGroupAvatar(url: String): XingDunUploadFile {
+        val uri = Uri.parse(url)
+        if (uri.scheme == "content" || uri.scheme == "file") {
+            val mimeType = if (uri.scheme == "content") {
+                appContext.contentResolver.getType(uri)
+            } else {
+                null
+            }?.lowercase(Locale.ROOT)?.takeIf { it in SUPPORTED_AVATAR_MIME_TYPES }
+                ?: if (uri.path?.endsWith(".png", true) == true) "image/png" else "image/jpeg"
+            val bytes = when (uri.scheme) {
+                "content" -> appContext.contentResolver.openInputStream(uri)?.use(::readAvatarBytes)
+                else -> uri.path?.let(::File)?.inputStream()?.use(::readAvatarBytes)
+            } ?: throw IllegalArgumentException(appContext.getString(R.string.xingdun_group_avatar_invalid))
+            return groupAvatarFile(bytes, mimeType)
+        }
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.connectTimeout = 10_000
         connection.readTimeout = 20_000
@@ -211,34 +228,37 @@ class XingDunBusinessActionHandler(context: Context) : BusinessActionHandler {
             val mimeType = connection.contentType?.substringBefore(';')?.lowercase(Locale.ROOT)
                 ?.takeIf { it in setOf("image/jpeg", "image/png", "image/webp") }
                 ?: if (url.substringBefore('?').endsWith(".png", true)) "image/png" else "image/jpeg"
-            val bytes = connection.inputStream.use { input ->
-                val output = ByteArrayOutputStream()
-                val buffer = ByteArray(16 * 1024)
-                var total = 0
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    total += count
-                    require(total <= 5 * 1024 * 1024) {
-                        appContext.getString(R.string.xingdun_group_avatar_invalid)
-                    }
-                    output.write(buffer, 0, count)
-                }
-                val data = output.toByteArray()
-                require(data.isNotEmpty() && data.size <= 5 * 1024 * 1024) {
-                    appContext.getString(R.string.xingdun_group_avatar_invalid)
-                }
-                data
-            }
-            val extension = when (mimeType) {
-                "image/png" -> "png"
-                "image/webp" -> "webp"
-                else -> "jpg"
-            }
-            return XingDunUploadFile("avatar", "xingdun-group-avatar.$extension", mimeType, bytes)
+            return groupAvatarFile(connection.inputStream.use(::readAvatarBytes), mimeType)
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun readAvatarBytes(input: InputStream): ByteArray {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(16 * 1024)
+        var total = 0
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            require(total <= MAX_AVATAR_BYTES) {
+                appContext.getString(R.string.xingdun_group_avatar_invalid)
+            }
+            output.write(buffer, 0, count)
+        }
+        return output.toByteArray().also { data ->
+            require(data.isNotEmpty()) { appContext.getString(R.string.xingdun_group_avatar_invalid) }
+        }
+    }
+
+    private fun groupAvatarFile(bytes: ByteArray, mimeType: String): XingDunUploadFile {
+        val extension = when (mimeType) {
+            "image/png" -> "png"
+            "image/webp" -> "webp"
+            else -> "jpg"
+        }
+        return XingDunUploadFile("avatar", "xingdun-group-avatar.$extension", mimeType, bytes)
     }
 
     private suspend fun resolveLocalUserID(timUserID: String): Int {
@@ -297,4 +317,9 @@ class XingDunBusinessActionHandler(context: Context) : BusinessActionHandler {
 
     private fun JsonObject.array(name: String): JsonArray =
         get(name)?.takeUnless(JsonElement::isJsonNull)?.takeIf(JsonElement::isJsonArray)?.asJsonArray ?: JsonArray()
+
+    private companion object {
+        const val MAX_AVATAR_BYTES = 5 * 1024 * 1024
+        val SUPPORTED_AVATAR_MIME_TYPES = setOf("image/jpeg", "image/png", "image/webp")
+    }
 }

@@ -22,6 +22,7 @@ import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseAccessActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessagePresentation
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunLocalMessageMarkRepository
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBusinessActionHandler
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
@@ -32,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import io.trtc.tuikit.chat.uikit.components.messagelist.config.MessageLocalMarkConfig
 
 class Application : Application() {
 
@@ -59,6 +61,7 @@ class Application : Application() {
         XingDunPushManager.initialize(this)
         XingDunCustomMessagePresentation.registerGlobalSummaries()
         XingDunForegroundNotificationManager.initialize(this)
+        MessageLocalMarkConfig.provider = XingDunLocalMessageMarkRepository::isMarked
         BusinessActionRegistry.handler = XingDunBusinessActionHandler(this)
         ChatSettingActionConfig.setCustomActionProvider { actionContext ->
             val groupID = actionContext.groupID

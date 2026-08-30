@@ -1942,6 +1942,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             searchProgress.visibility = if (busy) View.VISIBLE else View.GONE
         }
         val submitSearch = {
+            dismissFriendApplicationComposer()
             query.clearFocus()
             (getSystemService(INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager)
                 ?.hideSoftInputFromWindow(query.windowToken, 0)
@@ -1973,10 +1974,14 @@ open class XingDunFeatureActivity : BaseActivity() {
     ) {
         val keyword = rawQuery.trim()
         if (keyword.isEmpty() || keyword.toByteArray(Charsets.UTF_8).size > 128) {
+            resultContainer.removeAllViews()
+            dismissFriendApplicationComposer()
             status.setText(R.string.xingdun_friend_search_invalid)
             return
         }
         resultContainer.removeAllViews()
+        dismissFriendApplicationComposer()
+        status.text = ""
         onSearchingChanged(true)
         setBusy(true)
         lifecycleScope.launch {
@@ -2088,7 +2093,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         localUserID: Int,
         addFriendButton: Button,
     ) {
-        if (localUserID <= 0 || card.findViewWithTag<View>(FRIEND_APPLICATION_TAG) != null) return
+        if (localUserID <= 0 || fixedActionContainer.findViewWithTag<View>(FRIEND_APPLICATION_TAG) != null) return
         val composer = LinearLayout(this).apply {
             tag = FRIEND_APPLICATION_TAG
             orientation = LinearLayout.HORIZONTAL
@@ -2107,7 +2112,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             contentDescription = getString(R.string.xingdun_cancel)
             background = ColorDrawable(Color.TRANSPARENT)
             setPadding(8.dp(), 8.dp(), 8.dp(), 8.dp())
-            setOnClickListener { card.removeView(composer) }
+            setOnClickListener { dismissFriendApplicationComposer() }
         }
         val sendButton = Button(this).apply {
             setText(R.string.xingdun_send_application)
@@ -2142,7 +2147,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                             if (isFriend) R.string.xingdun_friend_added
                             else R.string.xingdun_friend_application_sent
                         )
-                        card.removeView(composer)
+                        dismissFriendApplicationComposer()
                         card.removeView(addFriendButton)
                         card.addView(TextView(this@XingDunFeatureActivity).apply {
                             setText(
@@ -2173,8 +2178,19 @@ open class XingDunFeatureActivity : BaseActivity() {
         composer.addView(closeButton, LinearLayout.LayoutParams(40.dp(), 40.dp()).apply { marginEnd = 6.dp() })
         composer.addView(message, LinearLayout.LayoutParams(0, 44.dp(), 1f))
         composer.addView(sendButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 44.dp()).apply { marginStart = 4.dp() })
-        card.addView(composer)
+        fixedActionContainer.removeAllViews()
+        fixedActionContainer.addView(
+            composer,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
+        fixedActionContainer.visibility = View.VISIBLE
         message.requestFocus()
+    }
+
+    private fun dismissFriendApplicationComposer() {
+        if (!::fixedActionContainer.isInitialized) return
+        fixedActionContainer.removeAllViews()
+        fixedActionContainer.visibility = View.GONE
     }
 
     private fun friendSearchEmptyState(): View = LinearLayout(this).apply {
@@ -6860,7 +6876,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 // Match iOS: resolve a scanned TIM user ID through the tenant-scoped
                 // business search before offering any friend action. This is required
                 // when multiple enterprises share one Tencent IM application.
-                start(this, MODE_FRIEND_SEARCH, route.userID)
+                start(this, MODE_FRIEND_SEARCH, route.userID, childSelectedTab())
                 finish()
             }
             is XingDunQRCodeRoute.Group -> {
@@ -7283,7 +7299,11 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
 
-    private fun childSelectedTab(): String = when (mode) {
+    private fun childSelectedTab(): String {
+        intent.getStringExtra(EXTRA_SELECTED_TAB)
+            ?.takeIf { it in setOf(MainActivity.TAB_MESSAGES, MainActivity.TAB_CONTACTS, MainActivity.TAB_WORKSPACE, MainActivity.TAB_PROFILE) }
+            ?.let { return it }
+        return when (mode) {
         MODE_WORKSPACE_LIST,
         MODE_WORKSPACE_PENDING,
         MODE_WORKSPACE_DETAIL,
@@ -7291,6 +7311,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_CUSTOMER_SERVICE,
         MODE_CUSTOMER_SERVICE_GROUP -> MainActivity.TAB_WORKSPACE
         else -> MainActivity.TAB_PROFILE
+        }
     }
 
     companion object {
@@ -7310,6 +7331,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val EXTRA_TARGET_TYPE = "target_type"
         private const val EXTRA_TARGET_DISPLAY_NAME = "target_display_name"
         private const val EXTRA_TARGET_DISPLAY_ID = "target_display_id"
+        private const val EXTRA_SELECTED_TAB = "selected_tab"
         const val MODE_WORKSPACE_LIST = "workspace_list"
         const val MODE_WORKSPACE_PENDING = "workspace_pending"
         const val MODE_WORKSPACE_DETAIL = "workspace_detail"
@@ -7349,10 +7371,11 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val FAVORITE_PAGE_SIZE = 20
         private const val FRIEND_APPLICATION_TAG = "xingdun_friend_application"
 
-        fun start(context: Context, mode: String, itemId: Int = 0) {
+        fun start(context: Context, mode: String, itemId: Int = 0, selectedTab: String? = null) {
             context.startActivity(Intent(context, XingDunFeatureActivity::class.java).apply {
                 putExtra(EXTRA_MODE, mode)
                 if (itemId > 0) putExtra(EXTRA_ITEM_ID, itemId)
+                selectedTab?.let { putExtra(EXTRA_SELECTED_TAB, it) }
                 if (BuildConfig.DEBUG && context is XingDunFeatureActivity &&
                     context.intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false)
                 ) putExtra(EXTRA_DEBUG_BYPASS_LOGIN, true)
@@ -7360,10 +7383,11 @@ open class XingDunFeatureActivity : BaseActivity() {
             })
         }
 
-        fun start(context: Context, mode: String, targetID: String) {
+        fun start(context: Context, mode: String, targetID: String, selectedTab: String? = null) {
             context.startActivity(Intent(context, XingDunFeatureActivity::class.java).apply {
                 putExtra(EXTRA_MODE, mode)
                 putExtra(EXTRA_TARGET_ID, targetID)
+                selectedTab?.let { putExtra(EXTRA_SELECTED_TAB, it) }
                 if (BuildConfig.DEBUG && context is XingDunFeatureActivity &&
                     context.intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false)
                 ) putExtra(EXTRA_DEBUG_BYPASS_LOGIN, true)

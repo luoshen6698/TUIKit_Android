@@ -150,6 +150,10 @@
     <string name="demo_page_conversations_title">消息</string>
     <string name="demo_page_contacts_title">通讯录</string>
     <string name="xingdun_global_search">全局搜索</string>
+    <string name="xingdun_search_category_favorites">收藏</string>
+    <string name="xingdun_search_category_workspace">工作台</string>
+    <string name="xingdun_search_workspace_entry">工作台入口</string>
+    <string name="xingdun_more_message_actions">更多消息操作</string>
     <string name="xingdun_more_contact_actions">更多通讯录操作</string>
     <string name="xingdun_start_group_chat">发起群聊</string>
     <string name="demo_page_me_title">我的</string>
@@ -161,6 +165,12 @@
     <string name="demo_chat_setting_group_info">群组信息</string>
     <string name="demo_chat_setting_group_settings">群设置</string>
     <string name="xingdun_report_group">举报该群</string>
+    <string name="xingdun_report_message_action">举报</string>
+    <string name="xingdun_report_message_target">%1$s 的消息</string>
+    <string name="xingdun_mark_action_add">标记</string>
+    <string name="xingdun_mark_action_remove">取消标记</string>
+    <string name="xingdun_message_marked">消息已标记。</string>
+    <string name="xingdun_message_unmarked">已取消标记。</string>
     <string name="xingdun_search_chat_content">查找聊天内容</string>
     <string name="demo_message_input_hint">输入消息…</string>
     <string name="demo_chat_custom_message_menu_title">自定义消息</string>
@@ -368,6 +378,7 @@
     <string name="xingdun_workspace_submitted">申请已提交。</string>
     <string name="xingdun_customer_service">客户服务</string>
     <string name="xingdun_my_customer_service_format">我的客服 · %1$s</string>
+    <string name="xingdun_my_customer_service">我的客服</string>
     <string name="xingdun_customer_service_agent">客服账号</string>
     <string name="xingdun_customer_service_user">企业用户</string>
     <string name="xingdun_customer_service_identity">客服身份</string>
@@ -666,6 +677,7 @@
     <string name="xingdun_qr_camera_permission_hint">请在系统设置中允许本应用访问相机后返回重试。</string>
     <string name="xingdun_cancel">取消</string>
     <string name="xingdun_delete_conversation_title">删除会话</string>
+    <string name="xingdun_delete_conversation_message">请选择删除方式。保留记录时仍可在重新发起会话后看到历史；清空记录将删除本地与云端聊天内容且不可恢复。</string>
     <string name="xingdun_delete_conversation_keep_history">保留聊天记录并删除会话</string>
     <string name="xingdun_delete_conversation_clear_history">清空聊天记录并删除会话</string>
     <string name="xingdun_delete_conversation_failed">删除会话失败，请稍后重试。</string>

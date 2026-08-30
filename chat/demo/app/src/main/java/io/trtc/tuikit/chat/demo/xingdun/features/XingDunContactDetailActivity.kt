@@ -37,6 +37,7 @@ import io.trtc.tuikit.atomicxcore.api.message.SendMessagePayload
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunContactDetail
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
@@ -355,7 +356,12 @@ class XingDunContactDetailActivity : BaseActivity() {
             ChatActivity.start(this, "c2c_$timUserID")
         } else if (canAddFriend()) {
             val keyword = detail?.customId.normalized() ?: timUserID
-            XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_FRIEND_SEARCH, keyword)
+            XingDunFeatureActivity.start(
+                this,
+                XingDunFeatureActivity.MODE_FRIEND_SEARCH,
+                keyword,
+                MainActivity.TAB_CONTACTS,
+            )
         }
     }
 

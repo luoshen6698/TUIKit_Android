@@ -121,6 +121,7 @@ class MainActivity : BaseActivity() {
     private lateinit var allBottomTabs: List<BottomTab>
     private lateinit var bottomTabs: List<BottomTab>
 
+    private var conversationsSearchButton: ImageView? = null
     private var conversationsAddButton: ImageView? = null
     private var contactsSearchButton: ImageView? = null
     private var contactsAddButton: ImageView? = null
@@ -272,6 +273,7 @@ class MainActivity : BaseActivity() {
         bottomNavContainer.setBackgroundColor(colors.bgColorTopBar)
         bottomNav.background = roundedBackground(colors.bgColorBottomBar, 32f)
 
+        conversationsSearchButton?.setColorFilter(colors.textColorPrimary)
         conversationsAddButton?.setColorFilter(colors.textColorPrimary)
         contactsSearchButton?.setColorFilter(colors.textColorPrimary)
         contactsAddButton?.setColorFilter(colors.textColorPrimary)
@@ -767,8 +769,18 @@ class MainActivity : BaseActivity() {
         }
         val addButton = ImageView(this).apply {
             setImageResource(io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_add_circle)
+            contentDescription = getString(R.string.xingdun_more_message_actions)
             layoutParams = ViewGroup.LayoutParams(24.dpToPx(), 24.dpToPx())
         }
+        val searchButton = ImageView(this).apply {
+            setImageResource(io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_search)
+            contentDescription = getString(R.string.xingdun_global_search)
+            layoutParams = LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply {
+                marginEnd = 16.dpToPx()
+            }
+            setOnClickListener { SearchActivity.start(this@MainActivity) }
+        }
+        conversationsSearchButton = searchButton
         conversationsAddButton = addButton
         addButton.setOnClickListener { anchor ->
             PopupMenuHelper(this).show(
@@ -789,6 +801,7 @@ class MainActivity : BaseActivity() {
                             XingDunFeatureActivity.start(
                                 this,
                                 XingDunFeatureActivity.MODE_FRIEND_SEARCH,
+                                selectedTab = TAB_MESSAGES,
                             )
                         },
                         iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_user_add
@@ -796,22 +809,30 @@ class MainActivity : BaseActivity() {
                     PopupMenuItem(
                         title = getString(R.string.xingdun_scan_qr),
                         onClick = {
-                            XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_QR_SCANNER)
+                            XingDunFeatureActivity.start(
+                                this,
+                                XingDunFeatureActivity.MODE_QR_SCANNER,
+                                selectedTab = TAB_MESSAGES,
+                            )
                         },
                         iconResId = R.drawable.xingdun_ic_mine_qr
                     )
                 )
             )
         }
+        val headerActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(searchButton)
+            addView(addButton)
+        }
         page.setup(
             config = actionConfig,
+            showSearchBar = false,
             headerTitle = getString(R.string.demo_page_conversations_title),
-            headerRightAction = addButton,
+            headerRightAction = headerActions,
             onConversationClick = { conversationInfo ->
                 ChatActivity.start(this, conversationInfo.conversationID)
-            },
-            onSearchClick = {
-                SearchActivity.Companion.start(this)
             }
         )
         return page
@@ -820,6 +841,7 @@ class MainActivity : BaseActivity() {
     private fun showDeleteConversationConfirmation(conversationID: String) {
         android.app.AlertDialog.Builder(this)
             .setTitle(R.string.xingdun_delete_conversation_title)
+            .setMessage(R.string.xingdun_delete_conversation_message)
             .setItems(
                 arrayOf(
                     getString(R.string.xingdun_delete_conversation_keep_history),
@@ -881,7 +903,8 @@ class MainActivity : BaseActivity() {
                         onClick = {
                             XingDunFeatureActivity.start(
                                 this,
-                                XingDunFeatureActivity.MODE_FRIEND_SEARCH
+                                XingDunFeatureActivity.MODE_FRIEND_SEARCH,
+                                selectedTab = TAB_CONTACTS,
                             )
                         },
                         iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_user_add
@@ -898,7 +921,11 @@ class MainActivity : BaseActivity() {
                     PopupMenuItem(
                         title = getString(R.string.xingdun_scan_qr),
                         onClick = {
-                            XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_QR_SCANNER)
+                            XingDunFeatureActivity.start(
+                                this,
+                                XingDunFeatureActivity.MODE_QR_SCANNER,
+                                selectedTab = TAB_CONTACTS,
+                            )
                         },
                         iconResId = R.drawable.xingdun_ic_mine_qr
                     )
@@ -957,8 +984,14 @@ class MainActivity : BaseActivity() {
             customerServiceContacts.forEachIndexed { index, service ->
                 add(ContactCustomItem(
                     ID = "xingdun.customerService.$index",
-                    title = getString(R.string.xingdun_my_customer_service_format, service.displayName),
-                    iconResID = R.drawable.xingdun_ic_contacts_customer_service,
+                    title = service.displayName,
+                    avatarURL = service.avatarURL,
+                    iconResID = if (service.avatarURL.isNullOrBlank()) {
+                        R.drawable.xingdun_ic_contacts_customer_service
+                    } else {
+                        0
+                    },
+                    sectionTitle = getString(R.string.xingdun_my_customer_service),
                     onClick = {
                         XingDunContactDetailActivity.start(
                             this@MainActivity,

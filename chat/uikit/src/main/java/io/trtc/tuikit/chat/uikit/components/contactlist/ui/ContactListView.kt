@@ -30,6 +30,7 @@ import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.chat.uikit.components.widgets.azorderedlist.AZOrderedListItem
 import io.trtc.tuikit.chat.uikit.components.widgets.azorderedlist.AtomicAZOrderedList
+import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
@@ -387,14 +388,20 @@ class ContactListView @JvmOverloads constructor(
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
         }
 
+        var previousSectionTitle: String? = null
         items.forEachIndexed { index, item ->
+            item.sectionTitle?.takeIf { it != previousSectionTitle }?.let { title ->
+                container.addView(createSectionHeader(title))
+            }
             val holder = createDefaultItemView(item)
             defaultItemViews[item.ID] = holder
             container.addView(holder.itemContainer)
 
-            if (index < items.size - 1) {
+            val nextSectionTitle = items.getOrNull(index + 1)?.sectionTitle
+            if (index < items.size - 1 && nextSectionTitle == item.sectionTitle) {
                 container.addView(createDivider())
             }
+            previousSectionTitle = item.sectionTitle
         }
 
         return container
@@ -431,9 +438,11 @@ class ContactListView @JvmOverloads constructor(
             setOnClickListener { item.onClick() }
         }
 
+        val iconHost = FrameLayout(context).apply {
+            layoutParams = LinearLayout.LayoutParams(iconSizePx, iconSizePx)
+        }
         val iconView = ImageView(context).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
-            layoutParams = LinearLayout.LayoutParams(iconSizePx, iconSizePx)
             if (item.iconResID != 0) {
                 setImageDrawable(ContextCompat.getDrawable(context, item.iconResID)?.apply {
                     isAutoMirrored = true
@@ -442,11 +451,32 @@ class ContactListView @JvmOverloads constructor(
                 visibility = GONE
             }
         }
-        rowView.addView(iconView)
+        iconHost.addView(
+            iconView,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        val avatarView = Avatar(context).apply {
+            visibility = if (item.avatarURL.isNullOrBlank()) GONE else VISIBLE
+            if (visibility == VISIBLE) {
+                setContent(Avatar.AvatarContent.Image(item.avatarURL, item.title))
+            }
+        }
+        iconHost.addView(
+            avatarView,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        iconHost.visibility = if (item.iconResID == 0 && item.avatarURL.isNullOrBlank()) GONE else VISIBLE
+        rowView.addView(iconHost)
 
         val iconTextSpacer = View(context).apply {
             layoutParams = LinearLayout.LayoutParams(iconTextSpacingPx, 1)
-            if (item.iconResID == 0) {
+            if (iconHost.visibility == GONE) {
                 visibility = GONE
             }
         }
@@ -500,6 +530,24 @@ class ContactListView @JvmOverloads constructor(
         }
     }
 
+    private fun createSectionHeader(title: String): TextView {
+        val colors = getColors()
+        return TextView(context).apply {
+            tag = "sectionHeader"
+            text = title
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextColor(colors.textColorLink)
+            setBackgroundColor(colors.bgColorInput)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(
+                dp2px(DEFAULT_ITEM_HORIZONTAL_PADDING_DP, resources.displayMetrics).toInt(),
+                dp2px(8f, resources.displayMetrics).toInt(),
+                dp2px(DEFAULT_ITEM_HORIZONTAL_PADDING_DP, resources.displayMetrics).toInt(),
+                dp2px(6f, resources.displayMetrics).toInt(),
+            )
+        }
+    }
+
     private fun updateBadge(itemID: String, count: Int) {
         val holder = defaultItemViews[itemID] ?: return
         if (count > 0) {
@@ -523,6 +571,11 @@ class ContactListView @JvmOverloads constructor(
                 val child = container.getChildAt(i)
                 if (child.tag == "divider") {
                     child.setBackgroundColor(colors.strokeColorSecondary)
+                } else if (child.tag == "sectionHeader") {
+                    (child as? TextView)?.apply {
+                        setBackgroundColor(colors.bgColorInput)
+                        setTextColor(colors.textColorLink)
+                    }
                 }
             }
         }

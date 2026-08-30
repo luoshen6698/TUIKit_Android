@@ -146,6 +146,8 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
     private val subtitleView: TextView
     private val timeView: TextView
     private val muteIcon: ImageView
+    private val chevronIcon: ImageView
+    private val pinnedAccent: View
     private val sendFailIcon: TextView
     private val sendingIndicator: ProgressBar
 
@@ -174,6 +176,17 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
             )
         }
         addView(contentRow)
+
+        pinnedAccent = View(context).apply {
+            visibility = GONE
+        }
+        addView(
+            pinnedAccent,
+            FrameLayout.LayoutParams(dp2px(context, 3f), LayoutParams.MATCH_PARENT, Gravity.START).apply {
+                topMargin = dp2px(context, 12f)
+                bottomMargin = dp2px(context, 12f)
+            }
+        )
 
         avatar = Avatar(context).apply {
             setSize(Avatar.AvatarSize.L)
@@ -279,6 +292,16 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
             dp2px(context, 16f), dp2px(context, 16f), Gravity.BOTTOM or Gravity.END
         ).apply { bottomMargin = dp2px(context, 13f) })
 
+        chevronIcon = ImageView(context).apply {
+            setImageResource(R.drawable.uikit_ic_arrow_right)
+        }
+        contentRow.addView(
+            chevronIcon,
+            LinearLayout.LayoutParams(dp2px(context, 16f), dp2px(context, 16f)).apply {
+                marginStart = dp2px(context, 8f)
+            }
+        )
+
         foreground = highlightOverlay
     }
 
@@ -327,6 +350,9 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
             }
         }
         timeView.setTextColor(colors.textColorSecondary)
+        chevronIcon.setColorFilter(colors.textColorTertiary, PorterDuff.Mode.SRC_IN)
+        pinnedAccent.setBackgroundColor(colors.textColorLink)
+        pinnedAccent.visibility = if (conversation.isPinned) VISIBLE else GONE
         bindMuteIcon(conversation, colors)
         bindSendStatus(conversation, colors)
     }

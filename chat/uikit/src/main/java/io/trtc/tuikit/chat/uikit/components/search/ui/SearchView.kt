@@ -32,6 +32,20 @@ enum class SearchFlowStep {
     MESSAGE_IN_CONVERSATION_DETAIL
 }
 
+/** Optional app-owned sections appended to the stock global-search results. */
+data class GlobalSearchExtensionResult(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val metadata: Map<String, String> = emptyMap(),
+)
+
+data class GlobalSearchExtensionSection(
+    val id: String,
+    val title: String,
+    val results: List<GlobalSearchExtensionResult>,
+)
+
 class SearchView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -57,6 +71,8 @@ class SearchView @JvmOverloads constructor(
     private var onConversationSelect: ((MessageSearchResultItem) -> Unit)? = null
     private var onMessageSelect: ((MessageInfo) -> Unit)? = null
     private var onBack: (() -> Unit)? = null
+    private var onGlobalQueryChange: ((String) -> Unit)? = null
+    private var onExtensionResultSelect: ((GlobalSearchExtensionResult) -> Unit)? = null
 
     init {
         applyTheme()
@@ -67,13 +83,26 @@ class SearchView @JvmOverloads constructor(
         onGroupSelect: ((GroupSearchInfo) -> Unit)? = null,
         onConversationSelect: ((MessageSearchResultItem) -> Unit)? = null,
         onMessageSelect: ((MessageInfo) -> Unit)? = null,
+        onGlobalQueryChange: ((String) -> Unit)? = null,
+        onExtensionResultSelect: ((GlobalSearchExtensionResult) -> Unit)? = null,
         onBack: (() -> Unit)? = null
     ) {
         this.onContactSelect = onContactSelect
         this.onGroupSelect = onGroupSelect
         this.onConversationSelect = onConversationSelect
         this.onMessageSelect = onMessageSelect
+        this.onGlobalQueryChange = onGlobalQueryChange
+        this.onExtensionResultSelect = onExtensionResultSelect
         this.onBack = onBack
+    }
+
+    fun updateExtensionResults(
+        query: String,
+        sections: List<GlobalSearchExtensionSection>,
+    ) {
+        if (query.trim() == searchAllQuery.trim()) {
+            globalSearchPage?.updateExtensionResults(sections)
+        }
     }
 
     override fun onAttachedToWindow() {
@@ -122,7 +151,13 @@ class SearchView @JvmOverloads constructor(
                         }
                     }
                 }
-                onQueryChange = { query -> searchAllQuery = query }
+                onQueryChange = { query ->
+                    searchAllQuery = query
+                    onGlobalQueryChange?.invoke(query)
+                }
+                onExtensionResultClick = { result ->
+                    onExtensionResultSelect?.invoke(result)
+                }
                 onShowMore = { searchType ->
                     when (searchType) {
                         SearchType.FRIEND -> navigateTo(SearchFlowStep.CONTACT_DETAIL)

@@ -63,6 +63,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     private lateinit var statusTitle: TextView
     private lateinit var statusMessage: TextView
     private lateinit var retry: TextView
+    private lateinit var operationWarning: TextView
     private val adapter = VerificationAdapter(::respondToFriend, ::respondToServerGroup, ::respondToNativeGroup)
 
     private var selectedTab = Tab.FRIEND
@@ -78,6 +79,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     private var loading = false
     private var loadingMore = false
     private var loadError: String? = null
+    private var operationError: String? = null
     private var groupPollingJob: Job? = null
     private val operatingRowKeys = mutableSetOf<String>()
 
@@ -91,7 +93,11 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
 
     override fun onStart() {
         super.onStart()
-        if (selectedTab == Tab.GROUP) startGroupPolling()
+        if (selectedTab == Tab.GROUP) {
+            refreshNativeGroups()
+            lifecycleScope.launch { refreshGroupApplicationsQuietly() }
+            startGroupPolling()
+        }
     }
 
     override fun onStop() {
@@ -109,6 +115,17 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         root.addView(segment(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 36.dp()).apply {
             marginStart = 16.dp(); marginEnd = 16.dp(); topMargin = 6.dp(); bottomMargin = 6.dp()
         })
+        operationWarning = TextView(this).apply {
+            textSize = 14f
+            setTextColor(0xFF8A5A00.toInt())
+            setBackgroundColor(0xFFFFF4D6.toInt())
+            setPadding(16.dp(), 10.dp(), 16.dp(), 10.dp())
+            visibility = View.GONE
+        }
+        root.addView(
+            operationWarning,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
 
         val body = FrameLayout(this)
         swipeRefresh = SwipeRefreshLayout(this).apply {
@@ -230,6 +247,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     private fun select(tab: Tab) {
         if (selectedTab == tab) return
         selectedTab = tab
+        operationError = null
         render()
         if (tab == Tab.GROUP) {
             refreshNativeGroups()
@@ -244,6 +262,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         if (loading) return
         loading = true
         loadError = null
+        operationError = null
         render()
         lifecycleScope.launch {
             try {
@@ -400,6 +419,8 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         clear.visibility = View.VISIBLE
         clear.isEnabled = selectedTab == Tab.FRIEND && friends.any { it.status != STATUS_PENDING }
         clear.alpha = if (clear.isEnabled) 1f else .35f
+        operationWarning.text = operationError.orEmpty()
+        operationWarning.visibility = if (operationError.isNullOrBlank()) View.GONE else View.VISIBLE
 
         val rows = if (selectedTab == Tab.FRIEND) {
             friends.map { VerificationRow.Friend(it) }
@@ -617,7 +638,9 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     }
 
     private fun showError(message: String) {
-        Toast.makeText(this, message.ifBlank { getString(R.string.xingdun_action_failed) }, Toast.LENGTH_LONG).show()
+        operationError = message.ifBlank { getString(R.string.xingdun_action_failed) }
+        render()
+        Toast.makeText(this, operationError, Toast.LENGTH_LONG).show()
     }
 
     private fun actionButton(text: String, primary: Boolean, onClick: () -> Unit) = TextView(this).apply {
@@ -711,35 +734,74 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
             val row = LinearLayout(parent.context).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.VERTICAL
                 setPadding(16.dp(), 12.dp(), 16.dp(), 12.dp())
                 background = rounded(Color.WHITE, 0f)
                 layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             }
+            val header = LinearLayout(parent.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
             val avatar = Avatar(parent.context)
-            row.addView(avatar, LinearLayout.LayoutParams(44.dp(), 44.dp()))
+            header.addView(avatar, LinearLayout.LayoutParams(44.dp(), 44.dp()))
             val texts = LinearLayout(parent.context).apply { orientation = LinearLayout.VERTICAL }
             val name = TextView(parent.context).apply { textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); maxLines = 1 }
-            val summary = TextView(parent.context).apply { textSize = 13f; setTextColor(TEXT_SECONDARY); maxLines = 2 }
-            texts.addView(name); texts.addView(summary)
-            row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 12.dp(); marginEnd = 8.dp() })
-            val actions = LinearLayout(parent.context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val detail = TextView(parent.context).apply { textSize = 12f; setTextColor(TEXT_SECONDARY); maxLines = 1 }
+            val friendSummary = TextView(parent.context).apply { textSize = 13f; setTextColor(TEXT_SECONDARY); maxLines = 2 }
+            texts.addView(name); texts.addView(detail); texts.addView(friendSummary)
+            header.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = 12.dp(); marginEnd = 8.dp()
+            })
+            val headerAccessory = accessoryViews()
+            header.addView(headerAccessory.container, LinearLayout.LayoutParams(124.dp(), 34.dp()))
+            row.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+            val groupSummary = TextView(parent.context).apply {
+                textSize = 13f
+                setTextColor(TEXT_PRIMARY)
+                setPadding(0, 10.dp(), 0, 8.dp())
+                maxLines = 3
+            }
+            row.addView(groupSummary, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            val footerAccessory = accessoryViews()
+            row.addView(footerAccessory.container, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 34.dp()))
+            return Holder(
+                row,
+                avatar,
+                name,
+                detail,
+                friendSummary,
+                groupSummary,
+                headerAccessory,
+                footerAccessory,
+            )
+        }
+
+        private fun accessoryViews(): AccessoryViews {
+            val actions = LinearLayout(this@XingDunVerificationMessagesActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            }
             val reject = actionButton(getString(R.string.xingdun_reject), false) {}
             val accept = actionButton(getString(R.string.xingdun_accept), true) {}
             actions.addView(reject, LinearLayout.LayoutParams(58.dp(), 34.dp()).apply { marginEnd = 8.dp() })
             actions.addView(accept, LinearLayout.LayoutParams(58.dp(), 34.dp()))
-            val state = TextView(parent.context).apply { textSize = 13f; gravity = Gravity.CENTER; setTextColor(TEXT_SECONDARY) }
-            val progress = ProgressBar(parent.context).apply {
+            val state = TextView(this@XingDunVerificationMessagesActivity).apply {
+                textSize = 13f
+                gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                setTextColor(TEXT_SECONDARY)
+            }
+            val progress = ProgressBar(this@XingDunVerificationMessagesActivity).apply {
                 isIndeterminate = true
                 visibility = View.GONE
             }
-            val accessory = FrameLayout(parent.context).apply {
-                addView(actions)
-                addView(state)
-                addView(progress, FrameLayout.LayoutParams(26.dp(), 26.dp(), Gravity.CENTER))
+            val container = FrameLayout(this@XingDunVerificationMessagesActivity).apply {
+                addView(actions, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END))
+                addView(state, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END))
+                addView(progress, FrameLayout.LayoutParams(26.dp(), 26.dp(), Gravity.END or Gravity.CENTER_VERTICAL))
             }
-            row.addView(accessory, LinearLayout.LayoutParams(124.dp(), 34.dp()))
-            return Holder(row, avatar, name, summary, actions, reject, accept, state, progress)
+            return AccessoryViews(container, actions, reject, accept, state, progress)
         }
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
@@ -754,17 +816,35 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                 else Avatar.AvatarContent.Image(presentation.avatar, presentation.name)
             )
             holder.name.text = presentation.name
-            holder.summary.text = presentation.summary
+            holder.detail.text = presentation.detail
+            holder.detail.visibility = if (presentation.detail.isBlank()) View.GONE else View.VISIBLE
+            holder.friendSummary.text = presentation.summary
+            holder.groupSummary.text = presentation.summary
+            val isFriend = row is VerificationRow.Friend
+            holder.friendSummary.visibility = if (isFriend) View.VISIBLE else View.GONE
+            holder.groupSummary.visibility = if (isFriend) View.GONE else View.VISIBLE
+            holder.headerAccessory.container.visibility = if (isFriend) View.VISIBLE else View.GONE
+            holder.footerAccessory.container.visibility = if (isFriend) View.GONE else View.VISIBLE
             val operating = rowKey(row) in operatingRowKeys
-            holder.actions.visibility = if (presentation.canHandle && !operating) View.VISIBLE else View.GONE
-            holder.state.visibility = if (!presentation.canHandle && !operating) View.VISIBLE else View.GONE
-            holder.progress.visibility = if (operating) View.VISIBLE else View.GONE
-            holder.state.text = listOf(presentation.statusIcon, presentation.status)
+            bindAccessory(holder.headerAccessory, row, presentation, operating)
+            bindAccessory(holder.footerAccessory, row, presentation, operating)
+        }
+
+        private fun bindAccessory(
+            views: AccessoryViews,
+            row: VerificationRow,
+            presentation: Presentation,
+            operating: Boolean,
+        ) {
+            views.actions.visibility = if (presentation.canHandle && !operating) View.VISIBLE else View.GONE
+            views.state.visibility = if (!presentation.canHandle && !operating) View.VISIBLE else View.GONE
+            views.progress.visibility = if (operating) View.VISIBLE else View.GONE
+            views.state.text = listOf(presentation.statusIcon, presentation.status)
                 .filter(String::isNotEmpty)
                 .joinToString(" ")
-            holder.state.setTextColor(presentation.statusColor)
-            holder.reject.setOnClickListener { dispatch(row, false) }
-            holder.accept.setOnClickListener { dispatch(row, true) }
+            views.state.setTextColor(presentation.statusColor)
+            views.reject.setOnClickListener { dispatch(row, false) }
+            views.accept.setOnClickListener { dispatch(row, true) }
         }
 
         private fun dispatch(row: VerificationRow, approve: Boolean) = when (row) {
@@ -779,18 +859,28 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
             itemView: View,
             val avatar: Avatar,
             val name: TextView,
-            val summary: TextView,
-            val actions: LinearLayout,
-            val reject: TextView,
-            val accept: TextView,
-            val state: TextView,
-            val progress: ProgressBar,
+            val detail: TextView,
+            val friendSummary: TextView,
+            val groupSummary: TextView,
+            val headerAccessory: AccessoryViews,
+            val footerAccessory: AccessoryViews,
         ) : RecyclerView.ViewHolder(itemView)
+
     }
+
+    private data class AccessoryViews(
+        val container: FrameLayout,
+        val actions: LinearLayout,
+        val reject: TextView,
+        val accept: TextView,
+        val state: TextView,
+        val progress: ProgressBar,
+    )
 
     private data class Presentation(
         val name: String,
         val avatar: String?,
+        val detail: String,
         val summary: String,
         val status: String,
         val canHandle: Boolean,
@@ -815,6 +905,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         return Presentation(
             name,
             user?.avatar,
+            "",
             summary,
             state.text,
             item.direction == Direction.RECEIVED && item.status == STATUS_PENDING,
@@ -826,6 +917,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     private fun serverGroupPresentation(item: ServerGroupInvitation) = Presentation(
         item.inviterName.takeIf(String::isNotBlank) ?: item.inviterUserId,
         item.inviterAvatar,
+        item.groupId,
         item.message?.takeIf(String::isNotBlank) ?: getString(R.string.xingdun_group_invitation_summary, item.groupName.ifBlank { item.groupId }),
         groupStatusText(item.status),
         item.status == STATUS_PENDING,
@@ -836,6 +928,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     private fun nativeGroupPresentation(item: GroupApplicationInfo) = Presentation(
         item.fromUserDisplayName,
         item.fromUserAvatarURL,
+        item.groupID,
         getString(if (item.isJoinRequest) R.string.xingdun_group_join_summary else R.string.xingdun_group_invite_summary, item.groupDisplayName),
         if (item.canHandle) getString(R.string.xingdun_pending) else getString(R.string.xingdun_processed),
         item.canHandle,

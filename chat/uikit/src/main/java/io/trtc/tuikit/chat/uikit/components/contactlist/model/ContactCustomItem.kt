@@ -21,6 +21,8 @@ data class ContactCustomItem(
     val title: String = "",
     val titleResID: Int = 0,
     val iconResID: Int = 0,
+    val avatarURL: String? = null,
+    val sectionTitle: String? = null,
     val badgeCount: StateFlow<Int> = MutableStateFlow(0),
     val onClick: () -> Unit = {},
 ) : CustomItem

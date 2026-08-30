@@ -152,6 +152,10 @@
     <string name="demo_page_conversations_title">Messages</string>
     <string name="demo_page_contacts_title">Contacts</string>
     <string name="xingdun_global_search">Global search</string>
+    <string name="xingdun_search_category_favorites">Favorites</string>
+    <string name="xingdun_search_category_workspace">Workspace</string>
+    <string name="xingdun_search_workspace_entry">Workspace entry</string>
+    <string name="xingdun_more_message_actions">More message actions</string>
     <string name="xingdun_more_contact_actions">More contact actions</string>
     <string name="xingdun_start_group_chat">Start group chat</string>
     <string name="demo_page_me_title">Me</string>
@@ -163,6 +167,12 @@
     <string name="demo_chat_setting_group_info">Group Info</string>
     <string name="demo_chat_setting_group_settings">Group Settings</string>
     <string name="xingdun_report_group">Report this group</string>
+    <string name="xingdun_report_message_action">Report</string>
+    <string name="xingdun_report_message_target">Message from %1$s</string>
+    <string name="xingdun_mark_action_add">Mark</string>
+    <string name="xingdun_mark_action_remove">Unmark</string>
+    <string name="xingdun_message_marked">Message marked.</string>
+    <string name="xingdun_message_unmarked">Message unmarked.</string>
     <string name="xingdun_search_chat_content">Search chat content</string>
     <string name="demo_message_input_hint">Type a message…</string>
     <string name="demo_chat_custom_message_menu_title">Custom Message</string>
@@ -374,6 +384,7 @@
     <string name="xingdun_workspace_submitted">Application submitted.</string>
     <string name="xingdun_customer_service">Customer service</string>
     <string name="xingdun_my_customer_service_format">My customer service · %1$s</string>
+    <string name="xingdun_my_customer_service">My customer service</string>
     <string name="xingdun_customer_service_agent">Customer-service account</string>
     <string name="xingdun_customer_service_user">Enterprise user</string>
     <string name="xingdun_customer_service_identity">Customer-service identity</string>
@@ -672,6 +683,7 @@
     <string name="xingdun_qr_camera_permission_hint">Allow camera access in system settings, then return and try again.</string>
     <string name="xingdun_cancel">Cancel</string>
     <string name="xingdun_delete_conversation_title">Delete conversation</string>
+    <string name="xingdun_delete_conversation_message">Choose how to delete it. Keeping the history lets you see it again after reopening the chat. Clearing it deletes local and cloud chat history and cannot be undone.</string>
     <string name="xingdun_delete_conversation_keep_history">Keep chat history and delete conversation</string>
     <string name="xingdun_delete_conversation_clear_history">Clear chat history and delete conversation</string>
     <string name="xingdun_delete_conversation_failed">Couldn\'t delete the conversation. Try again.</string>

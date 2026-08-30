@@ -37,6 +37,7 @@ import com.journeyapps.barcodescanner.DecoratedBarcodeView
 import com.journeyapps.barcodescanner.DefaultDecoderFactory
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -234,6 +235,10 @@ class XingDunQRCodeScannerActivity : BaseActivity() {
 
     private fun finishWithPayload(payload: String) {
         if (emitted) return
+        if (runCatching { XingDunQRCodeParser.parse(payload) }.isFailure) {
+            Toast.makeText(this, R.string.xingdun_qr_unrecognized, Toast.LENGTH_SHORT).show()
+            return
+        }
         emitted = true
         scanner.pause()
         setResult(RESULT_OK, Intent().putExtra(EXTRA_PAYLOAD, payload))

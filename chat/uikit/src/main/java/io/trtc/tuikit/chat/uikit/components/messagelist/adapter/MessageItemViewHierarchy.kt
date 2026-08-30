@@ -31,6 +31,7 @@ internal data class MessageItemViewHierarchy(
     val bubbleRow: MaxWidthLinearLayout,
     val bubbleContainer: MaxWidthFrameLayout,
     val bubbleContentContainer: LinearLayout,
+    val localMarkView: TextView,
     val sendingIndicator: ProgressBar,
     val sendFailIcon: TextView,
     val readReceiptIndicatorView: MessageReadReceiptIndicatorView,
@@ -159,6 +160,20 @@ internal fun MessageItemView.buildMessageItemViewHierarchy(
         LinearLayout.LayoutParams.WRAP_CONTENT,
         LinearLayout.LayoutParams.WRAP_CONTENT
     ))
+
+    val localMarkView = TextView(context).apply {
+        text = "🔖"
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        visibility = View.GONE
+        contentDescription = context.getString(R.string.message_list_locally_marked)
+        MessageListTouchTargetTags.mark(this)
+    }
+    middleColumn.addView(localMarkView, LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams.WRAP_CONTENT,
+        LinearLayout.LayoutParams.WRAP_CONTENT
+    ).apply {
+        topMargin = (2 * density).toInt()
+    })
 
     val quoteBubbleView = MessageQuoteBubbleView(context).apply {
         visibility = View.GONE
@@ -303,6 +318,7 @@ internal fun MessageItemView.buildMessageItemViewHierarchy(
         bubbleRow = bubbleRow,
         bubbleContainer = bubbleContainer,
         bubbleContentContainer = bubbleContentContainer,
+        localMarkView = localMarkView,
         sendingIndicator = sendingIndicator,
         sendFailIcon = sendFailIcon,
         readReceiptIndicatorView = readReceiptIndicatorView,

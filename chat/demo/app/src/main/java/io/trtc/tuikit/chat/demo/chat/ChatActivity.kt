@@ -40,6 +40,7 @@ import io.trtc.tuikit.atomicxcore.api.group.GroupEvent
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageStatus
+import io.trtc.tuikit.atomicxcore.api.message.MessageType
 import io.trtc.tuikit.atomicxcore.api.message.MessageInputStore
 import io.trtc.tuikit.atomicxcore.api.message.SendMessageOption
 import io.trtc.tuikit.atomicxcore.api.message.SendMessagePayload
@@ -59,6 +60,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationMa
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFavoriteMessageRequest
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoritePolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoriteRepository
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunLocalMessageMarkRepository
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagePolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessageRepository
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagesActivity
@@ -163,6 +165,8 @@ class ChatActivity : BaseActivity() {
         private const val UNREAD_BADGE_DEBOUNCE_MS = 300L
         private const val FAVORITE_ACTION_ID = "xingdun.message.favorite"
         private const val PIN_ACTION_ID = "xingdun.message.pin"
+        private const val MARK_ACTION_ID = "xingdun.message.mark"
+        private const val REPORT_ACTION_ID = "xingdun.message.report"
         private const val CONTACT_CARD_ACTION_ID = "xingdun.messageInput.contactCard"
         private const val MENTION_ACTION_ID = "xingdun.messageInput.mention"
         private const val CONTACT_CARD_TYPE = "xingdun_contact_card"
@@ -402,7 +406,6 @@ class ChatActivity : BaseActivity() {
     }
 
     private fun configureBusinessMessageActions(config: ChatMessageListConfig) {
-        if (!messageFavoriteEnabled && !messagePinEnabled) return
         config.customizeActions {
             val message = editorContext.message
             val messageID = message.msgID.takeIf(String::isNotBlank) ?: return@customizeActions
@@ -437,7 +440,55 @@ class ChatActivity : BaseActivity() {
                 )
                 if (!insertBefore(MessageActionIDs.DELETE, pinAction)) add(pinAction)
             }
+
+            val isMarked = XingDunLocalMessageMarkRepository.isMarked(conversationID, messageID)
+            val markAction = MessageCustomAction(
+                ID = MARK_ACTION_ID,
+                title = getString(if (isMarked) R.string.xingdun_mark_action_remove else R.string.xingdun_mark_action_add),
+                iconResID = R.drawable.xingdun_ic_message_mark,
+                action = { handleLocalMarkAction(it) },
+            )
+            if (!insertBefore(MessageActionIDs.DELETE, markAction)) add(markAction)
+
+            if (shouldOfferMessageReport(message)) {
+                val reportAction = MessageCustomAction(
+                    ID = REPORT_ACTION_ID,
+                    title = getString(R.string.xingdun_report_message_action),
+                    iconResID = R.drawable.xingdun_ic_mine_report,
+                    action = { reportMessage(it) },
+                )
+                if (!insertBefore(MessageActionIDs.DELETE, reportAction)) add(reportAction)
+            }
         }
+    }
+
+    private fun handleLocalMarkAction(message: MessageInfo) {
+        val messageID = message.msgID.takeIf(String::isNotBlank) ?: return
+        val marked = XingDunLocalMessageMarkRepository.toggle(conversationID, messageID)
+        chatPageView.refreshMessagePresentation(messageID)
+        Toast.makeText(
+            this,
+            if (marked) R.string.xingdun_message_marked else R.string.xingdun_message_unmarked,
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+
+    private fun shouldOfferMessageReport(message: MessageInfo): Boolean {
+        if (message.isSentBySelf || message.messageType == MessageType.TEXT || message.messageType == MessageType.TIPS) return false
+        if (message.status in setOf(MessageStatus.REVOKED, MessageStatus.DELETED)) return false
+        return XingDunCustomMessageParser.parse(message)?.type != "redpacket"
+    }
+
+    private fun reportMessage(message: MessageInfo) {
+        val messageID = message.msgID.takeIf(String::isNotBlank) ?: return
+        val sender = message.senderDisplayName.trim().ifBlank { message.from.userID }
+        XingDunFeatureActivity.startReport(
+            context = this,
+            targetType = "message",
+            targetID = messageID,
+            displayName = getString(R.string.xingdun_report_message_target, sender),
+            displayID = messageID,
+        )
     }
 
     private fun handleFavoriteMessageAction(message: MessageInfo) {

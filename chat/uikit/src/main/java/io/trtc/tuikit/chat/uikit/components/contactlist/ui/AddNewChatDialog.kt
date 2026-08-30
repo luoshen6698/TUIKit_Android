@@ -3,6 +3,7 @@ import android.app.Dialog
 import android.content.Context
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.InputType
@@ -21,6 +22,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.ActivityResultRegistryOwner
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.lifecycle.ViewModelProvider
 import com.google.android.material.appbar.AppBarLayout
@@ -55,6 +59,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 
 internal class AddNewChatDialog(
     context: Context,
@@ -72,6 +79,7 @@ internal class AddNewChatDialog(
             .get(key, AddNewChatViewModel::class.java)
     }
     private var dialogScope: CoroutineScope? = null
+    private var customAvatarLauncher: ActivityResultLauncher<String>? = null
 
     private lateinit var rootLayout: LinearLayout
     private lateinit var navBar: DialogNavBar
@@ -81,6 +89,12 @@ internal class AddNewChatDialog(
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestWindowFeature(Window.FEATURE_NO_TITLE)
+        customAvatarLauncher = (context as? ActivityResultRegistryOwner)?.activityResultRegistry?.register(
+            "xingdun_group_avatar_${System.identityHashCode(this)}",
+            ActivityResultContracts.GetContent(),
+        ) { uri ->
+            uri?.let(::cacheCustomGroupAvatar)
+        }
 
         val colors = getColors()
         val dm = context.resources.displayMetrics
@@ -189,6 +203,12 @@ internal class AddNewChatDialog(
         super.onStop()
         dialogScope?.cancel()
         dialogScope = null
+    }
+
+    override fun dismiss() {
+        customAvatarLauncher?.unregister()
+        customAvatarLauncher = null
+        super.dismiss()
     }
 
     override fun onBackPressed() {
@@ -540,7 +560,8 @@ internal class AddNewChatDialog(
             displayedGroupName = displayedGroupName,
             selectedAvatarUrl = displayedAvatarURL,
             avatarUrls = AddNewChatViewModel.getGroupAvatarUrls(),
-            onAvatarSelected = { viewModel.updateGroupAvatarUrl(it) }
+            onAvatarSelected = { viewModel.updateGroupAvatarUrl(it) },
+            onChooseCustomAvatar = { customAvatarLauncher?.launch("image/*") },
         )
         groupAvatarSelectorView = avatarSelector
         container.addView(avatarSelector)
@@ -551,6 +572,48 @@ internal class AddNewChatDialog(
         rootContainer.addView(scrollView)
         rootContainer.addView(createCreateButton(state.isCreating))
         contentContainer.addView(rootContainer)
+    }
+
+    private fun cacheCustomGroupAvatar(uri: Uri) {
+        val scope = dialogScope ?: return
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val mimeType = context.contentResolver.getType(uri)?.lowercase().orEmpty()
+                    require(mimeType.isEmpty() || mimeType in SUPPORTED_CUSTOM_AVATAR_MIME_TYPES)
+                    val extension = when (mimeType) {
+                        "image/png" -> "png"
+                        "image/webp" -> "webp"
+                        else -> "jpg"
+                    }
+                    val destination = File(context.cacheDir, "xingdun-group-avatar-${System.nanoTime()}.$extension")
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        FileOutputStream(destination).use { output ->
+                            val buffer = ByteArray(16 * 1024)
+                            var total = 0
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                require(total <= MAX_CUSTOM_AVATAR_BYTES)
+                                output.write(buffer, 0, count)
+                            }
+                            require(total > 0)
+                        }
+                    } ?: error(context.getString(R.string.contact_list_group_avatar_invalid))
+                    Uri.fromFile(destination).toString()
+                }
+            }.onSuccess { avatarUri ->
+                viewModel.updateGroupAvatarUrl(avatarUri)
+                groupAvatarSelectorView?.updateSelection(avatarUri)
+            }.onFailure {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.contact_list_group_avatar_invalid),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
     }
 
     private fun refreshGroupSettingsDynamicViews() {
@@ -794,5 +857,10 @@ internal class AddNewChatDialog(
             divider.setBackgroundColor(colors.strokeColorSecondary)
         }
         window?.let { WindowThemeUtil.applyDialogSystemBarStyle(it, colors) }
+    }
+
+    private companion object {
+        const val MAX_CUSTOM_AVATAR_BYTES = 5 * 1024 * 1024
+        val SUPPORTED_CUSTOM_AVATAR_MIME_TYPES = setOf("image/jpeg", "image/png", "image/webp")
     }
 }

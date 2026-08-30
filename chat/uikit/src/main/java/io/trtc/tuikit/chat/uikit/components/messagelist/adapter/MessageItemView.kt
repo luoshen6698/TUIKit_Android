@@ -11,6 +11,7 @@ import android.widget.TextView
 import io.trtc.tuikit.chat.uikit.R
 import io.trtc.tuikit.chat.uikit.components.common.RtlUtils
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.MessageListConfigProtocol
+import io.trtc.tuikit.chat.uikit.components.messagelist.config.MessageLocalMarkConfig
 import io.trtc.tuikit.chat.uikit.components.messagelist.model.MessageActionIDs
 import io.trtc.tuikit.chat.uikit.components.messagelist.model.MessageCustomAction
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.BubbleStyle
@@ -55,6 +56,7 @@ class MessageItemView(
     private val bubbleRow: MaxWidthLinearLayout
     private val bubbleContainer: MaxWidthFrameLayout
     private val bubbleContentContainer: LinearLayout
+    private val localMarkView: TextView
     private val statusContainer: FrameLayout
     private val callUnreadDotView: View
     private val auxiliaryTextBubbleView: AuxiliaryTextBubbleView
@@ -86,6 +88,7 @@ class MessageItemView(
         bubbleRow = hierarchy.bubbleRow
         bubbleContainer = hierarchy.bubbleContainer
         bubbleContentContainer = hierarchy.bubbleContentContainer
+        localMarkView = hierarchy.localMarkView
         statusContainer = hierarchy.statusContainer
         callUnreadDotView = hierarchy.callUnreadDotView
         auxiliaryTextBubbleView = hierarchy.auxiliaryTextBubbleView
@@ -239,6 +242,7 @@ class MessageItemView(
         val horizontalGravity = if (isLeftAligned) Gravity.LEFT else Gravity.RIGHT
         contentRow.gravity = horizontalGravity or Gravity.TOP
         middleColumn.gravity = horizontalGravity
+        localMarkView.gravity = horizontalGravity
         nicknameView.gravity = horizontalGravity
         (quoteBubbleView.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
             params.gravity = horizontalGravity
@@ -331,6 +335,10 @@ class MessageItemView(
             hasReactions = hasReactions,
             isLeftAligned = isLeftAligned
         )
+        localMarkView.visibility = if (
+            message.msgID.isNotBlank() &&
+            MessageLocalMarkConfig.isMarked(viewModel.conversationID, message.msgID)
+        ) View.VISIBLE else View.GONE
 
         if (message.status == MessageStatus.VIOLATION) {
             violationView.visibility = View.VISIBLE
@@ -428,6 +436,7 @@ class MessageItemView(
         quoteBubbleView.setOnClickListener(null)
         reactionBarView.visibility = View.GONE
         violationView.visibility = View.GONE
+        localMarkView.visibility = View.GONE
         checkBox.visibility = View.GONE
         bubbleRow.removeAllViews()
         detachReactionBarFromContainer()

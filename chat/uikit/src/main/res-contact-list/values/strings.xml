@@ -69,6 +69,8 @@
     <string name="contact_list_group_type_text">Group Type</string>
     <string name="contact_list_group_type_select_text">Select group type</string>
     <string name="contact_list_group_avatar_text">Group Avatar</string>
+    <string name="contact_list_group_avatar_choose_photo">Choose from Photos</string>
+    <string name="contact_list_group_avatar_invalid">Choose an image smaller than 5 MB.</string>
     <string name="contact_list_group_work_type">Friends Working group(Work)</string>
     <string name="contact_list_group_work_des">Friends work group (Work): Similar to ordinary WeChat groups, after creation, only friends who are already in the group can be invited to join the group, and there is no need for the approval of the invitee or the approval of the group owner.</string>
     <string name="contact_list_group_public_type">Stranger Social group(Public)</string>

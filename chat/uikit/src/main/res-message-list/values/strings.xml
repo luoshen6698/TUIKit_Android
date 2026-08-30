@@ -155,4 +155,5 @@
     <string name="message_list_mention_all">All</string>
     <string name="message_list_violation_message">[Violation message]</string>
     <string name="message_list_user_count_suffix">and %1$d others</string>
+    <string name="message_list_locally_marked">Marked message</string>
 </resources>
