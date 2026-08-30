@@ -100,6 +100,7 @@ class XingDunContactRemarkActivity : BaseActivity() {
     }
 
     private fun header(): FrameLayout = FrameLayout(this).apply {
+        setBackgroundColor(Color.WHITE)
         setPadding(12.dp(), 0, 12.dp(), 0)
         addView(navButton(R.string.xingdun_cancel) { finish() }, FrameLayout.LayoutParams(72.dp(), 42.dp(), Gravity.START or Gravity.CENTER_VERTICAL))
         addView(TextView(context).apply {
@@ -121,7 +122,7 @@ class XingDunContactRemarkActivity : BaseActivity() {
         textSize = 15f
         gravity = Gravity.CENTER
         setTextColor(BRAND)
-        background = rounded(Color.WHITE, 21f)
+        setBackgroundColor(Color.TRANSPARENT)
         isClickable = true
         isFocusable = true
         setOnClickListener { onClick() }
@@ -138,7 +139,7 @@ class XingDunContactRemarkActivity : BaseActivity() {
 
     private fun saveRemark() {
         if (isSaving) return
-        val remark = input.text.toString().trim()
+        val remark = input.text.toString()
         if (remark.toByteArray(Charsets.UTF_8).size > MAX_REMARK_BYTES) return
         setSaving(true)
         val success = {
