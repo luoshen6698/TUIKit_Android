@@ -38,6 +38,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.PopupMenu
@@ -1914,29 +1915,69 @@ open class XingDunFeatureActivity : BaseActivity() {
             setText(targetID)
             inputType = InputType.TYPE_CLASS_TEXT
             maxLines = 1
+            isSingleLine = true
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            background = ColorDrawable(Color.TRANSPARENT)
         }
         val resultContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val searchButton = actionButton(R.string.xingdun_search_user) {
-            searchFriend(query.text.toString(), resultContainer)
+        val searchButton = ImageButton(this).apply {
+            setImageResource(R.drawable.xingdun_ic_search)
+            imageTintList = ColorStateList.valueOf(Color.WHITE)
+            contentDescription = getString(R.string.xingdun_search_user)
+            background = roundedDrawable(0xFF168F83.toInt(), 12f)
+            setPadding(13.dp(), 13.dp(), 13.dp(), 13.dp())
+        }
+        val searchProgress = ProgressBar(this).apply {
+            visibility = View.GONE
+            isIndeterminate = true
+            indeterminateTintList = ColorStateList.valueOf(0xFF168F83.toInt())
+        }
+        val searchControl = FrameLayout(this).apply {
+            addView(searchButton, FrameLayout.LayoutParams(48.dp(), 48.dp()))
+            addView(searchProgress, FrameLayout.LayoutParams(28.dp(), 28.dp(), Gravity.CENTER))
+        }
+        val updateSearchBusy: (Boolean) -> Unit = { busy ->
+            searchButton.isEnabled = !busy
+            searchButton.visibility = if (busy) View.INVISIBLE else View.VISIBLE
+            searchProgress.visibility = if (busy) View.VISIBLE else View.GONE
+        }
+        val submitSearch = {
+            query.clearFocus()
+            (getSystemService(INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager)
+                ?.hideSoftInputFromWindow(query.windowToken, 0)
+            searchFriend(query.text.toString(), resultContainer, updateSearchBusy)
+        }
+        searchButton.setOnClickListener { submitSearch() }
+        query.setOnEditorActionListener { _, actionID, event ->
+            val submitted = actionID == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
+                event?.keyCode == android.view.KeyEvent.KEYCODE_ENTER
+            if (submitted) submitSearch()
+            submitted
         }
         content.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             background = roundedDrawable(Color.WHITE, 14f)
-            setPadding(14.dp(), 8.dp(), 14.dp(), 14.dp())
-            addView(query)
-            addView(searchButton)
+            setPadding(14.dp(), 8.dp(), 10.dp(), 8.dp())
+            addView(query, LinearLayout.LayoutParams(0, 48.dp(), 1f))
+            addView(searchControl, LinearLayout.LayoutParams(48.dp(), 48.dp()).apply { marginStart = 8.dp() })
         }, customerServiceSectionLayoutParams())
         content.addView(resultContainer)
-        if (targetID.isNotBlank()) searchFriend(targetID, resultContainer)
+        if (targetID.isNotBlank()) searchFriend(targetID, resultContainer, updateSearchBusy)
     }
 
-    private fun searchFriend(rawQuery: String, resultContainer: LinearLayout) {
+    private fun searchFriend(
+        rawQuery: String,
+        resultContainer: LinearLayout,
+        onSearchingChanged: (Boolean) -> Unit = {},
+    ) {
         val keyword = rawQuery.trim()
         if (keyword.isEmpty() || keyword.toByteArray(Charsets.UTF_8).size > 128) {
             status.setText(R.string.xingdun_friend_search_invalid)
             return
         }
         resultContainer.removeAllViews()
+        onSearchingChanged(true)
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
@@ -1947,6 +1988,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                     JsonObject::class.java,
                 )
             }.onSuccess { profile ->
+                onSearchingChanged(false)
                 setBusy(false)
                 if (profile == null) {
                     resultContainer.addView(friendSearchEmptyState())
@@ -1954,6 +1996,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                     renderFriendSearchProfile(resultContainer, profile)
                 }
             }.onFailure { error ->
+                onSearchingChanged(false)
                 setBusy(false)
                 status.text = error.localizedMessage ?: getString(R.string.xingdun_friend_search_failed)
             }
@@ -2025,9 +2068,11 @@ open class XingDunFeatureActivity : BaseActivity() {
             })
         }
         if (relationship.isBlank() || relationship == "none") {
-            card.addView(actionButton(R.string.xingdun_add_friend) {
-                showFriendApplicationComposer(card, localUserID)
-            })
+            lateinit var addFriendButton: Button
+            addFriendButton = actionButton(R.string.xingdun_add_friend) {
+                showFriendApplicationComposer(card, localUserID, addFriendButton)
+            }
+            card.addView(addFriendButton)
         }
         container.addView(TextView(this).apply {
             setText(R.string.xingdun_user_profile)
@@ -2038,26 +2083,49 @@ open class XingDunFeatureActivity : BaseActivity() {
         container.addView(card, customerServiceSectionLayoutParams())
     }
 
-    private fun showFriendApplicationComposer(card: LinearLayout, localUserID: Int) {
+    private fun showFriendApplicationComposer(
+        card: LinearLayout,
+        localUserID: Int,
+        addFriendButton: Button,
+    ) {
         if (localUserID <= 0 || card.findViewWithTag<View>(FRIEND_APPLICATION_TAG) != null) return
         val composer = LinearLayout(this).apply {
             tag = FRIEND_APPLICATION_TAG
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 10.dp(), 0, 0)
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 12.dp(), 0, 0)
         }
         val message = input(R.string.xingdun_friend_application_message).apply {
-            maxLines = 2
+            maxLines = 1
+            isSingleLine = true
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+            background = roundedDrawable(0xFFF2F2F7.toInt(), 12f)
         }
-        composer.addView(message)
-        composer.addView(LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            addView(actionButton(R.string.xingdun_cancel) { card.removeView(composer) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(actionButton(R.string.xingdun_send_application) {
-                val normalized = message.text.toString().trim()
-                if (normalized.toByteArray(Charsets.UTF_8).size > 256) {
-                    status.setText(R.string.xingdun_friend_application_too_long)
-                    return@actionButton
-                }
+        val closeButton = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+            imageTintList = ColorStateList.valueOf(0xFF8A8A8F.toInt())
+            contentDescription = getString(R.string.xingdun_cancel)
+            background = ColorDrawable(Color.TRANSPARENT)
+            setPadding(8.dp(), 8.dp(), 8.dp(), 8.dp())
+            setOnClickListener { card.removeView(composer) }
+        }
+        val sendButton = Button(this).apply {
+            setText(R.string.xingdun_send_application)
+            isAllCaps = false
+            setTextColor(0xFF168F83.toInt())
+            backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+            minimumWidth = 0
+            minWidth = 0
+            setPadding(10.dp(), 0, 4.dp(), 0)
+        }
+        val submitApplication = {
+            val normalized = message.text.toString().trim()
+            if (normalized.toByteArray(Charsets.UTF_8).size > 256) {
+                status.setText(R.string.xingdun_friend_application_too_long)
+            } else {
+                closeButton.isEnabled = false
+                sendButton.isEnabled = false
+                message.isEnabled = false
                 setBusy(true)
                 lifecycleScope.launch {
                     runCatching {
@@ -2069,16 +2137,44 @@ open class XingDunFeatureActivity : BaseActivity() {
                         )
                     }.onSuccess { response ->
                         setBusy(false)
+                        val isFriend = response.string("relationship_status") == "friend"
                         status.setText(
-                            if (response.string("relationship_status") == "friend") R.string.xingdun_friend_added
+                            if (isFriend) R.string.xingdun_friend_added
                             else R.string.xingdun_friend_application_sent
                         )
                         card.removeView(composer)
-                    }.onFailure(::showFailure)
+                        card.removeView(addFriendButton)
+                        card.addView(TextView(this@XingDunFeatureActivity).apply {
+                            setText(
+                                if (isFriend) R.string.xingdun_friend_relationship_friend
+                                else R.string.xingdun_friend_relationship_outgoing
+                            )
+                            textSize = 13f
+                            setTextColor(0xFF168F83.toInt())
+                            setPadding(0, 12.dp(), 0, 2.dp())
+                        })
+                    }.onFailure { error ->
+                        closeButton.isEnabled = true
+                        sendButton.isEnabled = true
+                        message.isEnabled = true
+                        showFailure(error)
+                    }
                 }
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 8.dp() })
-        })
+            }
+        }
+        sendButton.setOnClickListener { submitApplication() }
+        message.setOnEditorActionListener { _, actionID, _ ->
+            if (actionID == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) submitApplication()
+            actionID == android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+        }
+        message.doAfterTextChanged {
+            sendButton.isEnabled = it?.toString().orEmpty().toByteArray(Charsets.UTF_8).size <= 256
+        }
+        composer.addView(closeButton, LinearLayout.LayoutParams(40.dp(), 40.dp()).apply { marginEnd = 6.dp() })
+        composer.addView(message, LinearLayout.LayoutParams(0, 44.dp(), 1f))
+        composer.addView(sendButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 44.dp()).apply { marginStart = 4.dp() })
         card.addView(composer)
+        message.requestFocus()
     }
 
     private fun friendSearchEmptyState(): View = LinearLayout(this).apply {
