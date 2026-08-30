@@ -127,11 +127,24 @@ class ChatActivity : BaseActivity() {
     private val activeFavoriteMessageIDs = mutableSetOf<String>()
     private val contactCardPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
-        val selectedConversationID = result.data
-            ?.getStringExtra(XingDunContactForwardPickerActivity.EXTRA_RESULT_CONVERSATION_ID)
+        val selectedUserID = result.data
+            ?.getStringExtra(XingDunContactForwardPickerActivity.EXTRA_RESULT_USER_ID)
+            ?.trim()
             .orEmpty()
-        val selectedUserID = selectedConversationID.removePrefix(C2C_CONVERSATION_ID_PREFIX).trim()
-        if (selectedUserID.isNotEmpty()) sendContactCard(selectedUserID)
+            .ifBlank {
+                result.data
+                    ?.getStringExtra(XingDunContactForwardPickerActivity.EXTRA_RESULT_CONVERSATION_ID)
+                    .orEmpty()
+                    .removePrefix(C2C_CONVERSATION_ID_PREFIX)
+                    .trim()
+            }
+        if (selectedUserID.isNotEmpty()) {
+            sendContactCard(
+                selectedUserID,
+                result.data?.getStringExtra(XingDunContactForwardPickerActivity.EXTRA_RESULT_DISPLAY_NAME),
+                result.data?.getStringExtra(XingDunContactForwardPickerActivity.EXTRA_RESULT_AVATAR),
+            )
+        }
     }
 
     private val pinnedRepositoryListener: (String) -> Unit = { changedID ->
@@ -716,21 +729,24 @@ class ChatActivity : BaseActivity() {
             .show()
     }
 
-    private fun sendContactCard(userID: String) {
+    private fun sendContactCard(userID: String, selectedDisplayName: String? = null, selectedAvatar: String? = null) {
         val contact = contactStore.state.friendList.value.firstOrNull { it.userID == userID }
-        if (contact == null) {
+        val displayName = selectedDisplayName?.trim().orEmpty()
+            .ifBlank { contact?.friendRemark?.trim().orEmpty() }
+            .ifBlank { contact?.nickname?.trim().orEmpty() }
+            .ifBlank { userID }
+        if (contact == null && selectedDisplayName.isNullOrBlank()) {
             Toast.makeText(this, R.string.xingdun_contact_card_unavailable, Toast.LENGTH_SHORT).show()
             return
         }
-        val displayName = contact.friendRemark?.trim().orEmpty()
-            .ifBlank { contact.nickname?.trim().orEmpty() }
-            .ifBlank { userID }
+        val avatar = selectedAvatar?.trim().orEmpty()
+            .ifBlank { contact?.avatarURL?.trim().orEmpty() }
         val payload = JsonObject().apply {
             addProperty("type", CONTACT_CARD_TYPE)
             addProperty("version", 1)
             addProperty("user_id", userID)
             addProperty("display_name", displayName)
-            contact.avatarURL?.trim()?.takeIf(String::isNotEmpty)?.let { addProperty("avatar_url", it) }
+            avatar.takeIf(String::isNotEmpty)?.let { addProperty("avatar_url", it) }
         }.toString()
         MessageInputStore.create(conversationID).sendMessage(
             SendMessagePayload.CustomSendMessagePayload(payload, CONTACT_CARD_TYPE, ""),

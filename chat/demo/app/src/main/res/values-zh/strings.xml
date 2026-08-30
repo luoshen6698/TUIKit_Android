@@ -640,6 +640,7 @@
     <string name="xingdun_contact_forward_search_groups">搜索群组</string>
     <string name="xingdun_contact_forward_loading">正在加载会话</string>
     <string name="xingdun_contact_forward_load_failed">转发目标加载失败，点击重新加载。</string>
+    <string name="xingdun_contact_card_group_members_load_failed">群成员加载失败，点击重新加载。</string>
     <string name="xingdun_contact_forward_empty_recent">暂无最近联系人</string>
     <string name="xingdun_contact_forward_empty_contacts">暂无联系人</string>
     <string name="xingdun_contact_forward_empty_groups">暂无群组</string>

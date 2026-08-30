@@ -15,6 +15,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.addCallback
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.doAfterTextChanged
@@ -28,6 +29,8 @@ import io.trtc.tuikit.atomicxcore.api.conversation.ConversationLoadOption
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -43,10 +46,13 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
     private lateinit var recentTab: TextView
     private lateinit var contactsTab: TextView
     private lateinit var groupsTab: TextView
+    private lateinit var segmentView: LinearLayout
+    private lateinit var leftAction: TextView
+    private lateinit var titleView: TextView
     private lateinit var list: RecyclerView
     private lateinit var search: EditText
     private lateinit var status: TextView
-    private val adapter = TargetAdapter { finishWith(it.conversationID) }
+    private val adapter = TargetAdapter(::handleTargetClick)
 
     private val sourceConversationID: String by lazy {
         intent.getStringExtra(EXTRA_SOURCE_CONVERSATION_ID).orEmpty().trim()
@@ -61,12 +67,18 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
     private var recent = emptyList<Target>()
     private var contacts = emptyList<Target>()
     private var groups = emptyList<Target>()
+    private var selectedGroup: Target? = null
+    private var groupMembers = emptyList<Target>()
+    private var isGroupMembersLoading = false
+    private var groupMembersLoadFailed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (isFinishing) return
-        if (isContactCardPicker) tab = Tab.CONTACTS
         buildPage()
+        onBackPressedDispatcher.addCallback(this) {
+            if (selectedGroup != null) closeGroupMembers() else finish()
+        }
         observeStores()
         refresh()
     }
@@ -99,14 +111,13 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
             topMargin = 8.dp()
             bottomMargin = 8.dp()
         })
-        if (!isContactCardPicker) {
-            root.addView(segment(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()).apply {
-                marginStart = 16.dp()
-                marginEnd = 16.dp()
-                topMargin = 6.dp()
-                bottomMargin = 6.dp()
-            })
-        }
+        segmentView = segment()
+        root.addView(segmentView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()).apply {
+            marginStart = 16.dp()
+            marginEnd = 16.dp()
+            topMargin = 6.dp()
+            bottomMargin = 6.dp()
+        })
         root.addView(View(this).apply { setBackgroundColor(DIVIDER) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
 
         val body = FrameLayout(this)
@@ -123,7 +134,11 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
             setTextColor(TEXT_SECONDARY)
             setPadding(24.dp(), 24.dp(), 24.dp(), 24.dp())
             setOnClickListener {
-                if (loadFailed) refresh()
+                if (selectedGroup != null && groupMembersLoadFailed) {
+                    loadSelectedGroupMembers()
+                } else if (loadFailed) {
+                    refresh()
+                }
             }
         }
         body.addView(status, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -135,20 +150,24 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
             insets
         }
         setContentView(root)
+        updatePickerLevel()
         updateTabs()
     }
 
     private fun header(): FrameLayout = FrameLayout(this).apply {
         setPadding(10.dp(), 0, 10.dp(), 0)
-        addView(TextView(context).apply {
+        leftAction = TextView(context).apply {
             setText(R.string.xingdun_cancel)
             textSize = 15f
             gravity = Gravity.CENTER
             setTextColor(BRAND)
             setBackgroundColor(Color.TRANSPARENT)
-            setOnClickListener { finish() }
-        }, FrameLayout.LayoutParams(72.dp(), 42.dp(), Gravity.START or Gravity.CENTER_VERTICAL))
-        addView(TextView(context).apply {
+            setOnClickListener {
+                if (selectedGroup != null) closeGroupMembers() else finish()
+            }
+        }
+        addView(leftAction, FrameLayout.LayoutParams(72.dp(), 42.dp(), Gravity.START or Gravity.CENTER_VERTICAL))
+        titleView = TextView(context).apply {
             setText(
                 if (isContactCardPicker) R.string.xingdun_contact_card_picker_title
                 else R.string.xingdun_contact_forward_title
@@ -157,7 +176,8 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setTextColor(TEXT_PRIMARY)
-        }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply {
+        }
+        addView(titleView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply {
             marginStart = 76.dp()
             marginEnd = 76.dp()
         })
@@ -193,12 +213,6 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
     }
 
     private fun updateTabs() {
-        if (isContactCardPicker) {
-            if (::search.isInitialized) {
-                search.setHint(R.string.xingdun_contact_forward_search_contacts)
-            }
-            return
-        }
         if (!::recentTab.isInitialized) return
         listOf(recentTab to Tab.RECENT, contactsTab to Tab.CONTACTS, groupsTab to Tab.GROUPS).forEach { (view, target) ->
             view.background = rounded(if (tab == target) Color.WHITE else Color.TRANSPARENT, 9f)
@@ -224,6 +238,8 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
                             title = value.title?.trim().orEmpty().ifBlank { value.conversationID.substringAfter('_') },
                             avatar = value.avatarURL.orEmpty(),
                             group = group,
+                            userID = value.conversationID.takeUnless { group }?.removePrefix("c2c_")?.trim(),
+                            groupID = value.conversationID.takeIf { group }?.removePrefix("group_")?.trim(),
                         )
                     }
                     .distinctBy(Target::conversationID)
@@ -243,6 +259,7 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
                                 .ifBlank { value.userID },
                             avatar = value.avatarURL.orEmpty(),
                             group = false,
+                            userID = value.userID,
                         )
                     }
                     .filter { it.conversationID != sourceConversationID }
@@ -259,6 +276,7 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
                         title = value.groupName?.trim().orEmpty().ifBlank { value.groupID },
                         avatar = value.avatarURL.orEmpty(),
                         group = true,
+                        groupID = value.groupID,
                     )
                 }.filter { it.conversationID != sourceConversationID }
                     .sortedBy { it.title.lowercase(Locale.getDefault()) }
@@ -288,38 +306,140 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
 
     private fun render() {
         if (!::list.isInitialized) return
-        val source = when (tab) {
-            Tab.RECENT -> recent
+        val groupLevel = selectedGroup != null
+        val source = if (groupLevel) {
+            groupMembers
+        } else when (tab) {
+            Tab.RECENT -> if (isContactCardPicker) {
+                val friendIDs = contacts.mapNotNull(Target::userID).toSet()
+                recent.filter { !it.group && it.userID in friendIDs }
+            } else {
+                recent
+            }
             Tab.CONTACTS -> contacts
             Tab.GROUPS -> groups
         }
         val visible = if (query.isBlank()) source else source.filter {
             it.title.contains(query, ignoreCase = true) ||
+                it.userID?.contains(query, ignoreCase = true) == true ||
+                it.groupID?.contains(query, ignoreCase = true) == true ||
                 it.conversationID.substringAfter('_').contains(query, ignoreCase = true)
         }
         adapter.submit(visible)
-        val showStatus = loadFailed || visible.isEmpty()
+        val currentLoading = if (groupLevel) isGroupMembersLoading else isLoading
+        val currentLoadFailed = if (groupLevel) groupMembersLoadFailed else loadFailed
+        val showStatus = currentLoadFailed || visible.isEmpty()
         list.visibility = if (showStatus) View.GONE else View.VISIBLE
         status.visibility = if (showStatus) View.VISIBLE else View.GONE
         if (showStatus) {
             status.setText(
                 when {
-                    isLoading -> R.string.xingdun_contact_forward_loading
-                    loadFailed -> R.string.xingdun_contact_forward_load_failed
+                    groupLevel && currentLoading -> R.string.xingdun_group_members_loading
+                    groupLevel && currentLoadFailed -> R.string.xingdun_contact_card_group_members_load_failed
+                    currentLoading -> R.string.xingdun_contact_forward_loading
+                    currentLoadFailed -> R.string.xingdun_contact_forward_load_failed
                     query.isNotBlank() -> R.string.xingdun_contact_forward_empty_search
+                    groupLevel -> R.string.xingdun_group_members_empty
                     tab == Tab.RECENT -> R.string.xingdun_contact_forward_empty_recent
                     tab == Tab.CONTACTS -> R.string.xingdun_contact_forward_empty_contacts
                     else -> R.string.xingdun_contact_forward_empty_groups
                 }
             )
         }
-        status.isClickable = loadFailed
-        status.setTextColor(if (loadFailed) BRAND else TEXT_SECONDARY)
+        status.isClickable = currentLoadFailed
+        status.setTextColor(if (currentLoadFailed) BRAND else TEXT_SECONDARY)
     }
 
-    private fun finishWith(conversationID: String) {
-        setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_RESULT_CONVERSATION_ID, conversationID))
+    private fun handleTargetClick(target: Target) {
+        if (isContactCardPicker && selectedGroup == null && tab == Tab.GROUPS) {
+            selectedGroup = target.takeIf { !it.groupID.isNullOrBlank() } ?: return
+            query = ""
+            search.setText("")
+            updatePickerLevel()
+            loadSelectedGroupMembers()
+            return
+        }
+        if (isContactCardPicker) {
+            val userID = target.userID?.trim().orEmpty()
+            if (userID.isEmpty()) return
+            setResult(
+                Activity.RESULT_OK,
+                Intent()
+                    .putExtra(EXTRA_RESULT_CONVERSATION_ID, "c2c_$userID")
+                    .putExtra(EXTRA_RESULT_USER_ID, userID)
+                    .putExtra(EXTRA_RESULT_DISPLAY_NAME, target.title)
+                    .putExtra(EXTRA_RESULT_AVATAR, target.avatar),
+            )
+            finish()
+            return
+        }
+        setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_RESULT_CONVERSATION_ID, target.conversationID))
         finish()
+    }
+
+    private fun loadSelectedGroupMembers() {
+        val groupID = selectedGroup?.groupID?.trim().orEmpty()
+        if (groupID.isEmpty()) return
+        isGroupMembersLoading = true
+        groupMembersLoadFailed = false
+        groupMembers = emptyList()
+        render()
+        lifecycleScope.launch {
+            val result = runCatching {
+                val session = XingDunSessionManager.currentSession()
+                    ?: error(getString(R.string.xingdun_session_expired))
+                XingDunGroupMemberPager.loadAll(
+                    XingDunSessionManager.apiClient(),
+                    session,
+                    groupID,
+                    getString(R.string.xingdun_group_members_pagination_failed),
+                )
+            }
+            isGroupMembersLoading = false
+            result.onSuccess { members ->
+                groupMembersLoadFailed = false
+                groupMembers = members
+                    .map { member ->
+                        Target(
+                            conversationID = "c2c_${member.userId}",
+                            title = member.nickname.trim().ifBlank { member.userId },
+                            avatar = member.avatar.orEmpty(),
+                            group = false,
+                            userID = member.userId,
+                            member = true,
+                        )
+                    }
+                    .distinctBy(Target::userID)
+                    .sortedBy { it.title.lowercase(Locale.getDefault()) }
+            }.onFailure {
+                groupMembersLoadFailed = true
+                groupMembers = emptyList()
+            }
+            render()
+        }
+    }
+
+    private fun closeGroupMembers() {
+        selectedGroup = null
+        groupMembers = emptyList()
+        isGroupMembersLoading = false
+        groupMembersLoadFailed = false
+        query = ""
+        search.setText("")
+        updatePickerLevel()
+        render()
+    }
+
+    private fun updatePickerLevel() {
+        if (!::segmentView.isInitialized) return
+        val group = selectedGroup
+        segmentView.visibility = if (group == null) View.VISIBLE else View.GONE
+        leftAction.setText(if (group == null) R.string.xingdun_cancel else R.string.xingdun_back)
+        titleView.text = group?.title ?: getString(
+            if (isContactCardPicker) R.string.xingdun_contact_card_picker_title
+            else R.string.xingdun_contact_forward_title,
+        )
+        search.setHint(R.string.xingdun_contact_forward_search_contacts)
     }
 
     private fun completion(done: (Boolean) -> Unit): CompletionHandler = object : CompletionHandler {
@@ -340,6 +460,9 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
         val title: String,
         val avatar: String,
         val group: Boolean,
+        val userID: String? = null,
+        val groupID: String? = null,
+        val member: Boolean = false,
     )
 
     private inner class TargetAdapter(
@@ -360,6 +483,10 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
                 setPadding(20.dp(), 9.dp(), 16.dp(), 9.dp())
                 minimumHeight = 70.dp()
                 setBackgroundColor(Color.WHITE)
+                layoutParams = RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                )
             }
             val avatar = Avatar(parent.context).apply { setSize(Avatar.AvatarSize.M) }
             row.addView(avatar, LinearLayout.LayoutParams(48.dp(), 48.dp()))
@@ -386,7 +513,7 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
                 setTextColor(TEXT_TERTIARY)
             }
             row.addView(arrow)
-            return Holder(row, avatar, title, subtitle)
+            return Holder(row, avatar, title, subtitle, arrow)
         }
 
         override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(items[position])
@@ -397,11 +524,16 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
             private val avatar: Avatar,
             private val title: TextView,
             private val subtitle: TextView,
+            private val arrow: TextView,
         ) : RecyclerView.ViewHolder(itemView) {
             fun bind(target: Target) {
                 avatar.setContent(Avatar.AvatarContent.Image(target.avatar, target.title))
                 title.text = target.title
-                subtitle.setText(if (target.group) R.string.xingdun_contact_forward_group else R.string.xingdun_contact_forward_direct)
+                subtitle.visibility = if (target.member) View.GONE else View.VISIBLE
+                if (!target.member) {
+                    subtitle.setText(if (target.group) R.string.xingdun_contact_forward_group else R.string.xingdun_contact_forward_direct)
+                }
+                arrow.visibility = if (target.member) View.GONE else View.VISIBLE
                 itemView.setOnClickListener { onClick(target) }
             }
         }
@@ -411,6 +543,9 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
 
     companion object {
         const val EXTRA_RESULT_CONVERSATION_ID = "conversation_id_result"
+        const val EXTRA_RESULT_USER_ID = "contact_card_user_id_result"
+        const val EXTRA_RESULT_DISPLAY_NAME = "contact_card_display_name_result"
+        const val EXTRA_RESULT_AVATAR = "contact_card_avatar_result"
         private const val EXTRA_SOURCE_CONVERSATION_ID = "source_conversation_id"
         private const val EXTRA_CONTACT_CARD_PICKER = "contact_card_picker"
         private const val BRAND = 0xFF23B39C.toInt()
