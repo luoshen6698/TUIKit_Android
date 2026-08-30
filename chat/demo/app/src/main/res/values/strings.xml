@@ -666,6 +666,7 @@
     <string name="xingdun_delete_conversation_keep_history">Keep chat history and delete conversation</string>
     <string name="xingdun_delete_conversation_clear_history">Clear chat history and delete conversation</string>
     <string name="xingdun_delete_conversation_failed">Couldn\'t delete the conversation. Try again.</string>
+    <string name="xingdun_add_friend_menu">Add Friend</string>
     <string name="xingdun_qr_manual_payload">Paste QR content for manual verification</string>
     <string name="xingdun_qr_unrecognized">This QR code is not a supported XingDun code.</string>
     <string name="xingdun_qr_user_not_found">The account in this QR code was not found.</string>

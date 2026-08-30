@@ -775,22 +775,23 @@ class MainActivity : BaseActivity() {
                 anchor,
                 listOf(
                     PopupMenuItem(
-                        title = getString(R.string.demo_start_chat),
-                        onClick = {
-                            ContactFlowLauncher.showStartSingleChatPage(this) { conversationId ->
-                                ChatActivity.start(this, conversationId)
-                            }
-                        },
-                        iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_user_add
-                    ),
-                    PopupMenuItem(
-                        title = getString(R.string.demo_create_group),
+                        title = getString(R.string.xingdun_start_group_chat),
                         onClick = {
                             ContactFlowLauncher.showCreateGroupChatPage(this) { conversationId ->
                                 ChatActivity.start(this, conversationId)
                             }
                         },
                         iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_chat_add
+                    ),
+                    PopupMenuItem(
+                        title = getString(R.string.xingdun_add_friend_menu),
+                        onClick = {
+                            XingDunFeatureActivity.start(
+                                this,
+                                XingDunFeatureActivity.MODE_FRIEND_SEARCH,
+                            )
+                        },
+                        iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_user_add
                     ),
                     PopupMenuItem(
                         title = getString(R.string.xingdun_scan_qr),
