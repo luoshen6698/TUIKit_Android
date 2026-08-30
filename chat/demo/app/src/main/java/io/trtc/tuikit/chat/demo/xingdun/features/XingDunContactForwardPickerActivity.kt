@@ -57,6 +57,7 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
     private var tab = Tab.RECENT
     private var query = ""
     private var isLoading = true
+    private var loadFailed = false
     private var recent = emptyList<Target>()
     private var contacts = emptyList<Target>()
     private var groups = emptyList<Target>()
@@ -76,6 +77,28 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
             setBackgroundColor(Color.WHITE)
         }
         root.addView(header(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 56.dp()))
+
+        search = EditText(this).apply {
+            hint = getString(R.string.xingdun_contact_forward_search_contacts)
+            textSize = 15f
+            maxLines = 1
+            isSingleLine = true
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            setTextColor(TEXT_PRIMARY)
+            setHintTextColor(TEXT_TERTIARY)
+            background = rounded(0xFFF4F5F7.toInt(), 22f)
+            setPadding(18.dp(), 0, 18.dp(), 0)
+            doAfterTextChanged {
+                query = it?.toString().orEmpty().trim()
+                render()
+            }
+        }
+        root.addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 44.dp()).apply {
+            marginStart = 16.dp()
+            marginEnd = 16.dp()
+            topMargin = 8.dp()
+            bottomMargin = 8.dp()
+        })
         if (!isContactCardPicker) {
             root.addView(segment(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()).apply {
                 marginStart = 16.dp()
@@ -99,31 +122,12 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
             textSize = 15f
             setTextColor(TEXT_SECONDARY)
             setPadding(24.dp(), 24.dp(), 24.dp(), 24.dp())
+            setOnClickListener {
+                if (loadFailed) refresh()
+            }
         }
         body.addView(status, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         root.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-
-        search = EditText(this).apply {
-            hint = getString(R.string.xingdun_contact_forward_search_contacts)
-            textSize = 15f
-            maxLines = 1
-            isSingleLine = true
-            imeOptions = EditorInfo.IME_ACTION_SEARCH
-            setTextColor(TEXT_PRIMARY)
-            setHintTextColor(TEXT_TERTIARY)
-            background = rounded(0xFFF4F5F7.toInt(), 22f)
-            setPadding(18.dp(), 0, 18.dp(), 0)
-            doAfterTextChanged {
-                query = it?.toString().orEmpty().trim()
-                render()
-            }
-        }
-        root.addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 44.dp()).apply {
-            marginStart = 16.dp()
-            marginEnd = 16.dp()
-            topMargin = 8.dp()
-            bottomMargin = 12.dp()
-        })
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -141,7 +145,7 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
             textSize = 15f
             gravity = Gravity.CENTER
             setTextColor(BRAND)
-            background = rounded(Color.WHITE, 21f)
+            setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener { finish() }
         }, FrameLayout.LayoutParams(72.dp(), 42.dp(), Gravity.START or Gravity.CENTER_VERTICAL))
         addView(TextView(context).apply {
@@ -265,17 +269,21 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
 
     private fun refresh() {
         isLoading = true
+        loadFailed = false
         render()
         val remaining = AtomicInteger(3)
-        val completion = {
+        val failures = AtomicInteger(0)
+        val finishLoad: (Boolean) -> Unit = { failed ->
+            if (failed) failures.incrementAndGet()
             if (remaining.decrementAndGet() == 0) runOnUiThread {
                 isLoading = false
+                loadFailed = failures.get() > 0
                 render()
             }
         }
-        conversationStore.loadConversations(ConversationLoadOption(), completion(completion))
-        contactStore.loadFriends(completion(completion))
-        groupStore.loadJoinedGroups(completion(completion))
+        conversationStore.loadConversations(ConversationLoadOption(), completion(finishLoad))
+        contactStore.loadFriends(completion(finishLoad))
+        groupStore.loadJoinedGroups(completion(finishLoad))
     }
 
     private fun render() {
@@ -290,12 +298,14 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
                 it.conversationID.substringAfter('_').contains(query, ignoreCase = true)
         }
         adapter.submit(visible)
-        list.visibility = if (visible.isEmpty()) View.GONE else View.VISIBLE
-        status.visibility = if (visible.isEmpty()) View.VISIBLE else View.GONE
-        if (visible.isEmpty()) {
+        val showStatus = loadFailed || visible.isEmpty()
+        list.visibility = if (showStatus) View.GONE else View.VISIBLE
+        status.visibility = if (showStatus) View.VISIBLE else View.GONE
+        if (showStatus) {
             status.setText(
                 when {
                     isLoading -> R.string.xingdun_contact_forward_loading
+                    loadFailed -> R.string.xingdun_contact_forward_load_failed
                     query.isNotBlank() -> R.string.xingdun_contact_forward_empty_search
                     tab == Tab.RECENT -> R.string.xingdun_contact_forward_empty_recent
                     tab == Tab.CONTACTS -> R.string.xingdun_contact_forward_empty_contacts
@@ -303,6 +313,8 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
                 }
             )
         }
+        status.isClickable = loadFailed
+        status.setTextColor(if (loadFailed) BRAND else TEXT_SECONDARY)
     }
 
     private fun finishWith(conversationID: String) {
@@ -310,9 +322,9 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
         finish()
     }
 
-    private fun completion(done: () -> Unit): CompletionHandler = object : CompletionHandler {
-        override fun onSuccess() = done()
-        override fun onFailure(code: Int, desc: String) = done()
+    private fun completion(done: (Boolean) -> Unit): CompletionHandler = object : CompletionHandler {
+        override fun onSuccess() = done(false)
+        override fun onFailure(code: Int, desc: String) = done(true)
     }
 
     private fun rounded(color: Int, radiusDp: Float) = GradientDrawable().apply {

@@ -645,6 +645,7 @@
     <string name="xingdun_contact_forward_search_contacts">Search contacts</string>
     <string name="xingdun_contact_forward_search_groups">Search groups</string>
     <string name="xingdun_contact_forward_loading">Loading conversations…</string>
+    <string name="xingdun_contact_forward_load_failed">Couldn’t load forward targets. Tap to reload.</string>
     <string name="xingdun_contact_forward_empty_recent">No recent contacts</string>
     <string name="xingdun_contact_forward_empty_contacts">No contacts</string>
     <string name="xingdun_contact_forward_empty_groups">No groups</string>
