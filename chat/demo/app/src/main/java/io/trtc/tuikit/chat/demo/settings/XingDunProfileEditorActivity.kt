@@ -71,6 +71,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
     private lateinit var card: LinearLayout
     private var counter: TextView? = null
     private var editor: EditText? = null
+    private var editorLimit: Int = 0
     private var selectedGenderValue = "0"
     private val genderOptionTitles = mutableListOf<TextView>()
     private val genderOptionChecks = mutableListOf<TextView>()
@@ -153,17 +154,18 @@ class XingDunProfileEditorActivity : BaseActivity() {
     }
 
     private fun buildTextEditor(limit: Int, multiline: Boolean) {
+        editorLimit = limit
         editor = EditText(this).apply {
             setText(initialValue)
             setSelection(text.length)
             background = null
-            filters = arrayOf(InputFilter.LengthFilter(limit))
+            filters = if (mode == MODE_NICKNAME) emptyArray() else arrayOf(InputFilter.LengthFilter(limit))
             gravity = if (multiline) Gravity.TOP or Gravity.START else Gravity.CENTER_VERTICAL
             minHeight = if (multiline) 130.dp() else 48.dp()
             inputType = when (mode) {
                 MODE_ACCOUNT -> InputType.TYPE_CLASS_TEXT
                 MODE_SIGNATURE -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-                else -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                else -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             }
             if (!multiline) {
                 isSingleLine = true
@@ -181,7 +183,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    counter?.text = getString(R.string.xingdun_profile_character_count, s?.length ?: 0, limit)
+                    updateCounter(s?.toString().orEmpty())
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
@@ -223,7 +225,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
         }
         if (mode != MODE_ACCOUNT) {
             val counterView = TextView(this).apply {
-                text = getString(R.string.xingdun_profile_character_count, initialValue.length, limit)
+                text = getString(R.string.xingdun_profile_character_count, characterCount(initialValue), limit)
                 gravity = Gravity.END
                 setPadding(0, 6.dp(), 4.dp(), 6.dp())
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
@@ -322,6 +324,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
         val value = when (mode) {
             MODE_NICKNAME -> editor?.text?.toString()?.trim().orEmpty().also {
                 if (it.isEmpty()) return showInvalid(R.string.xingdun_profile_nickname_required)
+                if (characterCount(it) > 64) return showInvalid(R.string.xingdun_nickname_too_long)
             }
             MODE_ACCOUNT -> editor?.text?.toString()?.trim().orEmpty().also {
                 if (!it.matches(Regex("^[A-Za-z0-9_]{3,32}$"))) return showInvalid(R.string.xingdun_custom_id_invalid)
@@ -360,7 +363,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
         card.background = rounded(colors.bgColorOperate, 18f)
         editor?.setTextColor(colors.textColorPrimary)
         editor?.setHintTextColor(colors.textColorTertiary)
-        counter?.setTextColor(colors.textColorTertiary)
+        updateCounter(editor?.text?.toString().orEmpty(), colors)
         genderOptionTitles.forEach { it.setTextColor(colors.textColorPrimary) }
         genderOptionChecks.forEach { it.setTextColor(BRAND) }
         genderOptionDividers.forEach { it.setBackgroundColor(colors.strokeColorPrimary) }
@@ -371,6 +374,16 @@ class XingDunProfileEditorActivity : BaseActivity() {
         setColor(color)
         cornerRadius = radiusDp * resources.displayMetrics.density
     }
+
+    private fun updateCounter(value: String, colors: ColorTokens = themeStore.themeState.value.currentTheme.tokens.color) {
+        val count = characterCount(value)
+        counter?.text = getString(R.string.xingdun_profile_character_count, count, editorLimit)
+        counter?.setTextColor(
+            if (mode == MODE_NICKNAME && count > editorLimit) colors.textColorError else colors.textColorTertiary,
+        )
+    }
+
+    private fun characterCount(value: String): Int = value.codePointCount(0, value.length)
 
     private fun Switch.applyXingDunSwitchTint() {
         val states = arrayOf(
