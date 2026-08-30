@@ -3,9 +3,11 @@ package io.trtc.tuikit.chat.demo.settings
 import io.trtc.tuikit.chat.demo.common.AppConstants
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.graphics.Typeface
 import android.util.AttributeSet
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
@@ -269,6 +271,7 @@ class SettingsPageView @JvmOverloads constructor(
         backButton?.setColorFilter(colors.textColorPrimary)
 
         btnLogout.setTextColor(colors.textColorError)
+        btnLogout.compoundDrawableTintList = ColorStateList.valueOf(colors.textColorError)
         val logoutBg = GradientDrawable().apply {
             setColor(colors.bgColorInput)
             cornerRadius = 8f * resources.displayMetrics.density
@@ -303,6 +306,10 @@ class SettingsPageView @JvmOverloads constructor(
         findViewById<View>(R.id.demo_spacer2).visibility = View.GONE
         findViewById<View>(R.id.demo_spacer4).visibility = View.GONE
         rebuildSystemSettingsMenu()
+        btnLogout.setCompoundDrawablesWithIntrinsicBounds(R.drawable.xingdun_ic_settings_logout, 0, 0, 0)
+        btnLogout.compoundDrawablePadding = 10.dp()
+        btnLogout.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+        btnLogout.setPadding(16.dp(), 10.dp(), 16.dp(), 10.dp())
         btnLogout.setOnClickListener { confirmSystemSettingsLogout() }
         applyThemeColors(themeStore.themeState.value.currentTheme.tokens.color)
     }
@@ -328,9 +335,17 @@ class SettingsPageView @JvmOverloads constructor(
         )
         entries.forEachIndexed { index, (title, icon, mode) ->
             val row = LayoutInflater.from(context).inflate(R.layout.xingdun_item_mine_menu, settingsGroupVoice, false)
-            row.findViewById<ImageView>(R.id.xingdun_mine_menu_icon).setImageResource(icon)
+            row.layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 48.dp())
+            row.findViewById<ImageView>(R.id.xingdun_mine_menu_icon).apply {
+                setImageResource(icon)
+                layoutParams = layoutParams.apply {
+                    width = 20.dp()
+                    height = 20.dp()
+                }
+            }
             row.findViewById<TextView>(R.id.xingdun_mine_menu_title).apply {
                 setText(title)
+                textSize = 15f
                 setTypeface(typeface, Typeface.NORMAL)
             }
             if (mode == XingDunFeatureActivity.MODE_LANGUAGE) {
