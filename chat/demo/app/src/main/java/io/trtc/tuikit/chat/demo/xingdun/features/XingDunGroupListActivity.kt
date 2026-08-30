@@ -193,7 +193,7 @@ class XingDunGroupListActivity : BaseActivity() {
         root.addView(pageBody, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(
             XingDunChildBottomNavigation(this).apply {
-                bind(this@XingDunGroupListActivity, MainActivity.TAB_PROFILE)
+                bind(this@XingDunGroupListActivity, MainActivity.TAB_CONTACTS)
             },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )

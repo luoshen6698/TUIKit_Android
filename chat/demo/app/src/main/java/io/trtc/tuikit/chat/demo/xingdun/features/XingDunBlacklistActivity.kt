@@ -11,7 +11,9 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.ViewCompat
@@ -19,12 +21,14 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.uikit.components.common.displayName
 import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionCompletion
@@ -42,11 +46,16 @@ class XingDunBlacklistActivity : BaseActivity() {
     private lateinit var status: LinearLayout
     private lateinit var statusTitle: TextView
     private lateinit var statusMessage: TextView
+    private lateinit var statusIcon: ImageView
+    private lateinit var statusProgress: ProgressBar
+    private lateinit var warning: TextView
     private lateinit var retry: TextView
     private val adapter = BlacklistAdapter(::openDetail, ::confirmUnblock)
     private var contacts: List<ContactInfo> = emptyList()
     private var loading = true
     private var loadError: String? = null
+    private var operationError: String? = null
+    private val operatingUserIDs = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,7 +64,6 @@ class XingDunBlacklistActivity : BaseActivity() {
         lifecycleScope.launch {
             contactStore.state.blackList.collectLatest {
                 contacts = it
-                loading = false
                 render()
             }
         }
@@ -71,6 +79,16 @@ class XingDunBlacklistActivity : BaseActivity() {
             setOnRefreshListener { refresh() }
         }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(PAGE_BACKGROUND) }
+        warning = TextView(this).apply {
+            textSize = 13f
+            setTextColor(0xFF8A6215.toInt())
+            background = rounded(0xFFFFF4D6.toInt(), 10f)
+            setPadding(14.dp(), 10.dp(), 14.dp(), 10.dp())
+            visibility = View.GONE
+        }
+        column.addView(warning, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            marginStart = 16.dp(); marginEnd = 16.dp(); topMargin = 10.dp()
+        })
         column.addView(TextView(this).apply {
             setText(R.string.xingdun_blacklist_explanation); textSize = 13f; setTextColor(TEXT_SECONDARY)
             setPadding(20.dp(), 16.dp(), 20.dp(), 12.dp())
@@ -81,6 +99,25 @@ class XingDunBlacklistActivity : BaseActivity() {
             itemAnimator = null
             setBackgroundColor(Color.WHITE)
         }
+        ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder,
+            ) = false
+
+            override fun getSwipeDirs(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int {
+                val contact = adapter.itemAt(viewHolder.bindingAdapterPosition) ?: return 0
+                return if (operatingUserIDs.contains(contact.userID)) 0 else super.getSwipeDirs(recyclerView, viewHolder)
+            }
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                val position = viewHolder.bindingAdapterPosition
+                val contact = adapter.itemAt(position)
+                adapter.notifyItemChanged(position)
+                if (contact != null) confirmUnblock(contact)
+            }
+        }).attachToRecyclerView(list)
         column.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         column.addView(TextView(this).apply {
             setText(R.string.xingdun_blacklist_footer); textSize = 13f; setTextColor(TEXT_SECONDARY)
@@ -89,15 +126,29 @@ class XingDunBlacklistActivity : BaseActivity() {
         swipeRefresh.addView(column, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         body.addView(swipeRefresh, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
-        statusTitle = TextView(this).apply { textSize = 18f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; setTextColor(TEXT_PRIMARY) }
-        statusMessage = TextView(this).apply { textSize = 14f; gravity = Gravity.CENTER; setTextColor(TEXT_SECONDARY); setPadding(28.dp(), 10.dp(), 28.dp(), 18.dp()) }
+        statusIcon = ImageView(this).apply {
+            setImageResource(R.drawable.xingdun_ic_contacts_blacklist)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+        }
+        statusProgress = ProgressBar(this).apply { isIndeterminate = true }
+        statusTitle = TextView(this).apply { textSize = 16f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; setTextColor(TEXT_PRIMARY) }
+        statusMessage = TextView(this).apply { textSize = 13f; gravity = Gravity.CENTER; setTextColor(TEXT_SECONDARY); setPadding(28.dp(), 8.dp(), 28.dp(), 16.dp()) }
         retry = button(getString(R.string.xingdun_retry), true) { refresh() }
         status = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(24.dp(), 80.dp(), 24.dp(), 24.dp())
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            setPadding(24.dp(), 190.dp(), 24.dp(), 24.dp())
+            addView(statusIcon, LinearLayout.LayoutParams(72.dp(), 72.dp()).apply { bottomMargin = 18.dp() })
+            addView(statusProgress, LinearLayout.LayoutParams(36.dp(), 36.dp()).apply { bottomMargin = 18.dp() })
             addView(statusTitle); addView(statusMessage); addView(retry, LinearLayout.LayoutParams(150.dp(), 42.dp()))
         }
         body.addView(status, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         root.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(
+            XingDunChildBottomNavigation(this).apply {
+                bind(this@XingDunBlacklistActivity, MainActivity.TAB_CONTACTS)
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.setPadding(0, bars.top, 0, bars.bottom)
@@ -117,8 +168,9 @@ class XingDunBlacklistActivity : BaseActivity() {
         }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
         addView(TextView(this@XingDunBlacklistActivity).apply {
             text = "↻"; textSize = 25f; gravity = Gravity.CENTER; setTextColor(BRAND); contentDescription = getString(R.string.xingdun_refresh_blacklist)
+            background = rounded(0xFFF0F8F6.toInt(), 22f)
             setOnClickListener { refresh() }
-        }, FrameLayout.LayoutParams(52.dp(), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END))
+        }, FrameLayout.LayoutParams(42.dp(), 42.dp(), Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = 5.dp() })
     }
 
     private fun refresh() {
@@ -138,8 +190,13 @@ class XingDunBlacklistActivity : BaseActivity() {
     private fun render() {
         adapter.submit(contacts)
         val showList = contacts.isNotEmpty()
+        val visibleWarning = operationError ?: loadError?.takeIf { showList }
+        warning.text = visibleWarning.orEmpty()
+        warning.visibility = if (visibleWarning.isNullOrBlank()) View.GONE else View.VISIBLE
         swipeRefresh.visibility = if (showList) View.VISIBLE else View.GONE
         status.visibility = if (showList) View.GONE else View.VISIBLE
+        statusProgress.visibility = if (loading) View.VISIBLE else View.GONE
+        statusIcon.visibility = if (loading) View.GONE else View.VISIBLE
         retry.visibility = if (loadError != null) View.VISIBLE else View.GONE
         statusTitle.text = when {
             loading -> getString(R.string.xingdun_loading_blacklist)
@@ -165,24 +222,37 @@ class XingDunBlacklistActivity : BaseActivity() {
     }
 
     private fun unblock(contact: ContactInfo) {
+        if (!operatingUserIDs.add(contact.userID)) return
+        operationError = null
+        adapter.notifyDataSetChanged()
         val handled = BusinessActionRegistry.dispatch(
             BusinessAction.SetFriendBlacklist(contact.userID, false),
             object : BusinessActionCompletion {
                 override fun onSuccess(result: BusinessActionResult) {
+                    operatingUserIDs.remove(contact.userID)
                     contactStore.loadBlackList()
+                    render()
                     Toast.makeText(this@XingDunBlacklistActivity, R.string.xingdun_unblock_success, Toast.LENGTH_SHORT).show()
                 }
-                override fun onFailure(code: Int, description: String) = showError(description)
+                override fun onFailure(code: Int, description: String) = showOperationFailure(contact, description)
             }
         )
         if (handled) return
         contactStore.removeFromBlacklist(contact.userID, object : CompletionHandler {
             override fun onSuccess() {
+                operatingUserIDs.remove(contact.userID)
                 contactStore.loadBlackList()
+                render()
                 Toast.makeText(this@XingDunBlacklistActivity, R.string.xingdun_unblock_success, Toast.LENGTH_SHORT).show()
             }
-            override fun onFailure(code: Int, desc: String) = showError(desc)
+            override fun onFailure(code: Int, desc: String) = showOperationFailure(contact, desc)
         })
+    }
+
+    private fun showOperationFailure(contact: ContactInfo, message: String) {
+        operatingUserIDs.remove(contact.userID)
+        operationError = message.ifBlank { getString(R.string.xingdun_unblock_failed) }
+        render()
     }
 
     private fun showError(message: String) = Toast.makeText(
@@ -211,6 +281,7 @@ class XingDunBlacklistActivity : BaseActivity() {
     ) : RecyclerView.Adapter<BlacklistAdapter.Holder>() {
         private var items: List<ContactInfo> = emptyList()
         fun submit(value: List<ContactInfo>) { items = value; notifyDataSetChanged() }
+        fun itemAt(position: Int): ContactInfo? = items.getOrNull(position)
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
             val row = LinearLayout(parent.context).apply {
@@ -240,6 +311,9 @@ class XingDunBlacklistActivity : BaseActivity() {
             holder.account.text = item.userID
             holder.itemView.setOnClickListener { onOpen(item) }
             holder.unblock.setOnClickListener { onUnblock(item) }
+            val operating = operatingUserIDs.contains(item.userID)
+            holder.unblock.isEnabled = !operating
+            holder.unblock.alpha = if (operating) 0.55f else 1f
         }
 
         override fun getItemCount() = items.size
