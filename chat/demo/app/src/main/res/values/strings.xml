@@ -1004,7 +1004,7 @@
     <string name="xingdun_legal_load_failed">The legal document could not be loaded. Check your connection and try again.</string>
     <string name="xingdun_open_document">Open document</string>
     <string name="xingdun_feature_unavailable">This feature is not enabled for the current enterprise.</string>
-    <string name="xingdun_favorites_empty">No favorites yet. Long-press an eligible message in chat to add it.</string>
+    <string name="xingdun_favorites_empty">Long-press a message in chat to add it to favorites.</string>
     <string name="xingdun_favorites_empty_title">No favorites</string>
     <string name="xingdun_favorites_load_failed">Couldn’t load favorites</string>
     <string name="xingdun_favorites_retry_hint">Check your connection and try again.</string>

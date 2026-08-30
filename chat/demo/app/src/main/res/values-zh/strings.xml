@@ -998,7 +998,7 @@
     <string name="xingdun_legal_load_failed">法律文档加载失败，请检查网络后重新加载。</string>
     <string name="xingdun_open_document">打开文档</string>
     <string name="xingdun_feature_unavailable">当前企业未启用此功能。</string>
-    <string name="xingdun_favorites_empty">暂无收藏，在聊天中长按支持的消息即可收藏。</string>
+    <string name="xingdun_favorites_empty">在聊天中长按消息即可收藏。</string>
     <string name="xingdun_favorites_empty_title">暂无收藏</string>
     <string name="xingdun_favorites_load_failed">收藏加载失败</string>
     <string name="xingdun_favorites_retry_hint">请检查网络后重试。</string>
