@@ -464,8 +464,8 @@ open class SelfDetailActivity : BaseActivity() {
             }
             cachedBirthday = profile.string("birthday")?.replace("-", "")?.toLongOrNull()
             cachedAvatarUrl = profile.get("avatar")?.takeUnless { it.isJsonNull }?.asString?.trim()?.takeIf(String::isNotEmpty)
-            phoneItem.setValue(profile.string("phone") ?: getString(R.string.xingdun_not_bound))
-            emailItem.setValue(profile.string("email") ?: getString(R.string.xingdun_not_bound))
+            phoneItem.setValue(profile.string("phone") ?: getString(R.string.xingdun_not_set))
+            emailItem.setValue(profile.string("email") ?: getString(R.string.xingdun_not_set))
             renderCachedProfile()
         }.onFailure { error ->
             showProfileError(error, fallbackRes = R.string.xingdun_profile_load_failed, showToast = showFailure)
@@ -494,8 +494,8 @@ open class SelfDetailActivity : BaseActivity() {
         cachedGender = Gender.UNKNOWN
         cachedBirthday = null
         cachedAvatarUrl = null
-        phoneItem.setValue(getString(R.string.xingdun_not_bound))
-        emailItem.setValue(getString(R.string.xingdun_not_bound))
+        phoneItem.setValue(getString(R.string.xingdun_not_set))
+        emailItem.setValue(getString(R.string.xingdun_not_set))
         renderCachedProfile()
     }
 
