@@ -2547,7 +2547,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 }
                 val nickname = profile.string("nickname") ?: session.nickname
                 Triple(invitation, session, nickname)
-            }.onSuccess { (invitation, _, nickname) ->
+            }.onSuccess { (invitation, session, nickname) ->
                 setBusy(false)
                 val qrBitmap = BarcodeEncoder().encodeBitmap(
                     invitation.qrPayload,
@@ -2555,11 +2555,15 @@ open class XingDunFeatureActivity : BaseActivity() {
                     720,
                     720,
                 )
+                val brandName = XingDunSessionManager.currentEnterprise()
+                    ?.let { XingDunAuthUiSupport.displayName(this@XingDunFeatureActivity, it) }
+                    ?: session.companyName.takeIf(String::isNotBlank)
+                    ?: getString(R.string.demo_app_name)
                 val poster = createInvitePoster(
                     qrBitmap = qrBitmap,
                     inviteCode = invitation.inviteCode,
                     nickname = nickname,
-                    brandName = getString(R.string.xingdun_platform_brand_name),
+                    brandName = brandName,
                 )
                 renderInvitePoster(poster, invitation.shareUrl)
             }.onFailure {
