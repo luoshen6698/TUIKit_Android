@@ -147,4 +147,8 @@ class ChatPageView @JvmOverloads constructor(
     fun locateMessageByID(messageID: String, completion: (Boolean) -> Unit = {}) {
         messageListView.locateMessageByID(messageID, completion = completion)
     }
+
+    fun showMentionMemberDialog() {
+        messageInputView.showMentionMemberDialog()
+    }
 }

@@ -586,6 +586,13 @@ class MessageInputView @JvmOverloads constructor(
         setupQuotePreviewListeners()
     }
 
+    /** Opens the existing mention-member picker from a product-level menu action. */
+    fun showMentionMemberDialog() {
+        if (::mentionController.isInitialized) {
+            mentionController.showMentionMemberDialog()
+        }
+    }
+
     private fun setupQuotePreviewListeners() {
         quoteCloseView.isClickable = true
         quoteCloseView.isFocusable = true

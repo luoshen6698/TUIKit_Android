@@ -651,6 +651,13 @@
     <string name="xingdun_contact_forward_empty_search">No matching targets</string>
     <string name="xingdun_contact_forward_direct">Direct chat</string>
     <string name="xingdun_contact_forward_group">Group chat</string>
+    <string name="xingdun_contact_card_picker_title">Select Contact Card</string>
+    <string name="xingdun_contact_card_unavailable">This contact card is unavailable. Refresh Contacts and try again.</string>
+    <string name="xingdun_chat_more_photos">Photos</string>
+    <string name="xingdun_chat_more_capture">Capture</string>
+    <string name="xingdun_chat_capture_photo">Photo</string>
+    <string name="xingdun_chat_capture_video">Video</string>
+    <string name="xingdun_chat_more_mention">Mention</string>
     <string name="xingdun_contact_detail_recommend_failed">Could not send the contact card. Try again later.</string>
     <string name="xingdun_contact_detail_load_failed">Could Not Load Details</string>
     <string name="xingdun_qr_scan_description">Scan a XingDun account, group, or invitation QR code.</string>

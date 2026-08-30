@@ -51,6 +51,9 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
     private val sourceConversationID: String by lazy {
         intent.getStringExtra(EXTRA_SOURCE_CONVERSATION_ID).orEmpty().trim()
     }
+    private val isContactCardPicker: Boolean by lazy {
+        intent.getBooleanExtra(EXTRA_CONTACT_CARD_PICKER, false)
+    }
     private var tab = Tab.RECENT
     private var query = ""
     private var isLoading = true
@@ -61,6 +64,7 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (isFinishing) return
+        if (isContactCardPicker) tab = Tab.CONTACTS
         buildPage()
         observeStores()
         refresh()
@@ -72,12 +76,14 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
             setBackgroundColor(Color.WHITE)
         }
         root.addView(header(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 56.dp()))
-        root.addView(segment(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()).apply {
-            marginStart = 16.dp()
-            marginEnd = 16.dp()
-            topMargin = 6.dp()
-            bottomMargin = 6.dp()
-        })
+        if (!isContactCardPicker) {
+            root.addView(segment(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()).apply {
+                marginStart = 16.dp()
+                marginEnd = 16.dp()
+                topMargin = 6.dp()
+                bottomMargin = 6.dp()
+            })
+        }
         root.addView(View(this).apply { setBackgroundColor(DIVIDER) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
 
         val body = FrameLayout(this)
@@ -139,7 +145,10 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
             setOnClickListener { finish() }
         }, FrameLayout.LayoutParams(72.dp(), 42.dp(), Gravity.START or Gravity.CENTER_VERTICAL))
         addView(TextView(context).apply {
-            setText(R.string.xingdun_contact_forward_title)
+            setText(
+                if (isContactCardPicker) R.string.xingdun_contact_card_picker_title
+                else R.string.xingdun_contact_forward_title
+            )
             textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
@@ -180,6 +189,12 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
     }
 
     private fun updateTabs() {
+        if (isContactCardPicker) {
+            if (::search.isInitialized) {
+                search.setHint(R.string.xingdun_contact_forward_search_contacts)
+            }
+            return
+        }
         if (!::recentTab.isInitialized) return
         listOf(recentTab to Tab.RECENT, contactsTab to Tab.CONTACTS, groupsTab to Tab.GROUPS).forEach { (view, target) ->
             view.background = rounded(if (tab == target) Color.WHITE else Color.TRANSPARENT, 9f)
@@ -385,6 +400,7 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
     companion object {
         const val EXTRA_RESULT_CONVERSATION_ID = "conversation_id_result"
         private const val EXTRA_SOURCE_CONVERSATION_ID = "source_conversation_id"
+        private const val EXTRA_CONTACT_CARD_PICKER = "contact_card_picker"
         private const val BRAND = 0xFF23B39C.toInt()
         private const val TEXT_PRIMARY = 0xFF15191D.toInt()
         private const val TEXT_SECONDARY = 0xFF7A8088.toInt()
@@ -394,6 +410,12 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
         fun intent(context: Context, sourceConversationID: String): Intent =
             Intent(context, XingDunContactForwardPickerActivity::class.java).apply {
                 putExtra(EXTRA_SOURCE_CONVERSATION_ID, sourceConversationID)
+            }
+
+        fun contactCardIntent(context: Context, sourceConversationID: String): Intent =
+            Intent(context, XingDunContactForwardPickerActivity::class.java).apply {
+                putExtra(EXTRA_SOURCE_CONVERSATION_ID, sourceConversationID)
+                putExtra(EXTRA_CONTACT_CARD_PICKER, true)
             }
     }
 }

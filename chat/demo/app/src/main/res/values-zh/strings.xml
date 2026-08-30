@@ -645,6 +645,13 @@
     <string name="xingdun_contact_forward_empty_search">没有匹配的转发目标</string>
     <string name="xingdun_contact_forward_direct">单聊</string>
     <string name="xingdun_contact_forward_group">群聊</string>
+    <string name="xingdun_contact_card_picker_title">选择名片</string>
+    <string name="xingdun_contact_card_unavailable">当前名片不可用，请刷新通讯录后重试。</string>
+    <string name="xingdun_chat_more_photos">照片</string>
+    <string name="xingdun_chat_more_capture">拍摄</string>
+    <string name="xingdun_chat_capture_photo">照片</string>
+    <string name="xingdun_chat_capture_video">视频</string>
+    <string name="xingdun_chat_more_mention">提醒</string>
     <string name="xingdun_contact_detail_recommend_failed">联系人名片发送失败，请稍后重试。</string>
     <string name="xingdun_contact_detail_load_failed">资料加载失败</string>
     <string name="xingdun_qr_scan_description">扫描星盾账号、群聊或企业邀请二维码。</string>

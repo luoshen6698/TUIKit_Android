@@ -17,6 +17,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.doOnPreDraw
@@ -27,6 +29,7 @@ import io.trtc.tuikit.chat.uikit.components.common.expandTouchTarget
 import io.trtc.tuikit.chat.uikit.components.contactlist.ui.ContactFlowLauncher
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
+import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.atomicxcore.api.contact.GetContactInfoCompletionHandler
@@ -37,6 +40,9 @@ import io.trtc.tuikit.atomicxcore.api.group.GroupEvent
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageStatus
+import io.trtc.tuikit.atomicxcore.api.message.MessageInputStore
+import io.trtc.tuikit.atomicxcore.api.message.SendMessageOption
+import io.trtc.tuikit.atomicxcore.api.message.SendMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.AudioMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.ImageMessagePayload
@@ -47,6 +53,7 @@ import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessagePresentation
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessageParser
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactForwardPickerActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFavoriteMessageRequest
@@ -60,12 +67,15 @@ import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessage
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessagePage
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.messageinput.config.ChatMessageInputConfig
+import io.trtc.tuikit.chat.uikit.components.messageinput.data.MessageInputActionIDs
+import io.trtc.tuikit.chat.uikit.components.messageinput.data.MessageInputMenuAction
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.ChatMessageListConfig
 import io.trtc.tuikit.chat.uikit.components.messagelist.model.MessageActionIDs
 import io.trtc.tuikit.chat.uikit.components.messagelist.model.MessageCustomAction
 import io.trtc.tuikit.chat.uikit.components.messagelist.utils.MessageListMessageSummaryFormatter
 import io.trtc.tuikit.chat.uikit.components.messagelist.utils.senderDisplayName
 import io.trtc.tuikit.chat.uikit.pages.ChatPageView
+import com.google.gson.JsonObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -115,6 +125,14 @@ class ChatActivity : BaseActivity() {
     private var canManagePinnedMessages = false
     private var pinnedPage = XingDunPinnedMessagePage()
     private val activeFavoriteMessageIDs = mutableSetOf<String>()
+    private val contactCardPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val selectedConversationID = result.data
+            ?.getStringExtra(XingDunContactForwardPickerActivity.EXTRA_RESULT_CONVERSATION_ID)
+            .orEmpty()
+        val selectedUserID = selectedConversationID.removePrefix(C2C_CONVERSATION_ID_PREFIX).trim()
+        if (selectedUserID.isNotEmpty()) sendContactCard(selectedUserID)
+    }
 
     private val pinnedRepositoryListener: (String) -> Unit = { changedID ->
         if (::conversationID.isInitialized && changedID == conversationID) {
@@ -132,6 +150,9 @@ class ChatActivity : BaseActivity() {
         private const val UNREAD_BADGE_DEBOUNCE_MS = 300L
         private const val FAVORITE_ACTION_ID = "xingdun.message.favorite"
         private const val PIN_ACTION_ID = "xingdun.message.pin"
+        private const val CONTACT_CARD_ACTION_ID = "xingdun.messageInput.contactCard"
+        private const val MENTION_ACTION_ID = "xingdun.messageInput.mention"
+        private const val CONTACT_CARD_TYPE = "xingdun_contact_card"
 
         fun start(context: Context, conversationID: String) {
             start(context, conversationID, null)
@@ -235,6 +256,7 @@ class ChatActivity : BaseActivity() {
             isShowAudioCall = isC2CConversation,
             isShowVideoCall = isC2CConversation,
         )
+        configureMessageInputActions(messageInputConfig, isC2CConversation)
 
         chatPageView = ChatPageView(this)
         chatPageContainer.addView(chatPageView)
@@ -618,6 +640,115 @@ class ChatActivity : BaseActivity() {
                     badgeContainer.visibility = View.GONE
                 }
             }
+    }
+
+    private fun configureMessageInputActions(
+        config: ChatMessageInputConfig,
+        isC2CConversation: Boolean,
+    ) {
+        config.customizeActions {
+            val takePhoto = items.firstOrNull { it.ID == MessageInputActionIDs.TAKE_PHOTO }
+            val recordVideo = items.firstOrNull { it.ID == MessageInputActionIDs.RECORD_VIDEO }
+
+            replace(MessageInputActionIDs.ALBUM) { action ->
+                action.copy(title = getString(R.string.xingdun_chat_more_photos))
+            }
+            if (takePhoto != null) {
+                replace(MessageInputActionIDs.TAKE_PHOTO) { action ->
+                    action.copy(
+                        title = getString(R.string.xingdun_chat_more_capture),
+                        onClick = {
+                            showCaptureTypeChooser(
+                                takePhoto = takePhoto.onClick,
+                                recordVideo = recordVideo?.onClick,
+                            )
+                        },
+                    )
+                }
+            }
+            remove(MessageInputActionIDs.RECORD_VIDEO)
+
+            if (isC2CConversation) {
+                moveBefore(MessageInputActionIDs.AUDIO_CALL, MessageInputActionIDs.VIDEO_CALL)
+            }
+            add(
+                MessageInputMenuAction(
+                    ID = CONTACT_CARD_ACTION_ID,
+                    title = getString(R.string.xingdun_custom_contact),
+                    iconResID = R.drawable.xingdun_ic_contact_card,
+                    onClick = {
+                        contactCardPicker.launch(
+                            XingDunContactForwardPickerActivity.contactCardIntent(
+                                this@ChatActivity,
+                                conversationID,
+                            )
+                        )
+                    },
+                )
+            )
+            if (!isC2CConversation) {
+                add(
+                    MessageInputMenuAction(
+                        ID = MENTION_ACTION_ID,
+                        title = getString(R.string.xingdun_chat_more_mention),
+                        iconResID = R.drawable.xingdun_ic_mention,
+                        onClick = { chatPageView.showMentionMemberDialog() },
+                    )
+                )
+            }
+        }
+    }
+
+    private fun showCaptureTypeChooser(
+        takePhoto: () -> Unit,
+        recordVideo: (() -> Unit)?,
+    ) {
+        val entries = arrayOf(
+            getString(R.string.xingdun_chat_capture_photo),
+            getString(R.string.xingdun_chat_capture_video),
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.xingdun_chat_more_capture)
+            .setItems(entries) { _, index ->
+                if (index == 0) takePhoto() else recordVideo?.invoke()
+            }
+            .setNegativeButton(R.string.xingdun_cancel, null)
+            .show()
+    }
+
+    private fun sendContactCard(userID: String) {
+        val contact = contactStore.state.friendList.value.firstOrNull { it.userID == userID }
+        if (contact == null) {
+            Toast.makeText(this, R.string.xingdun_contact_card_unavailable, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val displayName = contact.friendRemark?.trim().orEmpty()
+            .ifBlank { contact.nickname?.trim().orEmpty() }
+            .ifBlank { userID }
+        val payload = JsonObject().apply {
+            addProperty("type", CONTACT_CARD_TYPE)
+            addProperty("version", 1)
+            addProperty("user_id", userID)
+            addProperty("display_name", displayName)
+            contact.avatarURL?.trim()?.takeIf(String::isNotEmpty)?.let { addProperty("avatar_url", it) }
+        }.toString()
+        MessageInputStore.create(conversationID).sendMessage(
+            SendMessagePayload.CustomSendMessagePayload(payload, CONTACT_CARD_TYPE, ""),
+            SendMessageOption(),
+            object : CompletionHandler {
+                override fun onSuccess() {
+                    runOnUiThread {
+                        Toast.makeText(this@ChatActivity, R.string.xingdun_contact_detail_recommended, Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                override fun onFailure(code: Int, desc: String) {
+                    runOnUiThread {
+                        Toast.makeText(this@ChatActivity, R.string.xingdun_contact_detail_recommend_failed, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+        )
     }
 
     private fun handleChatSettingNavigation(userID: String? = null, groupID: String? = null) {
