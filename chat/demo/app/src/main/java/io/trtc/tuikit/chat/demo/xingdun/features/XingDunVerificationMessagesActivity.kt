@@ -11,12 +11,16 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.DividerItemDecoration
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -25,15 +29,23 @@ import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.atomicxcore.api.group.GroupApplicationInfo
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
+import io.trtc.tuikit.atomicxcore.api.message.MessageInputStore
+import io.trtc.tuikit.atomicxcore.api.message.SendMessageOption
+import io.trtc.tuikit.atomicxcore.api.message.SendMessagePayload
 import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.contactlist.utils.canHandle
 import io.trtc.tuikit.chat.uikit.components.contactlist.utils.fromUserDisplayName
 import io.trtc.tuikit.chat.uikit.components.contactlist.utils.groupDisplayName
 import io.trtc.tuikit.chat.uikit.components.contactlist.utils.isJoinRequest
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /** iOS-parity verification inbox: friend applications and group applications share one page. */
@@ -46,6 +58,8 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var recycler: RecyclerView
     private lateinit var status: LinearLayout
+    private lateinit var statusIcon: ImageView
+    private lateinit var statusProgress: ProgressBar
     private lateinit var statusTitle: TextView
     private lateinit var statusMessage: TextView
     private lateinit var retry: TextView
@@ -53,10 +67,18 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
 
     private var selectedTab = Tab.FRIEND
     private var friends: List<FriendApplication> = emptyList()
+    private var receivedFriends: List<FriendApplication> = emptyList()
+    private var sentFriends: List<FriendApplication> = emptyList()
+    private var receivedPage = 1
+    private var sentPage = 1
+    private var receivedHasMore = false
+    private var sentHasMore = false
     private var serverGroups: List<ServerGroupInvitation> = emptyList()
     private var nativeGroups: List<GroupApplicationInfo> = emptyList()
     private var loading = false
+    private var loadingMore = false
     private var loadError: String? = null
+    private var groupPollingJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,14 +88,25 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         refresh()
     }
 
+    override fun onStart() {
+        super.onStart()
+        if (selectedTab == Tab.GROUP) startGroupPolling()
+    }
+
+    override fun onStop() {
+        groupPollingJob?.cancel()
+        groupPollingJob = null
+        super.onStop()
+    }
+
     private fun buildPage() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(PAGE_BACKGROUND)
         }
         root.addView(header(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()))
-        root.addView(segment(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dp()).apply {
-            marginStart = 16.dp(); marginEnd = 16.dp(); topMargin = 8.dp(); bottomMargin = 8.dp()
+        root.addView(segment(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 36.dp()).apply {
+            marginStart = 16.dp(); marginEnd = 16.dp(); topMargin = 6.dp(); bottomMargin = 6.dp()
         })
 
         val body = FrameLayout(this)
@@ -87,10 +120,54 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
             adapter = this@XingDunVerificationMessagesActivity.adapter
             itemAnimator = null
             setBackgroundColor(Color.WHITE)
+            addItemDecoration(DividerItemDecoration(context, DividerItemDecoration.VERTICAL))
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    if (dy <= 0 || selectedTab != Tab.FRIEND || loading || loadingMore) return
+                    val manager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+                    if (manager.findLastVisibleItemPosition() >=
+                        this@XingDunVerificationMessagesActivity.adapter.itemCount - 3
+                    ) {
+                        loadMoreFriends()
+                    }
+                }
+            })
         }
+        ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder,
+            ) = false
+
+            override fun getSwipeDirs(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int {
+                val friend = (adapter.rowAt(viewHolder.bindingAdapterPosition) as? VerificationRow.Friend)?.value
+                return if (selectedTab == Tab.FRIEND && friend?.status != STATUS_PENDING) {
+                    super.getSwipeDirs(recyclerView, viewHolder)
+                } else {
+                    0
+                }
+            }
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                val position = viewHolder.bindingAdapterPosition
+                val friend = (adapter.rowAt(position) as? VerificationRow.Friend)?.value
+                if (friend == null || friend.status == STATUS_PENDING) {
+                    if (position != RecyclerView.NO_POSITION) adapter.notifyItemChanged(position)
+                } else {
+                    confirmDeleteFriend(friend, position)
+                }
+            }
+        }).attachToRecyclerView(recycler)
         swipeRefresh.addView(recycler, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         body.addView(swipeRefresh, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
+        statusIcon = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+        }
+        statusProgress = ProgressBar(this).apply {
+            isIndeterminate = true
+        }
         statusTitle = TextView(this).apply {
             textSize = 18f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; setTextColor(TEXT_PRIMARY)
         }
@@ -100,6 +177,8 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         retry = actionButton(getString(R.string.xingdun_retry), primary = true) { refresh() }
         status = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(24.dp(), 80.dp(), 24.dp(), 24.dp())
+            addView(statusIcon, LinearLayout.LayoutParams(72.dp(), 72.dp()).apply { bottomMargin = 14.dp() })
+            addView(statusProgress, LinearLayout.LayoutParams(36.dp(), 36.dp()).apply { bottomMargin = 14.dp() })
             addView(statusTitle)
             addView(statusMessage)
             addView(retry, LinearLayout.LayoutParams(150.dp(), 42.dp()))
@@ -151,7 +230,13 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         if (selectedTab == tab) return
         selectedTab = tab
         render()
-        if (tab == Tab.GROUP) refreshNativeGroups()
+        if (tab == Tab.GROUP) {
+            refreshNativeGroups()
+            startGroupPolling()
+        } else {
+            groupPollingJob?.cancel()
+            groupPollingJob = null
+        }
     }
 
     private fun refresh() {
@@ -164,14 +249,15 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                 val session = XingDunSessionManager.currentSession()
                     ?: error(getString(R.string.xingdun_session_expired))
                 val client = XingDunSessionManager.apiClient()
-                val received: FriendApplicationPage = client.get(
-                    session, "friend/receivedApply", mapOf("page" to "1", "pageSize" to "50"), FriendApplicationPage::class.java
-                )
-                val sent: FriendApplicationPage = client.get(
-                    session, "friend/sentApply", mapOf("page" to "1", "pageSize" to "50"), FriendApplicationPage::class.java
-                )
-                friends = (received.list.map { it.copy(direction = Direction.RECEIVED) } +
-                    sent.list.map { it.copy(direction = Direction.SENT) }).sortedByDescending { it.id }
+                val received = loadFriendPage(session, Direction.RECEIVED, 1)
+                val sent = loadFriendPage(session, Direction.SENT, 1)
+                receivedFriends = received.list.map { it.copy(direction = Direction.RECEIVED) }
+                sentFriends = sent.list.map { it.copy(direction = Direction.SENT) }
+                receivedPage = received.page
+                sentPage = sent.page
+                receivedHasMore = received.hasMore
+                sentHasMore = sent.hasMore
+                mergeFriends()
                 if (received.unreadCount > 0) {
                     runCatching { client.postEmpty(session, "friend/readApply", emptyMap<String, String>()) }
                 }
@@ -190,6 +276,62 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                 render()
             }
         }
+    }
+
+    private suspend fun loadFriendPage(
+        session: XingDunStoredSession,
+        direction: Direction,
+        page: Int,
+    ): FriendApplicationPage {
+        val path = if (direction == Direction.RECEIVED) "friend/receivedApply" else "friend/sentApply"
+        val result: FriendApplicationPage = XingDunSessionManager.apiClient().get(
+            session,
+            path,
+            mapOf("page" to page.toString(), "pageSize" to FRIEND_PAGE_SIZE.toString()),
+            FriendApplicationPage::class.java,
+        )
+        val effectivePageSize = result.pageSize.takeIf { it > 0 } ?: FRIEND_PAGE_SIZE
+        val hasMore = result.list.size >= effectivePageSize &&
+            (result.total <= 0 || result.page * effectivePageSize < result.total)
+        return result.copy(hasMore = hasMore)
+    }
+
+    private fun loadMoreFriends() {
+        if (!receivedHasMore && !sentHasMore) return
+        loadingMore = true
+        lifecycleScope.launch {
+            try {
+                val session = XingDunSessionManager.currentSession()
+                    ?: error(getString(R.string.xingdun_session_expired))
+                if (receivedHasMore) {
+                    val page = loadFriendPage(session, Direction.RECEIVED, receivedPage + 1)
+                    receivedFriends = (receivedFriends + page.list.map { it.copy(direction = Direction.RECEIVED) })
+                        .distinctBy(FriendApplication::id)
+                    receivedPage = page.page
+                    receivedHasMore = page.hasMore
+                }
+                if (sentHasMore) {
+                    val page = loadFriendPage(session, Direction.SENT, sentPage + 1)
+                    sentFriends = (sentFriends + page.list.map { it.copy(direction = Direction.SENT) })
+                        .distinctBy(FriendApplication::id)
+                    sentPage = page.page
+                    sentHasMore = page.hasMore
+                }
+                mergeFriends()
+                render()
+            } catch (error: Throwable) {
+                showError(error.message.orEmpty())
+            } finally {
+                loadingMore = false
+            }
+        }
+    }
+
+    private fun mergeFriends() {
+        friends = (receivedFriends + sentFriends).sortedWith(
+            compareByDescending<FriendApplication> { it.createdAt.orEmpty() }
+                .thenByDescending(FriendApplication::id),
+        )
     }
 
     private fun observeNativeGroups() {
@@ -218,11 +360,44 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         })
     }
 
+    private fun startGroupPolling() {
+        if (groupPollingJob?.isActive == true || selectedTab != Tab.GROUP) return
+        groupPollingJob = lifecycleScope.launch {
+            while (isActive && selectedTab == Tab.GROUP) {
+                delay(GROUP_REFRESH_INTERVAL_MS)
+                refreshGroupApplicationsQuietly()
+            }
+        }
+    }
+
+    private suspend fun refreshGroupApplicationsQuietly() {
+        val session = XingDunSessionManager.currentSession() ?: return
+        runCatching {
+            val type = object : TypeToken<List<ServerGroupInvitation>>() {}.type
+            XingDunSessionManager.apiClient().get<List<ServerGroupInvitation>>(
+                session,
+                "team/invitations",
+                emptyMap(),
+                type,
+            )
+        }.onSuccess {
+            serverGroups = it
+            loadError = null
+            refreshNativeGroups()
+            render()
+        }.onFailure {
+            if (serverGroups.isEmpty() && nativeGroups.isEmpty()) {
+                loadError = it.message.orEmpty().ifBlank { getString(R.string.xingdun_verification_load_failed) }
+                render()
+            }
+        }
+    }
+
     private fun render() {
         friendTab.background = rounded(if (selectedTab == Tab.FRIEND) Color.WHITE else Color.TRANSPARENT, 8f)
         groupTab.background = rounded(if (selectedTab == Tab.GROUP) Color.WHITE else Color.TRANSPARENT, 8f)
-        clear.visibility = if (selectedTab == Tab.FRIEND) View.VISIBLE else View.INVISIBLE
-        clear.isEnabled = friends.any { it.status != STATUS_PENDING }
+        clear.visibility = View.VISIBLE
+        clear.isEnabled = selectedTab == Tab.FRIEND && friends.any { it.status != STATUS_PENDING }
         clear.alpha = if (clear.isEnabled) 1f else .35f
 
         val rows = if (selectedTab == Tab.FRIEND) {
@@ -238,6 +413,12 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         val hasRows = rows.isNotEmpty()
         recycler.visibility = if (hasRows) View.VISIBLE else View.GONE
         status.visibility = if (hasRows) View.GONE else View.VISIBLE
+        statusProgress.visibility = if (loading) View.VISIBLE else View.GONE
+        statusIcon.visibility = if (loading) View.GONE else View.VISIBLE
+        statusIcon.setImageResource(
+            if (selectedTab == Tab.FRIEND) R.drawable.xingdun_ic_contacts_new_friends
+            else R.drawable.xingdun_ic_contacts_groups,
+        )
         retry.visibility = if (loadError != null) View.VISIBLE else View.GONE
         statusTitle.text = when {
             loading -> getString(if (selectedTab == Tab.FRIEND) R.string.xingdun_loading_friend_applications else R.string.xingdun_loading_group_applications)
@@ -261,7 +442,10 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                     XingDunSessionManager.apiClient().postEmpty(
                         session, if (approve) "friend/agree" else "friend/reject", mapOf("apply_id" to application.id)
                     )
-                    if (approve) contactStore.loadFriends()
+                    if (approve) {
+                        contactStore.loadFriends()
+                        sendFriendAcceptedMessageAndOpen(application)
+                    }
                     refresh()
                 }
             }
@@ -276,7 +460,10 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                     XingDunSessionManager.apiClient().postEmpty(
                         session, "team/handleInvitation", mapOf("invitation_id" to invitation.id, "approve" to approve)
                     )
-                    if (approve) groupStore.loadJoinedGroups()
+                    if (approve) {
+                        groupStore.loadJoinedGroups()
+                        ChatActivity.start(this@XingDunVerificationMessagesActivity, "group_${invitation.groupId}")
+                    }
                     refresh()
                 }
             }
@@ -287,7 +474,13 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         confirm(if (approve) R.string.xingdun_confirm_accept_group else R.string.xingdun_confirm_reject_group) {
             val completion = object : CompletionHandler {
                 override fun onSuccess() {
-                    if (approve) groupStore.loadJoinedGroups()
+                    if (approve) {
+                        groupStore.loadJoinedGroups()
+                        ChatActivity.start(
+                            this@XingDunVerificationMessagesActivity,
+                            "group_${application.groupID}",
+                        )
+                    }
                     refreshNativeGroups()
                 }
                 override fun onFailure(code: Int, desc: String) = showError(desc)
@@ -295,6 +488,57 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
             if (approve) groupStore.acceptApplication(application, completion)
             else groupStore.refuseApplication(application, completion)
         }
+    }
+
+    private fun sendFriendAcceptedMessageAndOpen(application: FriendApplication) {
+        val userID = application.user?.timUserId?.trim().orEmpty()
+        if (userID.isEmpty()) return
+        val conversationID = "c2c_$userID"
+        val openConversation = {
+            ChatActivity.start(this@XingDunVerificationMessagesActivity, conversationID)
+        }
+        MessageInputStore.create(conversationID).sendMessage(
+            SendMessagePayload.TextSendMessagePayload(getString(R.string.xingdun_friend_accepted_auto_message)),
+            SendMessageOption(),
+            object : CompletionHandler {
+                override fun onSuccess() = runOnUiThread(openConversation)
+                override fun onFailure(code: Int, desc: String) = runOnUiThread {
+                    Toast.makeText(
+                        this@XingDunVerificationMessagesActivity,
+                        R.string.xingdun_friend_accepted_message_failed,
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    openConversation()
+                }
+            },
+        )
+    }
+
+    private fun confirmDeleteFriend(application: FriendApplication, position: Int) {
+        AlertDialog.Builder(this)
+            .setMessage(R.string.xingdun_confirm_delete_application)
+            .setNegativeButton(android.R.string.cancel) { _, _ -> adapter.notifyItemChanged(position) }
+            .setOnCancelListener { adapter.notifyItemChanged(position) }
+            .setPositiveButton(R.string.xingdun_delete) { _, _ ->
+                lifecycleScope.launch {
+                    try {
+                        val session = requireNotNull(XingDunSessionManager.currentSession())
+                        XingDunSessionManager.apiClient().postEmpty(
+                            session,
+                            "friend/deleteApply",
+                            mapOf("apply_id" to application.id),
+                        )
+                        receivedFriends = receivedFriends.filterNot { it.id == application.id }
+                        sentFriends = sentFriends.filterNot { it.id == application.id }
+                        mergeFriends()
+                        render()
+                    } catch (error: Throwable) {
+                        showError(error.message.orEmpty())
+                        adapter.notifyItemChanged(position)
+                    }
+                }
+            }
+            .show()
     }
 
     private fun confirm(messageRes: Int, operation: () -> Unit) {
@@ -348,8 +592,11 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         private const val BRAND = 0xFF23B39C.toInt()
         private const val TEXT_PRIMARY = 0xFF15191D.toInt()
         private const val TEXT_SECONDARY = 0xFF7A8088.toInt()
+        private const val SUCCESS = 0xFF2FA86F.toInt()
         private const val SEGMENT_BG = 0xFFE9ECEF.toInt()
         private const val STATUS_PENDING = 0
+        private const val FRIEND_PAGE_SIZE = 20
+        private const val GROUP_REFRESH_INTERVAL_MS = 5_000L
 
         fun start(context: Context) = context.startActivity(Intent(context, XingDunVerificationMessagesActivity::class.java))
     }
@@ -362,7 +609,8 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         val list: List<FriendApplication> = emptyList(),
         val page: Int = 1,
         val pageSize: Int = 20,
-        val unreadCount: Int = 0
+        val unreadCount: Int = 0,
+        val hasMore: Boolean = false,
     )
 
     private data class FriendApplication(
@@ -370,6 +618,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         val fromUserId: Int = 0,
         val toUserId: Int = 0,
         val applyMsg: String? = null,
+        val createdAt: String? = null,
         val status: Int = 0,
         val isRead: Int = 0,
         val fromUser: ApplicationUser? = null,
@@ -411,6 +660,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     ) : RecyclerView.Adapter<VerificationAdapter.Holder>() {
         private var rows: List<VerificationRow> = emptyList()
         fun submit(value: List<VerificationRow>) { rows = value; notifyDataSetChanged() }
+        fun rowAt(position: Int): VerificationRow? = rows.getOrNull(position)
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
             val row = LinearLayout(parent.context).apply {
@@ -420,7 +670,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                 layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             }
             val avatar = Avatar(parent.context)
-            row.addView(avatar, LinearLayout.LayoutParams(48.dp(), 48.dp()))
+            row.addView(avatar, LinearLayout.LayoutParams(44.dp(), 44.dp()))
             val texts = LinearLayout(parent.context).apply { orientation = LinearLayout.VERTICAL }
             val name = TextView(parent.context).apply { textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(TEXT_PRIMARY); maxLines = 1 }
             val summary = TextView(parent.context).apply { textSize = 13f; setTextColor(TEXT_SECONDARY); maxLines = 2 }
@@ -452,7 +702,10 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
             holder.summary.text = presentation.summary
             holder.actions.visibility = if (presentation.canHandle) View.VISIBLE else View.GONE
             holder.state.visibility = if (presentation.canHandle) View.GONE else View.VISIBLE
-            holder.state.text = presentation.status
+            holder.state.text = listOf(presentation.statusIcon, presentation.status)
+                .filter(String::isNotEmpty)
+                .joinToString(" ")
+            holder.state.setTextColor(presentation.statusColor)
             holder.reject.setOnClickListener { dispatch(row, false) }
             holder.accept.setOnClickListener { dispatch(row, true) }
         }
@@ -482,7 +735,9 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         val avatar: String?,
         val summary: String,
         val status: String,
-        val canHandle: Boolean
+        val canHandle: Boolean,
+        val statusIcon: String,
+        val statusColor: Int,
     )
 
     private fun friendPresentation(item: FriendApplication): Presentation {
@@ -498,7 +753,16 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                 else -> R.string.xingdun_friend_waiting
             })
         } else item.applyMsg?.takeIf(String::isNotBlank) ?: getString(R.string.xingdun_friend_request_default)
-        return Presentation(name, user?.avatar, summary, statusText(item.status), item.direction == Direction.RECEIVED && item.status == 0)
+        val state = statusPresentation(item.status)
+        return Presentation(
+            name,
+            user?.avatar,
+            summary,
+            state.text,
+            item.direction == Direction.RECEIVED && item.status == STATUS_PENDING,
+            state.icon,
+            state.color,
+        )
     }
 
     private fun serverGroupPresentation(item: ServerGroupInvitation) = Presentation(
@@ -506,7 +770,9 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         item.inviterAvatar,
         item.message?.takeIf(String::isNotBlank) ?: getString(R.string.xingdun_group_invitation_summary, item.groupName.ifBlank { item.groupId }),
         groupStatusText(item.status),
-        item.status == 0
+        item.status == STATUS_PENDING,
+        if (item.status == 1) "✓" else if (item.status == 2) "✕" else "",
+        if (item.status == 1) SUCCESS else TEXT_SECONDARY,
     )
 
     private fun nativeGroupPresentation(item: GroupApplicationInfo) = Presentation(
@@ -514,8 +780,20 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         item.fromUserAvatarURL,
         getString(if (item.isJoinRequest) R.string.xingdun_group_join_summary else R.string.xingdun_group_invite_summary, item.groupDisplayName),
         if (item.canHandle) getString(R.string.xingdun_pending) else getString(R.string.xingdun_processed),
-        item.canHandle
+        item.canHandle,
+        if (item.canHandle) "" else "✓",
+        if (item.canHandle) TEXT_SECONDARY else SUCCESS,
     )
+
+    private data class StatusPresentation(val text: String, val icon: String, val color: Int)
+
+    private fun statusPresentation(status: Int) = when (status) {
+        1 -> StatusPresentation(getString(R.string.xingdun_agreed), "✓", SUCCESS)
+        2 -> StatusPresentation(getString(R.string.xingdun_rejected), "✕", TEXT_SECONDARY)
+        3 -> StatusPresentation(getString(R.string.xingdun_expired), "○", TEXT_SECONDARY)
+        0 -> StatusPresentation(getString(R.string.xingdun_pending), "", TEXT_SECONDARY)
+        else -> StatusPresentation(getString(R.string.xingdun_unknown_status), "", TEXT_SECONDARY)
+    }
 
     private fun statusText(status: Int) = getString(when (status) {
         0 -> R.string.xingdun_pending
