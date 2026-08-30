@@ -2430,11 +2430,12 @@ open class XingDunFeatureActivity : BaseActivity() {
                     maxLines = 1
                 })
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (muted) addView(TextView(context).apply {
-                text = "🔇"
-                textSize = 16f
+            if (muted) addView(ImageView(context).apply {
+                setImageResource(R.drawable.xingdun_ic_speaker_muted)
+                imageTintList = ColorStateList.valueOf(0xFF8A8A8F.toInt())
                 contentDescription = getString(R.string.xingdun_muted)
-            })
+                setPadding(3.dp(), 12.dp(), 3.dp(), 12.dp())
+            }, LinearLayout.LayoutParams(26.dp(), 44.dp()))
             if (!group) addView(ImageView(context).apply {
                 setImageResource(android.R.drawable.sym_action_chat)
                 imageTintList = ColorStateList.valueOf(0xFF168F83.toInt())
