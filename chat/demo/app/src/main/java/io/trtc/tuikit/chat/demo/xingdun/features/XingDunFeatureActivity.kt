@@ -28,11 +28,6 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -51,6 +46,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
@@ -163,7 +159,6 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var pendingPersonalQRCode: XingDunPersonalQRCodeArtifact? = null
     private var personalQRCodeSaving = false
     private var personalQRCodeSaveButton: Button? = null
-    private var legalWebView: WebView? = null
     private var reportTargetFilter: String? = null
     private var reportStatusFilter: Int? = null
     private var reportPage = 1
@@ -355,13 +350,6 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     override fun onDestroy() {
         if (mode == MODE_FAVORITES) favoriteAudioPlayer.stop()
-        legalWebView?.apply {
-            stopLoading()
-            loadUrl("about:blank")
-            removeAllViews()
-            destroy()
-        }
-        legalWebView = null
         attachmentSelectionHandler = null
         attachmentFailureHandler = null
         super.onDestroy()
@@ -5861,90 +5849,22 @@ open class XingDunFeatureActivity : BaseActivity() {
             ?.takeIf { BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false) }
         val url = debugUrl ?: session?.let { if (privacy) it.privacy.privacyUrl else it.privacy.userAgreementUrl }
         val uri = runCatching { Uri.parse(url.orEmpty()) }.getOrNull()
-        if (uri == null || uri.scheme?.lowercase() !in setOf("http", "https") || uri.host.isNullOrBlank()) {
-            showBundledLegalDocument(privacy)
-            return
+        val remoteUri = uri?.takeIf {
+            it.scheme?.lowercase() in setOf("http", "https") && !it.host.isNullOrBlank()
         }
-        val remoteUrl = uri.toString()
-        val background = 0xFFF5F5F9.toInt()
-        window.statusBarColor = background
-        window.navigationBarColor = background
-        headerBar.setBackgroundColor(background)
-        scrollView.setBackgroundColor(background)
-        content.setBackgroundColor(background)
-        content.setPadding(0, 0, 0, 0)
-
-        val frame = FrameLayout(this)
-        val webView = WebView(this).apply {
-            setBackgroundColor(Color.WHITE)
-            settings.javaScriptEnabled = false
-            settings.domStorageEnabled = false
-            settings.allowFileAccess = false
-            settings.allowContentAccess = false
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) settings.safeBrowsingEnabled = true
-        }
-        legalWebView = webView
-        val progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100
-            progress = 0
-        }
-        val errorPanel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            visibility = View.GONE
-            setPadding(28.dp(), 28.dp(), 28.dp(), 28.dp())
-            addView(TextView(context).apply {
-                setText(R.string.xingdun_legal_load_failed)
-                textSize = 16f
-                gravity = Gravity.CENTER
-                setTextColor(0xFF6D6D72.toInt())
-            })
-            addView(actionButton(R.string.xingdun_retry) {
-                visibility = View.GONE
-                webView.visibility = View.VISIBLE
-                progress.visibility = View.VISIBLE
-                status.setText(R.string.xingdun_loading)
-                webView.loadUrl(remoteUrl)
-            })
-        }
-        webView.webChromeClient = object : WebChromeClient() {
-            override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                progress.progress = newProgress
-                progress.visibility = if (newProgress >= 100) View.GONE else View.VISIBLE
+        if (remoteUri != null) {
+            val launched = runCatching {
+                CustomTabsIntent.Builder()
+                    .setShowTitle(true)
+                    .build()
+                    .launchUrl(this, remoteUri)
+            }.isSuccess
+            if (launched) {
+                finish()
+                return
             }
         }
-        webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val next = request?.url ?: return true
-                return next.scheme?.lowercase() !in setOf("http", "https")
-            }
-
-            override fun onPageFinished(view: WebView?, loadedUrl: String?) {
-                if (errorPanel.visibility != View.VISIBLE) {
-                    progress.visibility = View.GONE
-                    status.text = ""
-                }
-            }
-
-            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                if (request?.isForMainFrame == true) {
-                    progress.visibility = View.GONE
-                    webView.visibility = View.GONE
-                    errorPanel.visibility = View.VISIBLE
-                    status.setText(R.string.xingdun_legal_load_failed)
-                }
-            }
-        }
-        frame.addView(webView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        frame.addView(errorPanel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        frame.addView(progress, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 3.dp(), Gravity.TOP))
-        val documentHeight = (resources.displayMetrics.heightPixels - 130.dp()).coerceAtLeast(480.dp())
-        content.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, documentHeight))
-        status.setText(R.string.xingdun_loading)
-        webView.loadUrl(remoteUrl)
+        showBundledLegalDocument(privacy)
     }
 
     private fun showBundledLegalDocument(privacy: Boolean) {
