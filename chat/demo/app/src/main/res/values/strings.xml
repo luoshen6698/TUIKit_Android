@@ -159,6 +159,7 @@
     <string name="demo_search_hint">Search</string>
     <string name="demo_chat_title">Chat</string>
     <string name="demo_chat_setting_contact_info">Contact Info</string>
+    <string name="demo_chat_setting_chat_settings">Chat Settings</string>
     <string name="demo_chat_setting_group_info">Group Info</string>
     <string name="demo_chat_setting_group_settings">Group Settings</string>
     <string name="xingdun_report_group">Report this group</string>

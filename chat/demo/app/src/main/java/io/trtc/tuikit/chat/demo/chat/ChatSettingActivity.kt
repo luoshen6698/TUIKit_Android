@@ -116,7 +116,7 @@ open class ChatSettingActivity : BaseActivity() {
         badgeContainer.visibility = View.GONE
 
         if (!userID.isNullOrEmpty()) {
-            tvTitle.text = getString(R.string.demo_chat_setting_contact_info)
+            tvTitle.text = getString(R.string.demo_chat_setting_chat_settings)
             val settingView = C2CChatSettingView(this)
             settingContainer.addView(settingView)
             settingView.setup(
@@ -132,6 +132,15 @@ open class ChatSettingActivity : BaseActivity() {
                     { XingDunAutoDeleteActivity.start(this, "c2c_$userID", canUpdate = true) }
                 } else {
                     null
+                },
+                searchMessagesTitle = getString(R.string.xingdun_search_chat_content),
+                onSearchMessagesClick = {
+                    ConversationSearchActivity.start(
+                        context = this,
+                        conversationID = "c2c_$userID",
+                        displayName = settingView.currentContactDisplayName(),
+                        avatarURL = settingView.currentContactAvatarURL(),
+                    )
                 },
                 onContactDeleted = {
                     EventBus.post(Event.ContactDeleted(userID))

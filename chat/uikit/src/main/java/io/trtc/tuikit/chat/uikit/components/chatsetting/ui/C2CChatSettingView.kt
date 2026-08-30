@@ -46,6 +46,8 @@ class C2CChatSettingView @JvmOverloads constructor(
     private var onVideoCallClick: (() -> Unit)? = null
     private var onAutoDeleteClick: (() -> Unit)? = null
     private var autoDeleteTitle: String? = null
+    private var onSearchMessagesClick: (() -> Unit)? = null
+    private var searchMessagesTitle: String? = null
     private var onContactDeleted: (() -> Unit)? = null
     private var showChatBackground = true
 
@@ -87,6 +89,8 @@ class C2CChatSettingView @JvmOverloads constructor(
         onVideoCallClick: (() -> Unit)? = null,
         autoDeleteTitle: String? = null,
         onAutoDeleteClick: (() -> Unit)? = null,
+        searchMessagesTitle: String? = null,
+        onSearchMessagesClick: (() -> Unit)? = null,
         onContactDeleted: (() -> Unit)? = null,
         showChatBackground: Boolean = true,
     ) {
@@ -95,6 +99,8 @@ class C2CChatSettingView @JvmOverloads constructor(
         this.onVideoCallClick = onVideoCallClick
         this.autoDeleteTitle = autoDeleteTitle
         this.onAutoDeleteClick = onAutoDeleteClick
+        this.searchMessagesTitle = searchMessagesTitle
+        this.onSearchMessagesClick = onSearchMessagesClick
         this.onContactDeleted = onContactDeleted
         this.showChatBackground = showChatBackground
 
@@ -232,6 +238,15 @@ class C2CChatSettingView @JvmOverloads constructor(
                 }
             }
             contentLayout.addView(chatBackgroundRow)
+        }
+
+        if (onSearchMessagesClick != null && !searchMessagesTitle.isNullOrBlank()) {
+            addSpacer(contentLayout)
+            contentLayout.addView(SettingRowNavigate(context).apply {
+                setTitle(searchMessagesTitle.orEmpty())
+                setShowArrow(true)
+                setOnClickListener { onSearchMessagesClick?.invoke() }
+            })
         }
 
         if (onAutoDeleteClick != null && !autoDeleteTitle.isNullOrBlank()) {
@@ -524,6 +539,13 @@ class C2CChatSettingView @JvmOverloads constructor(
         viewScope?.cancel()
         viewScope = null
     }
+
+    fun currentContactDisplayName(): String {
+        val vm = viewModel ?: return currentUserID.orEmpty()
+        return vm.friendRemark.value.ifBlank { vm.nickname.value }.ifBlank { vm.userID }
+    }
+
+    fun currentContactAvatarURL(): String? = viewModel?.avatar?.value?.takeIf { it.isNotBlank() }
 
     private fun applyThemeColors(colors: ColorTokens) {
         setBackgroundColor(colors.bgColorTopBar)

@@ -157,6 +157,7 @@
     <string name="demo_search_hint">搜索</string>
     <string name="demo_chat_title">聊天</string>
     <string name="demo_chat_setting_contact_info">联系人信息</string>
+    <string name="demo_chat_setting_chat_settings">聊天设置</string>
     <string name="demo_chat_setting_group_info">群组信息</string>
     <string name="demo_chat_setting_group_settings">群设置</string>
     <string name="xingdun_report_group">举报该群</string>
