@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Editable
@@ -13,6 +14,7 @@ import android.text.InputFilter
 import android.text.InputType
 import android.text.TextWatcher
 import android.util.TypedValue
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -294,7 +296,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
             val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(initialValue)
             if (parsed != null) calendar.time = parsed
         }
-        datePicker = DatePicker(this).apply {
+        datePicker = DatePicker(ContextThemeWrapper(this, R.style.XingDunDatePickerTheme)).apply {
             maxDate = System.currentTimeMillis()
             visibility = if (birthdayIsSet) View.VISIBLE else View.GONE
             init(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)) { _, _, _, _ ->
@@ -306,6 +308,7 @@ class XingDunProfileEditorActivity : BaseActivity() {
             gravity = Gravity.CENTER_VERTICAL
             minHeight = 56.dp()
             isChecked = birthdayIsSet
+            applyXingDunSwitchTint()
             setOnCheckedChangeListener { _, checked ->
                 birthdayIsSet = checked
                 datePicker?.visibility = if (checked) View.VISIBLE else View.GONE
@@ -367,6 +370,15 @@ class XingDunProfileEditorActivity : BaseActivity() {
         shape = GradientDrawable.RECTANGLE
         setColor(color)
         cornerRadius = radiusDp * resources.displayMetrics.density
+    }
+
+    private fun Switch.applyXingDunSwitchTint() {
+        val states = arrayOf(
+            intArrayOf(android.R.attr.state_checked),
+            intArrayOf(-android.R.attr.state_checked),
+        )
+        thumbTintList = ColorStateList(states, intArrayOf(Color.WHITE, Color.WHITE))
+        trackTintList = ColorStateList(states, intArrayOf(BRAND, 0xFFBDBDC2.toInt()))
     }
 
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()

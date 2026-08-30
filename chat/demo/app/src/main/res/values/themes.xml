@@ -67,4 +67,9 @@
         <item name="android:textSize">15sp</item>
         <item name="android:textStyle">bold</item>
     </style>
+
+    <style name="XingDunDatePickerTheme">
+        <item name="android:colorAccent">#23B39C</item>
+        <item name="android:colorControlActivated">#23B39C</item>
+    </style>
 </resources>
