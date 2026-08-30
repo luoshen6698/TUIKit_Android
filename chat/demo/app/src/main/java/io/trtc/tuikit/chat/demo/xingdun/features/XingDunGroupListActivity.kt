@@ -7,6 +7,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
@@ -43,6 +44,8 @@ class XingDunGroupListActivity : BaseActivity() {
     private val conversationStore = ConversationListStore.create()
 
     private lateinit var swipeRefresh: SwipeRefreshLayout
+    private lateinit var searchField: EditText
+    private lateinit var searchContainer: FrameLayout
     private lateinit var warning: TextView
     private lateinit var countHeader: TextView
     private lateinit var status: LinearLayout
@@ -59,6 +62,8 @@ class XingDunGroupListActivity : BaseActivity() {
     private var isLoading = true
     private var loadFailed = false
     private var metadataFailed = false
+    private var observedGroupSignature: String? = null
+    private var pullDownStartY = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,6 +73,25 @@ class XingDunGroupListActivity : BaseActivity() {
         refresh()
     }
 
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> pullDownStartY = event.y
+            MotionEvent.ACTION_UP -> {
+                if (::searchContainer.isInitialized && ::list.isInitialized &&
+                    searchContainer.visibility != View.VISIBLE &&
+                    !list.canScrollVertically(-1) &&
+                    event.y - pullDownStartY >= 44.dp()
+                ) {
+                    searchContainer.post {
+                        showSearch()
+                        if (::swipeRefresh.isInitialized) swipeRefresh.isRefreshing = false
+                    }
+                }
+            }
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
     private fun buildPage() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -75,7 +99,7 @@ class XingDunGroupListActivity : BaseActivity() {
         }
         root.addView(header(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()))
 
-        root.addView(EditText(this).apply {
+        searchField = EditText(this).apply {
             hint = getString(R.string.xingdun_group_list_search_hint)
             textSize = 15f
             maxLines = 1
@@ -88,11 +112,16 @@ class XingDunGroupListActivity : BaseActivity() {
                 searchQuery = it?.toString().orEmpty().trim()
                 render()
             }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 44.dp()).apply {
-            marginStart = 16.dp()
-            marginEnd = 16.dp()
-            topMargin = 12.dp()
-        })
+        }
+        searchContainer = FrameLayout(this).apply {
+            visibility = View.GONE
+            addView(searchField, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 44.dp()).apply {
+                marginStart = 16.dp()
+                marginEnd = 16.dp()
+                topMargin = 10.dp()
+            })
+        }
+        root.addView(searchContainer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 58.dp()))
 
         warning = TextView(this).apply {
             setText(R.string.xingdun_group_list_metadata_warning)
@@ -128,6 +157,13 @@ class XingDunGroupListActivity : BaseActivity() {
             adapter = this@XingDunGroupListActivity.adapter
             setBackgroundColor(Color.WHITE)
             itemAnimator = null
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    if (dy > 12 && searchContainer.visibility == View.VISIBLE && searchQuery.isBlank()) {
+                        hideSearch()
+                    }
+                }
+            })
         }
         swipeRefresh.addView(list, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         pageBody.addView(swipeRefresh, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -190,19 +226,18 @@ class XingDunGroupListActivity : BaseActivity() {
             marginStart = 58.dp()
             marginEnd = 58.dp()
         })
-        addView(TextView(context).apply {
-            text = "↻"
-            textSize = 25f
-            gravity = Gravity.CENTER
-            setTextColor(BRAND)
-            contentDescription = getString(R.string.xingdun_group_list_refresh)
-            setOnClickListener { refresh() }
-        }, FrameLayout.LayoutParams(52.dp(), 52.dp(), Gravity.END))
     }
 
     private fun observeStores() {
         lifecycleScope.launch {
             groupStore.state.joinedGroupList.collectLatest {
+                val signature = it.joinToString("|") { group ->
+                    "${group.groupID}:${group.groupName}:${group.memberCount}"
+                }
+                if (observedGroupSignature != null && observedGroupSignature != signature) {
+                    loadMetadata()
+                }
+                observedGroupSignature = signature
                 groups = it
                 render()
             }
@@ -263,6 +298,15 @@ class XingDunGroupListActivity : BaseActivity() {
                 render()
             }
         }
+    }
+
+    private fun showSearch() {
+        searchContainer.visibility = View.VISIBLE
+    }
+
+    private fun hideSearch() {
+        searchField.clearFocus()
+        searchContainer.visibility = View.GONE
     }
 
     private fun render() {
@@ -384,57 +428,65 @@ class XingDunGroupListActivity : BaseActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(20.dp(), 12.dp(), 18.dp(), 12.dp())
-            minimumHeight = 78.dp()
+            orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.WHITE)
-            addView(Avatar(context).apply {
-                id = ID_GROUP_AVATAR
-                setSize(Avatar.AvatarSize.M)
-            }, LinearLayout.LayoutParams(52.dp(), 52.dp()))
             addView(LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(14.dp(), 0, 0, 0)
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(20.dp(), 9.dp(), 18.dp(), 9.dp())
+                minimumHeight = 70.dp()
+                addView(Avatar(context).apply {
+                    id = ID_GROUP_AVATAR
+                    setSize(Avatar.AvatarSize.M)
+                }, LinearLayout.LayoutParams(48.dp(), 48.dp()))
                 addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    addView(TextView(context).apply {
-                        id = ID_GROUP_NAME
-                        textSize = 16f
-                        typeface = Typeface.DEFAULT_BOLD
-                        setTextColor(TEXT_PRIMARY)
-                        maxLines = 1
-                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                    addView(TextView(context).apply {
-                        id = ID_GROUP_BADGE
-                        setText(R.string.xingdun_group_list_official)
-                        textSize = 11f
-                        setTextColor(BRAND)
-                        background = rounded(0xFFE1F7F2.toInt(), 8f)
-                        setPadding(8.dp(), 2.dp(), 8.dp(), 2.dp())
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(14.dp(), 0, 0, 0)
+                    addView(LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        addView(TextView(context).apply {
+                            id = ID_GROUP_NAME
+                            textSize = 16f
+                            typeface = Typeface.DEFAULT_BOLD
+                            setTextColor(TEXT_PRIMARY)
+                            maxLines = 1
+                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                        addView(TextView(context).apply {
+                            id = ID_GROUP_BADGE
+                            setText(R.string.xingdun_group_list_official)
+                            textSize = 11f
+                            setTextColor(BRAND)
+                            background = rounded(0xFFE1F7F2.toInt(), 8f)
+                            setPadding(8.dp(), 2.dp(), 8.dp(), 2.dp())
+                        })
                     })
+                    addView(TextView(context).apply {
+                        id = ID_GROUP_SUBTITLE
+                        textSize = 13f
+                        setTextColor(TEXT_SECONDARY)
+                        setPadding(0, 3.dp(), 0, 0)
+                    })
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(TextView(context).apply {
+                    id = ID_GROUP_MUTED
+                    text = "♩̸"
+                    textSize = 18f
+                    setTextColor(TEXT_TERTIARY)
+                    contentDescription = getString(R.string.xingdun_group_list_muted)
+                    setPadding(10.dp(), 0, 0, 0)
                 })
                 addView(TextView(context).apply {
-                    id = ID_GROUP_SUBTITLE
-                    textSize = 13f
-                    setTextColor(TEXT_SECONDARY)
-                    setPadding(0, 5.dp(), 0, 0)
+                    text = "›"
+                    textSize = 25f
+                    setTextColor(TEXT_TERTIARY)
+                    setPadding(8.dp(), 0, 0, 0)
                 })
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(TextView(context).apply {
-                id = ID_GROUP_MUTED
-                text = "♩̸"
-                textSize = 18f
-                setTextColor(TEXT_TERTIARY)
-                contentDescription = getString(R.string.xingdun_group_list_muted)
-                setPadding(10.dp(), 0, 0, 0)
-            })
-            addView(TextView(context).apply {
-                text = "›"
-                textSize = 25f
-                setTextColor(TEXT_TERTIARY)
-                setPadding(8.dp(), 0, 0, 0)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(View(context).apply {
+                setBackgroundColor(0xFFE8EAED.toInt())
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1).apply {
+                marginStart = 82.dp()
             })
         }
 
