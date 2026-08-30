@@ -58,6 +58,7 @@ class XingDunContactDetailActivity : BaseActivity() {
     private val timUserID: String by lazy { intent.getStringExtra(EXTRA_USER_ID).orEmpty().trim() }
     private var detail: XingDunContactDetail? = null
     private var isOperating = false
+    private var operationError: String? = null
     private var relationshipState: String = RELATIONSHIP_UNKNOWN
     private val remarkEditor = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
@@ -188,14 +189,16 @@ class XingDunContactDetailActivity : BaseActivity() {
                 )
             }
             detailResult.onSuccess { response ->
-                relationshipState = if (response.isBlacklist) RELATIONSHIP_BLOCKED else RELATIONSHIP_FRIEND
+                if (relationshipState == RELATIONSHIP_FRIEND || relationshipState == RELATIONSHIP_BLOCKED) {
+                    relationshipState = if (response.isBlacklist) RELATIONSHIP_BLOCKED else RELATIONSHIP_FRIEND
+                }
                 detail = response.copy(
                     timUserId = response.timUserId.trim().ifEmpty { timUserID },
                     nickname = response.nickname.normalized() ?: detail?.nickname,
                     avatar = response.avatar.normalized() ?: detail?.avatar
                 )
             }
-            if (detailResult.isFailure && relationshipState == RELATIONSHIP_UNKNOWN) {
+            if (relationshipState == RELATIONSHIP_UNKNOWN) {
                 runCatching {
                     XingDunSessionManager.apiClient().getNullable<JsonObject>(
                         session,
@@ -239,6 +242,15 @@ class XingDunContactDetailActivity : BaseActivity() {
         val current = detail ?: return
         content.removeAllViews()
         content.addView(profileCard(current), cardParams())
+        operationError?.takeIf(String::isNotBlank)?.let { message ->
+            content.addView(TextView(this).apply {
+                text = message
+                textSize = 13f
+                setTextColor(0xFF8A6215.toInt())
+                background = rounded(0xFFFFF4D6.toInt(), 10f)
+                setPadding(14.dp(), 10.dp(), 14.dp(), 10.dp())
+            }, cardParams(top = 12))
+        }
 
         val friendRelationship = isFriendRelationship()
         val features = XingDunSessionManager.currentSession()?.features
@@ -278,8 +290,10 @@ class XingDunContactDetailActivity : BaseActivity() {
             }, cardParams(top = 16))
         }
         configureBottomAction()
-        more.isEnabled = true
-        more.alpha = 1f
+        chatButton.isEnabled = !isOperating
+        chatButton.alpha = if (isOperating) .55f else 1f
+        more.isEnabled = !isOperating
+        more.alpha = if (isOperating) .35f else 1f
     }
 
     private fun profileCard(current: XingDunContactDetail): View = card().apply {
@@ -383,8 +397,11 @@ class XingDunContactDetailActivity : BaseActivity() {
     private fun setBlacklist(enabled: Boolean) {
         if (isOperating) return
         isOperating = true
+        operationError = null
+        render()
         val success = {
             isOperating = false
+            operationError = null
             detail = detail?.copy(isBlacklist = enabled)
             ContactStore.shared.loadBlackList()
             render()
@@ -394,7 +411,11 @@ class XingDunContactDetailActivity : BaseActivity() {
                 Toast.LENGTH_SHORT
             ).show()
         }
-        val failure = { _: Int, _: String -> isOperating = false; render() }
+        val failure = { _: Int, description: String ->
+            isOperating = false
+            operationError = description.ifBlank { getString(R.string.xingdun_action_failed) }
+            render()
+        }
         if (!dispatch(BusinessAction.SetFriendBlacklist(timUserID, enabled), success, failure)) {
             val handler = completion(success, failure)
             if (enabled) ContactStore.shared.addToBlacklist(timUserID, handler)
@@ -414,13 +435,19 @@ class XingDunContactDetailActivity : BaseActivity() {
     private fun deleteContact() {
         if (isOperating) return
         isOperating = true
+        operationError = null
+        render()
         val success = {
             isOperating = false
             ContactStore.shared.loadFriends()
             Toast.makeText(this, R.string.xingdun_contact_detail_deleted, Toast.LENGTH_SHORT).show()
             finish()
         }
-        val failure = { _: Int, _: String -> isOperating = false }
+        val failure = { _: Int, description: String ->
+            isOperating = false
+            operationError = description.ifBlank { getString(R.string.xingdun_action_failed) }
+            render()
+        }
         if (!dispatch(BusinessAction.DeleteFriend(timUserID), success, failure)) {
             ContactStore.shared.deleteFriend(timUserID, completion(success, failure))
         }
