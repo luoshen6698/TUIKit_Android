@@ -4732,6 +4732,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         addNotificationSectionHeader(R.string.xingdun_notification_in_app_section)
         val sound = Switch(this).apply {
             setText(R.string.xingdun_notification_sound)
+            applyXingDunSwitchTint()
             isChecked = XingDunForegroundNotificationManager.soundEnabled(this@XingDunFeatureActivity)
             setOnCheckedChangeListener { _, checked ->
                 XingDunForegroundNotificationManager.setSoundEnabled(this@XingDunFeatureActivity, checked)
@@ -4739,6 +4740,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
         val vibration = Switch(this).apply {
             setText(R.string.xingdun_notification_vibration)
+            applyXingDunSwitchTint()
             isChecked = XingDunForegroundNotificationManager.vibrationEnabled(this@XingDunFeatureActivity)
             setOnCheckedChangeListener { _, checked ->
                 XingDunForegroundNotificationManager.setVibrationEnabled(this@XingDunFeatureActivity, checked)
@@ -4779,6 +4781,15 @@ open class XingDunFeatureActivity : BaseActivity() {
                 setPadding(0, 8.dp(), 0, 0)
             })
         }, notificationSectionLayoutParams())
+    }
+
+    private fun Switch.applyXingDunSwitchTint() {
+        val states = arrayOf(
+            intArrayOf(android.R.attr.state_checked),
+            intArrayOf(-android.R.attr.state_checked),
+        )
+        thumbTintList = ColorStateList(states, intArrayOf(Color.WHITE, Color.WHITE))
+        trackTintList = ColorStateList(states, intArrayOf(0xFF20A88F.toInt(), 0xFFBDBDC2.toInt()))
     }
 
     private fun showLanguageSettings() {
