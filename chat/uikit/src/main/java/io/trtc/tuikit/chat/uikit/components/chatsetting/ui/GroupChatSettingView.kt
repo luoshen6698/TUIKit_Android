@@ -232,6 +232,10 @@ class GroupChatSettingView @JvmOverloads constructor(
         viewModel?.refreshSelfNameCard()
     }
 
+    fun refreshGroupData() {
+        viewModel?.refreshGroupData()
+    }
+
     fun currentGroupDisplayName(): String = viewModel?.groupName?.value.orEmpty()
 
     fun currentGroupAvatarURL(): String? = viewModel?.avatarURL?.value

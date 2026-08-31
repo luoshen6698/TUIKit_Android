@@ -500,9 +500,10 @@ class GroupChatSettingViewModel(
         override fun onFailure(code: Int, description: String) = onFailure(code, description)
     })
 
-    private fun refreshGroupData() {
+    fun refreshGroupData() {
         _groupStore.loadJoinedGroups()
         _groupMemberStore.loadMembers(roleList = listOf(GroupMemberFilterRole.ALL))
+        refreshSelfNameCard()
     }
 
     private fun updateConversationInfo(update: (ConversationInfo) -> ConversationInfo) {

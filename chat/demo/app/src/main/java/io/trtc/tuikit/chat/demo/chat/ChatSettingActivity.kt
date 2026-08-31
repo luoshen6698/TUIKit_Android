@@ -253,7 +253,7 @@ open class ChatSettingActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        groupSettingView?.refreshSelfNameCard()
+        groupSettingView?.refreshGroupData()
     }
 
     private fun handleGroupMemberClick(memberUserID: String) {
