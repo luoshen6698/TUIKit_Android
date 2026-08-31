@@ -34,6 +34,9 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.viewpager2.widget.ViewPager2
 import com.google.gson.JsonObject
+import com.tencent.imsdk.v2.V2TIMConversationOperationResult
+import com.tencent.imsdk.v2.V2TIMManager
+import com.tencent.imsdk.v2.V2TIMValueCallback
 import io.trtc.tuikit.chat.uikit.components.contactlist.ui.ContactFlowLauncher
 import io.trtc.tuikit.chat.uikit.components.contactlist.config.ChatContactListConfig
 import io.trtc.tuikit.chat.uikit.components.contactlist.model.ContactCustomItem
@@ -878,10 +881,10 @@ class MainActivity : BaseActivity() {
         }
 
         addAction(R.string.xingdun_delete_conversation_keep_history, isDestructive = true) {
-            conversationListStore.deleteConversation(conversationID)
+            deleteConversation(conversationID, clearMessages = false)
         }
         addAction(R.string.xingdun_delete_conversation_clear_history, isDestructive = true) {
-            clearHistoryAndDeleteConversation(conversationID)
+            deleteConversation(conversationID, clearMessages = true)
         }
         addAction(R.string.xingdun_cancel) {}
 
@@ -892,23 +895,33 @@ class MainActivity : BaseActivity() {
         dialog.show()
     }
 
-    private fun clearHistoryAndDeleteConversation(conversationID: String) {
-        conversationListStore.clearConversationMessages(
-            conversationID,
-            object : CompletionHandler {
-                override fun onSuccess() {
-                    conversationListStore.deleteConversation(conversationID)
+    private fun deleteConversation(conversationID: String, clearMessages: Boolean) {
+        V2TIMManager.getConversationManager().deleteConversationList(
+            listOf(conversationID),
+            clearMessages,
+            object : V2TIMValueCallback<List<V2TIMConversationOperationResult>> {
+                override fun onSuccess(results: List<V2TIMConversationOperationResult>) {
+                    val failure = results.firstOrNull { it.resultCode != 0 }
+                    if (failure != null) {
+                        showDeleteConversationFailure(failure.resultInfo)
+                    } else {
+                        conversationListStore.loadConversations()
+                    }
                 }
 
-                override fun onFailure(code: Int, desc: String) {
-                    Toast.makeText(
-                        this@MainActivity,
-                        desc.ifBlank { getString(R.string.xingdun_delete_conversation_failed) },
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                override fun onError(code: Int, desc: String) {
+                    showDeleteConversationFailure(desc)
                 }
             },
         )
+    }
+
+    private fun showDeleteConversationFailure(description: String?) = runOnUiThread {
+        Toast.makeText(
+            this@MainActivity,
+            description.orEmpty().ifBlank { getString(R.string.xingdun_delete_conversation_failed) },
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     private fun createContactsPage(): View {
