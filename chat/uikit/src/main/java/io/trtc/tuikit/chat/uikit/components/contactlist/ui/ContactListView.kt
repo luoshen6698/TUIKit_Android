@@ -2,6 +2,7 @@ package io.trtc.tuikit.chat.uikit.components.contactlist.ui
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.PorterDuff
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.Gravity
@@ -500,6 +501,20 @@ class ContactListView @JvmOverloads constructor(
         }
         rowView.addView(badgeView)
 
+        val disclosureView = ImageView(context).apply {
+            setImageResource(R.drawable.uikit_ic_arrow_right)
+            setColorFilter(colors.textColorTertiary, PorterDuff.Mode.SRC_IN)
+        }
+        rowView.addView(
+            disclosureView,
+            LinearLayout.LayoutParams(
+                dp2px(16f, dm).toInt(),
+                dp2px(16f, dm).toInt(),
+            ).apply {
+                marginStart = dp2px(8f, dm).toInt()
+            },
+        )
+
         itemContainer.addView(rowView)
 
         return DefaultItemViewHolder(
@@ -507,7 +522,8 @@ class ContactListView @JvmOverloads constructor(
             rowView = rowView,
             iconView = iconView,
             titleView = titleView,
-            badgeView = badgeView
+            badgeView = badgeView,
+            disclosureView = disclosureView,
         )
     }
 
@@ -564,6 +580,7 @@ class ContactListView @JvmOverloads constructor(
             holder.itemContainer.setBackgroundColor(colors.bgColorOperate)
             holder.titleView.setTextColor(colors.textColorPrimary)
             holder.badgeView.setBadgeColor(colors.textColorError)
+            holder.disclosureView.setColorFilter(colors.textColorTertiary, PorterDuff.Mode.SRC_IN)
         }
 
         headerView?.let { container ->
@@ -590,7 +607,8 @@ class ContactListView @JvmOverloads constructor(
         val rowView: LinearLayout,
         val iconView: ImageView,
         val titleView: TextView,
-        val badgeView: BadgeView
+        val badgeView: BadgeView,
+        val disclosureView: ImageView,
     )
 
     private class BadgeView(context: Context) : View(context) {

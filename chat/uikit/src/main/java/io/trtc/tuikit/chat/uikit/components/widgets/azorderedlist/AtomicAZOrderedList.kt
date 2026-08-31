@@ -2,6 +2,7 @@ package io.trtc.tuikit.chat.uikit.components.widgets.azorderedlist
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.PorterDuff
 import android.graphics.Typeface
 import android.text.TextUtils
 import android.util.AttributeSet
@@ -11,6 +12,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -19,6 +21,7 @@ import androidx.recyclerview.widget.SimpleItemAnimator
 import io.trtc.tuikit.atomicx.common.util.ScreenUtil.dp2px
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
+import io.trtc.tuikit.chat.uikit.R
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import io.trtc.tuikit.chat.uikit.components.widgets.azorderedlist.pinyinhelper.Pinyin
 import kotlinx.coroutines.CoroutineScope
@@ -283,6 +286,7 @@ class AtomicAZOrderedList @JvmOverloads constructor(
                     holder.avatar.setContent(
                         Avatar.AvatarContent.Image(item.item.avatarUrl, item.item.label)
                     )
+                    holder.disclosureView.setColorFilter(colors.textColorTertiary, PorterDuff.Mode.SRC_IN)
                     holder.itemView.setOnClickListener {
                         onItemClickListener?.invoke(item.item)
                     }
@@ -306,6 +310,7 @@ class AtomicAZOrderedList @JvmOverloads constructor(
     private class DataItemViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val avatar: Avatar = view.findViewWithTag("avatar")
         val textView: TextView = view.findViewWithTag("label")
+        val disclosureView: ImageView = view.findViewWithTag("disclosure")
     }
 
     private fun createSectionHeaderView(context: Context): View {
@@ -398,6 +403,21 @@ class AtomicAZOrderedList @JvmOverloads constructor(
             )
         }
         rowLayout.addView(textView)
+
+        val disclosureView = ImageView(context).apply {
+            tag = "disclosure"
+            setImageResource(R.drawable.uikit_ic_arrow_right)
+            setColorFilter(colors.textColorTertiary, PorterDuff.Mode.SRC_IN)
+        }
+        rowLayout.addView(
+            disclosureView,
+            LinearLayout.LayoutParams(
+                dp2px(16f, dm).toInt(),
+                dp2px(16f, dm).toInt(),
+            ).apply {
+                marginStart = dp2px(8f, dm).toInt()
+            },
+        )
 
         container.addView(rowLayout)
         return container
