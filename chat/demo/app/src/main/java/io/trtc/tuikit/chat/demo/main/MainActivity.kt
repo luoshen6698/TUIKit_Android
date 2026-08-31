@@ -947,6 +947,15 @@ class MainActivity : BaseActivity() {
                 anchor,
                 listOf(
                     PopupMenuItem(
+                        title = getString(R.string.xingdun_start_group_chat),
+                        onClick = {
+                            ContactFlowLauncher.showCreateGroupChatPage(this) { conversationId ->
+                                ChatActivity.start(this, conversationId)
+                            }
+                        },
+                        iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_chat_add
+                    ),
+                    PopupMenuItem(
                         title = getString(R.string.demo_add_friend),
                         onClick = {
                             XingDunFeatureActivity.start(
@@ -956,15 +965,6 @@ class MainActivity : BaseActivity() {
                             )
                         },
                         iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_user_add
-                    ),
-                    PopupMenuItem(
-                        title = getString(R.string.xingdun_start_group_chat),
-                        onClick = {
-                            ContactFlowLauncher.showCreateGroupChatPage(this) { conversationId ->
-                                ChatActivity.start(this, conversationId)
-                            }
-                        },
-                        iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_chat_add
                     ),
                     PopupMenuItem(
                         title = getString(R.string.xingdun_scan_qr),

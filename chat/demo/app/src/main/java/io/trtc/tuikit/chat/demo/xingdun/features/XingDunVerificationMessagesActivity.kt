@@ -24,6 +24,7 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
@@ -678,6 +679,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         val total: Int = 0,
         val list: List<FriendApplication> = emptyList(),
         val page: Int = 1,
+        @SerializedName(value = "page_size", alternate = ["pageSize"])
         val pageSize: Int = 20,
         val unreadCount: Int = 0,
         val hasMore: Boolean = false,
@@ -688,10 +690,13 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         val fromUserId: Int = 0,
         val toUserId: Int = 0,
         val applyMsg: String? = null,
+        @SerializedName(value = "create_time", alternate = ["created_at", "createdAt"])
         val createdAt: String? = null,
         val status: Int = 0,
         val isRead: Int = 0,
+        @SerializedName(value = "from_user", alternate = ["fromUser"])
         val fromUser: ApplicationUser? = null,
+        @SerializedName(value = "to_user", alternate = ["toUser"])
         val toUser: ApplicationUser? = null,
         val direction: Direction = Direction.RECEIVED
     ) {
