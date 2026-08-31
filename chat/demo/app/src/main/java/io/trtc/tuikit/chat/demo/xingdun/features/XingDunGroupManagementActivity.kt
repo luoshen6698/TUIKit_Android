@@ -71,6 +71,7 @@ open class XingDunGroupManagementActivity : BaseActivity() {
     private var administratorCount = 0
     private var warningMessage: String? = null
     private var isOperating = false
+    private var hasResumedOnce = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -105,6 +106,18 @@ open class XingDunGroupManagementActivity : BaseActivity() {
         activityScope?.cancel()
         activityScope = null
         super.onDestroy()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (isDebugPreview) return
+        if (!hasResumedOnce) {
+            hasResumedOnce = true
+            return
+        }
+        if (!isOperating && detail != null) {
+            load()
+        }
     }
 
     private fun bindViews() {
