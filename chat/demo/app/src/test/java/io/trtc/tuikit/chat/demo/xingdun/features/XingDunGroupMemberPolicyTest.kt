@@ -41,10 +41,42 @@ class XingDunGroupMemberPolicyTest {
         assertFalse(XingDunGroupMemberPolicy.canTransferOwner(detail(role = "member")))
     }
 
+    @Test
+    fun `invite policy follows tenant mode and privileged roles`() {
+        assertFalse(XingDunGroupMemberPolicy.canInvite(detail(role = "member", inviteMode = 2)))
+        assertTrue(XingDunGroupMemberPolicy.canInvite(detail(role = "member", inviteMode = 1)))
+        assertTrue(XingDunGroupMemberPolicy.canInvite(detail(role = "administrator", inviteMode = 2)))
+        assertTrue(XingDunGroupMemberPolicy.canInvite(detail(role = "owner", inviteMode = 2)))
+        assertTrue(XingDunGroupMemberPolicy.canInvite(detail(role = "member", inviteMode = 2, assignedCs = true)))
+    }
+
+    @Test
+    fun `mute policy only allows operators to mute ordinary members`() {
+        val normal = member("normal")
+        assertTrue(XingDunGroupMemberPolicy.canMute(detail(role = "owner"), normal, "self"))
+        assertTrue(XingDunGroupMemberPolicy.canMute(detail(role = "administrator"), normal, "self"))
+        assertFalse(XingDunGroupMemberPolicy.canMute(detail(role = "member"), normal, "self"))
+        assertFalse(XingDunGroupMemberPolicy.canMute(detail(role = "owner"), member("admin", "administrator"), "self"))
+        assertFalse(XingDunGroupMemberPolicy.canMute(detail(role = "owner"), member("self"), "self"))
+    }
+
+    @Test
+    fun `administrator changes remain owner-only and exclude work groups`() {
+        val normal = member("normal")
+        val admin = member("admin", "administrator")
+        assertTrue(XingDunGroupMemberPolicy.canChangeAdministrator(detail(role = "owner"), normal, "self"))
+        assertTrue(XingDunGroupMemberPolicy.canChangeAdministrator(detail(role = "owner"), admin, "self"))
+        assertFalse(XingDunGroupMemberPolicy.canChangeAdministrator(detail(role = "administrator"), normal, "self"))
+        assertFalse(XingDunGroupMemberPolicy.canChangeAdministrator(detail(role = "owner", type = "Work"), normal, "self"))
+        assertFalse(XingDunGroupMemberPolicy.canChangeAdministrator(detail(role = "owner"), member("owner", "owner"), "self"))
+        assertFalse(XingDunGroupMemberPolicy.canChangeAdministrator(detail(role = "owner"), member("self"), "self"))
+    }
+
     private fun detail(
         role: String = "member",
         type: String = "Public",
         viewMode: Int = 2,
+        inviteMode: Int = 2,
         assignedCs: Boolean = false,
     ) = XingDunGroupDetail(
         groupId = "group-1",
@@ -52,6 +84,7 @@ class XingDunGroupMemberPolicyTest {
         currentUserRole = role,
         groupType = type,
         viewMemberCardMode = viewMode,
+        inviteMode = inviteMode,
         currentUserIsAssignedCs = assignedCs,
     )
 

@@ -839,22 +839,57 @@ class MainActivity : BaseActivity() {
     }
 
     private fun showDeleteConversationConfirmation(conversationID: String) {
-        android.app.AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_delete_conversation_title)
-            .setMessage(R.string.xingdun_delete_conversation_message)
-            .setItems(
-                arrayOf(
-                    getString(R.string.xingdun_delete_conversation_keep_history),
-                    getString(R.string.xingdun_delete_conversation_clear_history),
+        val actionContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24.dpToPx(), 0, 24.dpToPx(), 8.dpToPx())
+        }
+        val messageView = TextView(this).apply {
+            setText(R.string.xingdun_delete_conversation_message)
+            setTextColor(android.graphics.Color.parseColor("#666666"))
+            textSize = 14f
+            setPadding(0, 8.dpToPx(), 0, 12.dpToPx())
+        }
+        actionContainer.addView(messageView)
+
+        lateinit var dialog: android.app.AlertDialog
+        fun addAction(labelRes: Int, isDestructive: Boolean = false, onClick: () -> Unit) {
+            val actionView = TextView(this).apply {
+                setText(labelRes)
+                gravity = Gravity.CENTER
+                textSize = 16f
+                setTextColor(
+                    ContextCompat.getColor(
+                        this@MainActivity,
+                        if (isDestructive) android.R.color.holo_red_dark else android.R.color.holo_blue_dark,
+                    )
                 )
-            ) { _, which ->
-                when (which) {
-                    0 -> conversationListStore.deleteConversation(conversationID)
-                    1 -> clearHistoryAndDeleteConversation(conversationID)
+                isClickable = true
+                isFocusable = true
+                setBackgroundResource(android.R.drawable.list_selector_background)
+                setOnClickListener {
+                    dialog.dismiss()
+                    onClick()
                 }
             }
-            .setNegativeButton(R.string.xingdun_cancel, null)
-            .show()
+            actionContainer.addView(
+                actionView,
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dpToPx()),
+            )
+        }
+
+        addAction(R.string.xingdun_delete_conversation_keep_history, isDestructive = true) {
+            conversationListStore.deleteConversation(conversationID)
+        }
+        addAction(R.string.xingdun_delete_conversation_clear_history, isDestructive = true) {
+            clearHistoryAndDeleteConversation(conversationID)
+        }
+        addAction(R.string.xingdun_cancel) {}
+
+        dialog = android.app.AlertDialog.Builder(this)
+            .setTitle(R.string.xingdun_delete_conversation_title)
+            .setView(actionContainer)
+            .create()
+        dialog.show()
     }
 
     private fun clearHistoryAndDeleteConversation(conversationID: String) {

@@ -5,7 +5,7 @@ import io.trtc.tuikit.chat.uikit.components.userpicker.model.UserPickerData
 import io.trtc.tuikit.chat.uikit.components.userpicker.ui.UserPickerDialog
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
 
-internal class ContactPickerDialog(
+class ContactPickerDialog(
     context: Context,
     title: String,
     contacts: List<ContactInfo>,

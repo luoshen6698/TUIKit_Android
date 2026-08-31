@@ -232,7 +232,7 @@ open class XingDunGroupManagementActivity : BaseActivity() {
                             ),
                         )
                     },
-                ))
+                ), matchWrap())
             })
         }
 

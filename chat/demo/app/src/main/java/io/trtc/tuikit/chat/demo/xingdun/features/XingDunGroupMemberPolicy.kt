@@ -5,6 +5,12 @@ import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMember
 
 internal object XingDunGroupMemberPolicy {
 
+    fun canInvite(detail: XingDunGroupDetail): Boolean =
+        detail.currentUserIsAssignedCs ||
+            detail.inviteMode == MODE_EVERYONE ||
+            detail.currentUserRole == ROLE_OWNER ||
+            detail.currentUserRole == ROLE_ADMINISTRATOR
+
     fun canViewCard(
         detail: XingDunGroupDetail,
         member: XingDunGroupMember,
@@ -36,6 +42,24 @@ internal object XingDunGroupMemberPolicy {
 
     fun canTransferOwner(detail: XingDunGroupDetail): Boolean =
         detail.currentUserRole == ROLE_OWNER
+
+    fun canMute(
+        detail: XingDunGroupDetail,
+        member: XingDunGroupMember,
+        currentUserID: String,
+    ): Boolean = member.userId != currentUserID &&
+        member.role == ROLE_MEMBER &&
+        (detail.currentUserRole == ROLE_OWNER || detail.currentUserRole == ROLE_ADMINISTRATOR)
+
+    fun canChangeAdministrator(
+        detail: XingDunGroupDetail,
+        member: XingDunGroupMember,
+        currentUserID: String,
+    ): Boolean = member.userId != currentUserID &&
+        member.role != ROLE_OWNER &&
+        member.userId != detail.ownerUserId &&
+        detail.currentUserRole == ROLE_OWNER &&
+        !detail.groupType.equals(GROUP_TYPE_WORK, ignoreCase = true)
 
     const val ROLE_OWNER = "owner"
     const val ROLE_ADMINISTRATOR = "administrator"

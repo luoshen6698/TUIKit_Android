@@ -29,6 +29,9 @@ import androidx.core.view.updatePadding
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
+import io.trtc.tuikit.atomicxcore.api.CompletionHandler
+import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
+import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
@@ -39,6 +42,7 @@ import io.trtc.tuikit.chat.uikit.components.config.BusinessAction
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionCompletion
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionResult
+import io.trtc.tuikit.chat.uikit.components.chatsetting.ui.ContactPickerDialog
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -219,6 +223,9 @@ open class XingDunGroupMembersActivity : BaseActivity() {
         content.gravity = Gravity.NO_GRAVITY
         content.setBackgroundColor(current.bgColorTopBar)
 
+        if (XingDunGroupMemberPolicy.canInvite(value)) {
+            content.addView(inviteMembersRow(current), matchWrap())
+        }
         content.addView(searchField(current), matchWrap())
 
         warningMessage?.takeIf(String::isNotBlank)?.let { message ->
@@ -248,6 +255,22 @@ open class XingDunGroupMembersActivity : BaseActivity() {
             }
             override fun afterTextChanged(s: Editable?) = Unit
         })
+    }
+
+    private fun inviteMembersRow(colors: ColorTokens) = TextView(this).apply {
+        setText(R.string.xingdun_group_invite_members)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+        setTextColor(BRAND)
+        gravity = Gravity.CENTER_VERTICAL
+        background = rounded(colors.bgColorOperate, 18f)
+        compoundDrawablePadding = 10.dp()
+        setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_input_add, 0, R.drawable.demo_ic_arrow_right, 0)
+        setPadding(18.dp(), 0, 14.dp(), 0)
+        minimumHeight = 58.dp()
+        isClickable = operatingUserID == null
+        isFocusable = operatingUserID == null
+        alpha = if (operatingUserID == null) 1f else 0.5f
+        setOnClickListener { showInviteMembersPicker() }
     }
 
     private fun renderMemberList(value: XingDunGroupDetail) {
@@ -319,16 +342,19 @@ open class XingDunGroupMembersActivity : BaseActivity() {
                     ).apply { marginStart = 6.dp() })
                 }
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (XingDunGroupMemberPolicy.canRemove(value, member, currentUserID())) {
+            val canMute = XingDunGroupMemberPolicy.canMute(value, member, currentUserID())
+            val canChangeRole = XingDunGroupMemberPolicy.canChangeAdministrator(value, member, currentUserID())
+            val canRemove = XingDunGroupMemberPolicy.canRemove(value, member, currentUserID())
+            if (canMute || canChangeRole || canRemove) {
                 addView(TextView(this@XingDunGroupMembersActivity).apply {
-                    setText(R.string.xingdun_group_member_remove)
+                    text = "⋯"
+                    contentDescription = getString(R.string.xingdun_group_member_manage, member.displayName())
                     gravity = Gravity.CENTER
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                    setTextColor(DANGER)
-                    background = rounded(0x0FE34D59, 16f)
-                    setPadding(12.dp(), 7.dp(), 12.dp(), 7.dp())
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+                    setTextColor(colors.textColorSecondary)
+                    setPadding(12.dp(), 6.dp(), 12.dp(), 6.dp())
                     isClickable = !isOperating
-                    if (!isOperating) setOnClickListener { confirmRemove(member) }
+                    if (!isOperating) setOnClickListener { showMemberActions(member, value) }
                 })
             }
         }
@@ -360,6 +386,155 @@ open class XingDunGroupMembersActivity : BaseActivity() {
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.xingdun_group_member_remove) { _, _ -> remove(member) }
             .show()
+    }
+
+    private fun showInviteMembersPicker() {
+        if (operatingUserID != null) return
+        if (isDebugPreview) {
+            Toast.makeText(this, R.string.xingdun_group_invite_preview, Toast.LENGTH_SHORT).show()
+            return
+        }
+        operatingUserID = OPERATION_INVITE
+        detail?.let(::render)
+        ContactStore.shared.loadFriends(object : CompletionHandler {
+            override fun onSuccess() = runOnUiThread {
+                operatingUserID = null
+                val existing = members.mapTo(mutableSetOf()) { it.userId }
+                val contacts = ContactStore.shared.state.friendList.value.filterNot { it.userID in existing }
+                detail?.let(::render)
+                if (contacts.isEmpty()) {
+                    Toast.makeText(
+                        this@XingDunGroupMembersActivity,
+                        R.string.xingdun_group_invite_no_contacts,
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@runOnUiThread
+                }
+                ContactPickerDialog(
+                    context = this@XingDunGroupMembersActivity,
+                    title = getString(R.string.xingdun_group_invite_members),
+                    contacts = contacts,
+                    maxSelection = MAX_INVITE_COUNT,
+                    onConfirm = { selected -> inviteMembers(selected) },
+                ).show()
+            }
+
+            override fun onFailure(code: Int, desc: String) = runOnUiThread {
+                operatingUserID = null
+                warningMessage = desc.ifBlank { getString(R.string.xingdun_group_invite_contacts_failed) }
+                detail?.let(::render)
+            }
+        })
+    }
+
+    private fun inviteMembers(contacts: List<ContactInfo>) {
+        if (contacts.isEmpty() || operatingUserID != null) return
+        operatingUserID = OPERATION_INVITE
+        warningMessage = null
+        detail?.let(::render)
+        val dispatched = BusinessActionRegistry.dispatch(
+            BusinessAction.InviteGroupMembers(groupID, contacts.map(ContactInfo::userID)),
+            object : BusinessActionCompletion {
+                override fun onSuccess(result: BusinessActionResult) = runOnUiThread {
+                    operatingUserID = null
+                    Toast.makeText(
+                        this@XingDunGroupMembersActivity,
+                        R.string.xingdun_group_invite_sent,
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    load()
+                }
+
+                override fun onFailure(code: Int, description: String) = runOnUiThread {
+                    operatingUserID = null
+                    warningMessage = description.ifBlank { getString(R.string.xingdun_group_invite_failed) }
+                    detail?.let(::render)
+                }
+            },
+        )
+        if (!dispatched) {
+            operatingUserID = null
+            warningMessage = getString(R.string.xingdun_group_management_handler_unavailable)
+            detail?.let(::render)
+        }
+    }
+
+    private fun showMemberActions(member: XingDunGroupMember, value: XingDunGroupDetail) {
+        val actions = mutableListOf<MemberAction>()
+        if (XingDunGroupMemberPolicy.canMute(value, member, currentUserID())) {
+            if (member.isMuted) {
+                actions += MemberAction(getString(R.string.xingdun_unmute_member), 0L)
+            } else {
+                actions += MemberAction(getString(R.string.xingdun_group_mute_ten_minutes), 10 * 60L)
+                actions += MemberAction(getString(R.string.xingdun_group_mute_one_hour), 60 * 60L)
+                actions += MemberAction(getString(R.string.xingdun_group_mute_one_day), 24 * 60 * 60L)
+            }
+        }
+        if (XingDunGroupMemberPolicy.canChangeAdministrator(value, member, currentUserID())) {
+            actions += MemberAction(
+                getString(if (member.role == XingDunGroupMemberPolicy.ROLE_ADMINISTRATOR) {
+                    R.string.xingdun_group_administrator_cancel
+                } else {
+                    R.string.xingdun_group_administrator_set
+                }),
+                roleEnabled = member.role != XingDunGroupMemberPolicy.ROLE_ADMINISTRATOR,
+            )
+        }
+        if (XingDunGroupMemberPolicy.canRemove(value, member, currentUserID())) {
+            actions += MemberAction(getString(R.string.xingdun_group_member_remove), remove = true)
+        }
+        if (actions.isEmpty()) return
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.xingdun_group_member_manage, member.displayName()))
+            .setItems(actions.map(MemberAction::title).toTypedArray()) { _, index ->
+                val action = actions[index]
+                when {
+                    action.remove -> confirmRemove(member)
+                    action.roleEnabled != null -> setAdministrator(member, action.roleEnabled)
+                    action.muteDurationSeconds != null -> setMemberMuted(member, action.muteDurationSeconds)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun setMemberMuted(member: XingDunGroupMember, durationSeconds: Long) =
+        dispatchMemberAction(
+            member,
+            BusinessAction.MuteGroupMember(groupID, member.userId, durationSeconds),
+            if (durationSeconds == 0L) R.string.xingdun_group_member_unmuted else R.string.xingdun_group_member_muted_success,
+        )
+
+    private fun setAdministrator(member: XingDunGroupMember, enabled: Boolean) =
+        dispatchMemberAction(
+            member,
+            BusinessAction.SetGroupAdministrator(groupID, member.userId, enabled),
+            if (enabled) R.string.xingdun_group_administrator_added else R.string.xingdun_group_administrator_removed,
+        )
+
+    private fun dispatchMemberAction(member: XingDunGroupMember, action: BusinessAction, successMessage: Int) {
+        if (operatingUserID != null) return
+        operatingUserID = member.userId
+        warningMessage = null
+        detail?.let(::render)
+        val dispatched = BusinessActionRegistry.dispatch(action, object : BusinessActionCompletion {
+            override fun onSuccess(result: BusinessActionResult) = runOnUiThread {
+                operatingUserID = null
+                Toast.makeText(this@XingDunGroupMembersActivity, successMessage, Toast.LENGTH_SHORT).show()
+                load()
+            }
+
+            override fun onFailure(code: Int, description: String) = runOnUiThread {
+                operatingUserID = null
+                warningMessage = description.ifBlank { getString(R.string.xingdun_group_management_action_failed) }
+                detail?.let(::render)
+            }
+        })
+        if (!dispatched) {
+            operatingUserID = null
+            warningMessage = getString(R.string.xingdun_group_management_handler_unavailable)
+            detail?.let(::render)
+        }
     }
 
     private fun remove(member: XingDunGroupMember) {
@@ -476,6 +651,8 @@ open class XingDunGroupMembersActivity : BaseActivity() {
         private const val BRAND = 0xFF23B39C.toInt()
         private const val WARNING = 0xFFB36A00.toInt()
         private const val DANGER = 0xFFE34D59.toInt()
+        private const val MAX_INVITE_COUNT = 20
+        private const val OPERATION_INVITE = "__invite__"
 
         private val memberComparator = compareBy<XingDunGroupMember> {
             when (it.role) {
@@ -495,4 +672,11 @@ open class XingDunGroupMembersActivity : BaseActivity() {
             context.startActivity(intent(context, groupID))
         }
     }
+
+    private data class MemberAction(
+        val title: String,
+        val muteDurationSeconds: Long? = null,
+        val roleEnabled: Boolean? = null,
+        val remove: Boolean = false,
+    )
 }
