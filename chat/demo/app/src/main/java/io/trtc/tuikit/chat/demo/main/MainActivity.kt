@@ -36,6 +36,7 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.gson.JsonObject
 import com.tencent.imsdk.v2.V2TIMConversationOperationResult
 import com.tencent.imsdk.v2.V2TIMManager
+import com.tencent.imsdk.v2.V2TIMSDKListener
 import com.tencent.imsdk.v2.V2TIMValueCallback
 import io.trtc.tuikit.chat.uikit.components.contactlist.ui.ContactFlowLauncher
 import io.trtc.tuikit.chat.uikit.components.contactlist.config.ChatContactListConfig
@@ -96,6 +97,11 @@ private data class CustomerServiceContact(
     val avatarURL: String?,
 )
 
+private data class IMConnectionNotice(
+    val messageResID: Int,
+    val warning: Boolean,
+)
+
 private const val BADGE_CLEAR_DRAG_THRESHOLD_DP = 48
 private const val TAB_ICON_SIZE_DP = 24
 
@@ -129,7 +135,9 @@ class MainActivity : BaseActivity() {
     private var contactsSearchButton: ImageView? = null
     private var contactsAddButton: ImageView? = null
     private var contactsHeaderActions: LinearLayout? = null
+    private var conversationsPage: ConversationsPageView? = null
     private var contactsPage: ContactsPageView? = null
+    private var imConnectionNotice: IMConnectionNotice? = null
     private var customerServiceContacts: List<CustomerServiceContact> = emptyList()
     private var selectedTabIndex = 0
     private var currentTabId = R.id.demo_tab_messages
@@ -148,6 +156,29 @@ class MainActivity : BaseActivity() {
     private val groupStore by lazy { GroupStore.shared }
     private val verificationUnreadCount = MutableStateFlow(0)
     private var mainScope: CoroutineScope? = null
+    private val imSDKListener = object : V2TIMSDKListener() {
+        override fun onConnecting() {
+            updateIMConnectionNotice(
+                IMConnectionNotice(R.string.xingdun_im_connecting_notice, warning = false),
+            )
+        }
+
+        override fun onConnectSuccess() {
+            updateIMConnectionNotice(null)
+        }
+
+        override fun onConnectFailed(code: Int, error: String?) {
+            updateIMConnectionNotice(
+                IMConnectionNotice(R.string.xingdun_im_disconnected_notice, warning = true),
+            )
+        }
+
+        override fun onUserSigExpired() {
+            updateIMConnectionNotice(
+                IMConnectionNotice(R.string.xingdun_im_credential_refreshing_notice, warning = true),
+            )
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -213,6 +244,12 @@ class MainActivity : BaseActivity() {
         refreshUnreadCounts()
         selectRequestedTab(intent)
         XingDunRouter.consumePendingRoute()
+        V2TIMManager.getInstance().addIMSDKListener(imSDKListener)
+    }
+
+    override fun onDestroy() {
+        V2TIMManager.getInstance().removeIMSDKListener(imSDKListener)
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -760,6 +797,7 @@ class MainActivity : BaseActivity() {
 
     private fun createConversationsPage(): View {
         val page = ConversationsPageView(this)
+        conversationsPage = page
         val actionConfig = ChatConversationActionConfig(isSupportClearHistory = false).customizeActions {
             if (!editorContext.conversation.isUnread) {
                 remove(ConversationActionIDs.MARK_UNREAD)
@@ -838,7 +876,24 @@ class MainActivity : BaseActivity() {
                 ChatActivity.start(this, conversationInfo.conversationID)
             }
         )
+        applyIMConnectionNotice(page)
         return page
+    }
+
+    private fun updateIMConnectionNotice(notice: IMConnectionNotice?) = runOnUiThread {
+        imConnectionNotice = notice
+        conversationsPage?.let(::applyIMConnectionNotice)
+        contactsPage?.let(::applyIMConnectionNotice)
+    }
+
+    private fun applyIMConnectionNotice(page: ConversationsPageView) {
+        val notice = imConnectionNotice
+        page.setConnectionNotice(notice?.let { getString(it.messageResID) }, notice?.warning == true)
+    }
+
+    private fun applyIMConnectionNotice(page: ContactsPageView) {
+        val notice = imConnectionNotice
+        page.setConnectionNotice(notice?.let { getString(it.messageResID) }, notice?.warning == true)
     }
 
     private fun showDeleteConversationConfirmation(conversationID: String) {
@@ -927,6 +982,7 @@ class MainActivity : BaseActivity() {
     private fun createContactsPage(): View {
         val page = ContactsPageView(this)
         contactsPage = page
+        applyIMConnectionNotice(page)
         val searchButton = ImageView(this).apply {
             setImageResource(io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_search)
             contentDescription = getString(R.string.xingdun_global_search)

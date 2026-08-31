@@ -143,6 +143,9 @@
     <string name="xingdun_password_reset_failed_safe">Password reset could not be completed. Check the verification information and try again.</string>
     <string name="xingdun_enterprise_service_expired">The enterprise messaging service has expired. Contact the enterprise administrator.</string>
     <string name="xingdun_im_connection_failed">Could not connect to messaging. Please try again.</string>
+    <string name="xingdun_im_connecting_notice">Connecting to the messaging service.</string>
+    <string name="xingdun_im_disconnected_notice">Messaging is disconnected. Messages will sync after the connection is restored.</string>
+    <string name="xingdun_im_credential_refreshing_notice">Messaging credentials are being renewed. Keep the network connected.</string>
     <string name="xingdun_deletion_completed">Your account data has been permanently deleted.</string>
     <string name="xingdun_deletion_cancelled">Your account-deletion request was cancelled.</string>
     <string name="xingdun_deletion_pending">Your account-deletion request is pending. Permanent deletion is expected after %1$s.</string>

@@ -27,6 +27,7 @@ class ContactsPageView @JvmOverloads constructor(
 ) : LinearLayout(context, attrs, defStyleAttr) {
 
     private val pageHeader: PageHeaderView
+    private val connectionNoticeView: ConnectionNoticeView
     private val contactListView: ContactListView
 
     private val themeStore = ThemeStore.shared(context)
@@ -38,6 +39,9 @@ class ContactsPageView @JvmOverloads constructor(
 
         pageHeader = PageHeaderView(context)
         addView(pageHeader, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+
+        connectionNoticeView = ConnectionNoticeView(context)
+        addView(connectionNoticeView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
         contactListView = ContactListView(context)
         addView(contactListView, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
@@ -63,6 +67,15 @@ class ContactsPageView @JvmOverloads constructor(
 
     private fun applyColors(colors: ColorTokens) {
         setBackgroundColor(colors.bgColorOperate)
+        connectionNoticeView.applyColors(colors)
+    }
+
+    fun setConnectionNotice(message: CharSequence?, warning: Boolean = false) {
+        connectionNoticeView.setNotice(
+            message,
+            warning,
+            themeStore.themeState.value.currentTheme.tokens.color,
+        )
     }
 
     @JvmOverloads

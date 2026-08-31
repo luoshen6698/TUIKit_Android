@@ -34,6 +34,7 @@ class ConversationsPageView @JvmOverloads constructor(
     private var viewScope: CoroutineScope? = null
 
     private val pageHeader: PageHeaderView
+    private val connectionNoticeView: ConnectionNoticeView
     private val coordinatorLayout: CoordinatorLayout
     private val appBarLayout: AppBarLayout
     private val searchBarWrapper: LinearLayout
@@ -54,6 +55,9 @@ class ConversationsPageView @JvmOverloads constructor(
 
         pageHeader = PageHeaderView(context)
         addView(pageHeader, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+
+        connectionNoticeView = ConnectionNoticeView(context)
+        addView(connectionNoticeView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
         coordinatorLayout = CoordinatorLayout(context)
         addView(coordinatorLayout, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
@@ -150,10 +154,19 @@ class ConversationsPageView @JvmOverloads constructor(
         searchBarBgDrawable.setColor(colors.bgColorInput)
         searchIcon.setColorFilter(colors.textColorTertiary)
         searchText.setTextColor(colors.textColorTertiary)
+        connectionNoticeView.applyColors(colors)
     }
 
     private fun setSearchBarVisible(visible: Boolean) {
         appBarLayout.visibility = if (visible) VISIBLE else GONE
+    }
+
+    fun setConnectionNotice(message: CharSequence?, warning: Boolean = false) {
+        connectionNoticeView.setNotice(
+            message,
+            warning,
+            themeStore.themeState.value.currentTheme.tokens.color,
+        )
     }
 
     @JvmOverloads
