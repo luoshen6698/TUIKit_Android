@@ -25,7 +25,8 @@ internal class GroupChatSettingActionSection(
     private val createSpacer: () -> View,
     private val canPerformAction: (GroupType, GroupMemberRole, GroupPermission) -> Boolean,
     private val onGroupDeletedProvider: () -> (() -> Unit)?,
-    private val onOpenTransferOwner: () -> Boolean
+    private val onOpenTransferOwner: () -> Boolean,
+    private val displayGroupIDProvider: () -> String?,
 ) {
     fun rebuild(
         actionSection: LinearLayout,
@@ -89,7 +90,8 @@ internal class GroupChatSettingActionSection(
                 scene = ChatSettingScene.GROUP,
                 userID = null,
                 groupID = viewModel.groupID,
-                displayName = viewModel.groupName.value.takeIf(String::isNotBlank)
+                displayName = viewModel.groupName.value.takeIf(String::isNotBlank),
+                displayID = displayGroupIDProvider(),
             )
         )
     }

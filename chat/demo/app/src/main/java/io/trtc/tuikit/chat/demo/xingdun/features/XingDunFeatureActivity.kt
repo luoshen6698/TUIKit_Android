@@ -3506,7 +3506,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         targetIdentifier?.doAfterTextChanged { if (formReady) updateState() }
         description.doAfterTextChanged { updateState() }
         formReady = true
-        selectTargetType(0)
+        selectTargetType(targetValues.indexOf(XingDunReportFormPolicy.initialTargetType(targetType, hasFixedTarget)))
         renderAttachments()
         updateState()
     }

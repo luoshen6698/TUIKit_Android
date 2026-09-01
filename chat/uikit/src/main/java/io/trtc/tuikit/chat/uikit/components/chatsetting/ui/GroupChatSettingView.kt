@@ -64,6 +64,8 @@ class GroupChatSettingView @JvmOverloads constructor(
     private var showChatBackground = true
     private var isAssignedCustomerService = false
     private var onGroupDeleted: (() -> Unit)? = null
+    private var displayGroupID: String? = null
+    private var showInternalGroupID = true
 
     private var viewModel: GroupChatSettingViewModel? = null
     private var viewScope: CoroutineScope? = null
@@ -101,6 +103,7 @@ class GroupChatSettingView @JvmOverloads constructor(
         onSearchMessagesClick: (() -> Unit)? = null,
         showGroupPolicySummary: Boolean = true,
         showChatBackground: Boolean = true,
+        showInternalGroupID: Boolean = true,
         onGroupDeleted: (() -> Unit)? = null
     ) {
         this.onSendMessageClick = onSendMessageClick
@@ -120,6 +123,7 @@ class GroupChatSettingView @JvmOverloads constructor(
         this.onSearchMessagesClick = onSearchMessagesClick
         this.showGroupPolicySummary = showGroupPolicySummary
         this.showChatBackground = showChatBackground
+        this.showInternalGroupID = showInternalGroupID
         this.onGroupDeleted = onGroupDeleted
 
         val owner = context.findViewModelStoreOwner() ?: return
@@ -220,7 +224,8 @@ class GroupChatSettingView @JvmOverloads constructor(
                     callback()
                     true
                 }
-            }
+            },
+            displayGroupIDProvider = { displayGroupID },
         )
         contentLayout.addView(actionSection, cardLayoutParams())
 
@@ -243,6 +248,16 @@ class GroupChatSettingView @JvmOverloads constructor(
     fun setAssignedCustomerService(value: Boolean) {
         if (isAssignedCustomerService == value) return
         isAssignedCustomerService = value
+        refreshViewState()
+    }
+
+    /**
+     * Sets the tenant-facing group number without changing the Tencent IM group ID used by stores and APIs.
+     */
+    fun setDisplayGroupID(value: String?) {
+        val normalized = value?.trim()?.takeIf(String::isNotEmpty)
+        if (displayGroupID == normalized) return
+        displayGroupID = normalized
         refreshViewState()
     }
 
@@ -391,6 +406,8 @@ class GroupChatSettingView @JvmOverloads constructor(
 
         headerSection.update(
             state = state,
+            displayGroupID = displayGroupID,
+            showInternalGroupID = showInternalGroupID,
             onAvatarClick = ::showGroupAvatarPicker,
             onGroupNameConfirmed = vm::setGroupName,
             onGroupIdClick = ::copyGroupID,
@@ -487,8 +504,9 @@ class GroupChatSettingView @JvmOverloads constructor(
 
     private fun copyGroupID() {
         val vm = viewModel ?: return
+        val copyValue = displayGroupID ?: vm.groupID.takeIf { showInternalGroupID } ?: return
         val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
-        clipboardManager.setPrimaryClip(ClipData.newPlainText(vm.groupID, vm.groupID))
+        clipboardManager.setPrimaryClip(ClipData.newPlainText(copyValue, copyValue))
         Toast.makeText(context, context.getString(R.string.uikit_copied), Toast.LENGTH_SHORT).show()
     }
 

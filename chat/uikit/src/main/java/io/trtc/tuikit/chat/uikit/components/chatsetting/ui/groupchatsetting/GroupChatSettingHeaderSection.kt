@@ -89,6 +89,8 @@ internal class GroupChatSettingHeaderSection(
 
     fun update(
         state: GroupChatSettingUiState,
+        displayGroupID: String?,
+        showInternalGroupID: Boolean,
         onAvatarClick: () -> Unit,
         onGroupNameConfirmed: (String) -> Unit,
         onGroupIdClick: () -> Unit,
@@ -97,7 +99,12 @@ internal class GroupChatSettingHeaderSection(
         val permissions = state.permissions
         val headerDisplayName = state.headerDisplayName
         nameView.text = headerDisplayName
-        idView.text = "${context.getString(R.string.chat_setting_group_id)}: ${state.groupID}"
+        val visibleGroupID = displayGroupID?.takeIf(String::isNotBlank)
+            ?: state.groupID.takeIf { showInternalGroupID }
+        idView.visibility = if (visibleGroupID == null) View.GONE else View.VISIBLE
+        idView.text = visibleGroupID?.let {
+            "${context.getString(R.string.chat_setting_group_id)}: $it"
+        }.orEmpty()
         avatarView.setContent(
             Avatar.AvatarContent.Image(
                 url = state.avatarURL.ifEmpty { null },
@@ -111,11 +118,11 @@ internal class GroupChatSettingHeaderSection(
         disclosureView.visibility = if (onGroupInfoClick != null) View.VISIBLE else View.GONE
 
         if (onGroupInfoClick != null) {
-            avatarView.setOnAvatarClickListener(null)
-            nameView.isClickable = false
-            nameView.setOnClickListener(null)
-            idView.isClickable = false
-            idView.setOnClickListener(null)
+            avatarView.setOnAvatarClickListener { onGroupInfoClick.invoke() }
+            nameView.isClickable = true
+            nameView.setOnClickListener { onGroupInfoClick.invoke() }
+            idView.isClickable = true
+            idView.setOnClickListener { onGroupInfoClick.invoke() }
         } else if (permissions.canEditGroupAvatar) {
             avatarView.setOnAvatarClickListener { onAvatarClick() }
         } else {

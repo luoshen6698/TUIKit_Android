@@ -309,7 +309,8 @@ class MessageInputViewModel(
         quotedMessage: MessageInfo? = null,
         onSuccess: (() -> Unit)? = null
     ) {
-        val payload = SendMessagePayload.TextSendMessagePayload(text)
+        val outgoingText = messageInputConfig.transformOutgoingText(text)
+        val payload = SendMessagePayload.TextSendMessagePayload(outgoingText)
         val option = createSendMessageOption(
             context = context,
             payload = payload,

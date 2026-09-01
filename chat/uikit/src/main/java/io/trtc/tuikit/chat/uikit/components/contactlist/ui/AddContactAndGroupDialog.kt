@@ -137,12 +137,11 @@ internal class AddContactAndGroupDialog(
             setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         }
 
-        val preset = initialContactInfo
-        if (preset != null) {
-            selectedResult = preset
-            showContactDetailStep()
-        } else {
-            showSearchStep()
+        selectedResult = initialContactInfo
+        when (AddContactNavigator.initialStep(addType, initialContactInfo != null)) {
+            AddContactFlowStep.CONTACT_DETAIL -> showContactDetailStep()
+            AddContactFlowStep.GROUP_JOIN_FORM -> showGroupJoinFormStep()
+            else -> showSearchStep()
         }
     }
 

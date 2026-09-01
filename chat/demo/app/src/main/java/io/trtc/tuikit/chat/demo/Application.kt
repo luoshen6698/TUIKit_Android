@@ -8,7 +8,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import com.tencent.mmkv.MMKV
-import io.trtc.tuikit.chat.uikit.components.config.AppBuilderConfig
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
 import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingActionConfig
 import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingCustomAction
@@ -28,6 +27,7 @@ import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBusinessActionHandler
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunReadReceiptFeatureSynchronizer
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,7 +76,7 @@ class Application : Application() {
                                 targetType = "team",
                                 targetID = groupID,
                                 displayName = actionContext.displayName ?: groupID,
-                                displayID = groupID
+                                displayID = actionContext.displayID ?: groupID
                             )
                         }
                     )
@@ -88,9 +88,7 @@ class Application : Application() {
 
         applyLanguageFromSettings()
 
-        MMKV.defaultMMKV().decodeBool(AppConstants.KEY_ENABLE_READ_RECEIPT, false).also {
-            AppBuilderConfig.enableReadReceipt = it
-        }
+        XingDunReadReceiptFeatureSynchronizer.apply(XingDunSessionManager.currentEnterprise())
 
         LoginStore.shared.addLoginListener(loginListener)
         registerEnterpriseForegroundRefresh()

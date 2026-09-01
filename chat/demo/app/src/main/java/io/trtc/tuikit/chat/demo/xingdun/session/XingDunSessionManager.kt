@@ -50,6 +50,7 @@ object XingDunSessionManager {
         if (XingDunTenantBoundary.identity(enterprise) == null || !hasPushSnapshot) {
             store.clearEnterprise()
             store.clearSession()
+            XingDunReadReceiptFeatureSynchronizer.reset()
             return null
         }
         return enterprise
@@ -140,6 +141,7 @@ object XingDunSessionManager {
 
     private fun storeEnterprise(bootstrap: XingDunBootstrapConfiguration) {
         store.saveEnterprise(bootstrap)
+        XingDunReadReceiptFeatureSynchronizer.apply(bootstrap)
         val session = store.load() ?: return
         val sessionIdentity = XingDunTenantBoundary.identity(session)
         val enterpriseIdentity = XingDunTenantBoundary.identity(bootstrap)
@@ -328,6 +330,7 @@ object XingDunSessionManager {
         if (!::store.isInitialized) return
         store.clearSession()
         store.clearEnterprise()
+        XingDunReadReceiptFeatureSynchronizer.reset()
     }
 
     private fun persist(

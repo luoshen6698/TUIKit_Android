@@ -10,6 +10,15 @@ internal object AddContactNavigator {
         SHOW_CONTACT_DETAIL
     }
 
+    fun initialStep(addType: AddType, hasInitialContactInfo: Boolean): AddContactFlowStep {
+        if (!hasInitialContactInfo) return AddContactFlowStep.SEARCH
+        return if (addType == AddType.GROUP) {
+            AddContactFlowStep.GROUP_JOIN_FORM
+        } else {
+            AddContactFlowStep.CONTACT_DETAIL
+        }
+    }
+
     fun titleRes(step: AddContactFlowStep, addType: AddType): Int {
         return when (step) {
             AddContactFlowStep.SEARCH -> {

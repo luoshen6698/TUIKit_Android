@@ -63,6 +63,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoriteRepositor
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunLocalMessageMarkRepository
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagePolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessageRepository
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunEmojiCompatibility
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagesActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessage
@@ -273,6 +274,7 @@ class ChatActivity : BaseActivity() {
             isShowAudioCall = isC2CConversation,
             isShowVideoCall = isC2CConversation,
         )
+        messageInputConfig.transformOutgoingText(XingDunEmojiCompatibility::transformOutgoingText)
         configureMessageInputActions(messageInputConfig, isC2CConversation)
 
         chatPageView = ChatPageView(this)

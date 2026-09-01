@@ -14,6 +14,7 @@ interface MessageInputConfigProtocol {
         get() = 60 * 1000
     val actionCustomizer: MessageInputActionCustomizer?
         get() = null
+    fun transformOutgoingText(text: String): String = text
 }
 
 class ChatMessageInputConfig : MessageInputConfigProtocol {
@@ -28,6 +29,7 @@ class ChatMessageInputConfig : MessageInputConfigProtocol {
     private var _enableLongPressToTalk: Boolean? = null
     private var _audioMaxRecordDurationMs: Int? = null
     private var _actionCustomizer: MessageInputActionCustomizer? = null
+    private var _outgoingTextTransformer: ((String) -> String)? = null
 
     constructor(
         isShowAudioRecorder: Boolean? = null,
@@ -108,9 +110,17 @@ class ChatMessageInputConfig : MessageInputConfigProtocol {
     override val actionCustomizer: MessageInputActionCustomizer?
         get() = _actionCustomizer
 
+    override fun transformOutgoingText(text: String): String {
+        return _outgoingTextTransformer?.invoke(text) ?: text
+    }
+
     fun customizeActions(block: MessageInputActionEditor.() -> Unit): ChatMessageInputConfig = apply {
         _actionCustomizer = MessageInputActionCustomizer { editor ->
             editor.block()
         }
+    }
+
+    fun transformOutgoingText(transformer: (String) -> String): ChatMessageInputConfig = apply {
+        _outgoingTextTransformer = transformer
     }
 }

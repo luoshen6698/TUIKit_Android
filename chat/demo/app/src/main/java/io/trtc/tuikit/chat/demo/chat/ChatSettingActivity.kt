@@ -209,6 +209,7 @@ open class ChatSettingActivity : BaseActivity() {
                 },
                 showGroupPolicySummary = false,
                 showChatBackground = false,
+                showInternalGroupID = false,
                 onGroupDeleted = {
                     EventBus.post(Event.GroupDeleted(groupID))
                     finish()
@@ -224,7 +225,7 @@ open class ChatSettingActivity : BaseActivity() {
         headerDivider.setBackgroundColor(currentColors.strokeColorPrimary)
 
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-        if (autoDeleteEnabled && !groupID.isNullOrEmpty()) {
+        if (!groupID.isNullOrEmpty()) {
             activityScope?.launch {
                 val session = XingDunSessionManager.currentSession() ?: return@launch
                 runCatching {
@@ -235,7 +236,10 @@ open class ChatSettingActivity : BaseActivity() {
                         XingDunGroupDetail::class.java,
                     )
                 }.onSuccess { detail ->
-                    groupSettingView?.setAssignedCustomerService(detail.currentUserIsAssignedCs)
+                    groupSettingView?.setDisplayGroupID(detail.publicGroupId)
+                    if (autoDeleteEnabled) {
+                        groupSettingView?.setAssignedCustomerService(detail.currentUserIsAssignedCs)
+                    }
                 }
             }
         }
