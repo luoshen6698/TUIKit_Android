@@ -60,6 +60,7 @@ import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.search.SearchActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactDetailActivity
+import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunBlacklistActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupListActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunVerificationMessagesActivity
@@ -187,6 +188,15 @@ class MainActivity : BaseActivity() {
         }
 
         setContentView(R.layout.demo_activity_main)
+
+        XingDunSessionManager.currentSession()?.let { session ->
+            XingDunCallSessionInitializer.initialize(
+                this,
+                session.sdkAppId,
+                session.timUserId,
+                session.userSig,
+            )
+        }
 
         mainContainer = findViewById(R.id.demo_mainContainer)
         viewPager = findViewById(R.id.demo_viewPager)
@@ -877,7 +887,30 @@ class MainActivity : BaseActivity() {
             }
         )
         applyIMConnectionNotice(page)
-        return page
+        return SwipeRefreshLayout(this).apply {
+            setColorSchemeColors(0xFF23B39C.toInt())
+            addView(
+                page,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+            setOnRefreshListener {
+                page.refresh { success, description ->
+                    isRefreshing = false
+                    if (!success) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            description.orEmpty().ifBlank {
+                                getString(R.string.xingdun_conversation_refresh_failed)
+                            },
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }
+            }
+        }
     }
 
     private fun updateIMConnectionNotice(notice: IMConnectionNotice?) = runOnUiThread {
@@ -1012,7 +1045,7 @@ class MainActivity : BaseActivity() {
                         iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_chat_add
                     ),
                     PopupMenuItem(
-                        title = getString(R.string.demo_add_friend),
+                        title = getString(R.string.xingdun_add_friend_menu),
                         onClick = {
                             XingDunFeatureActivity.start(
                                 this,

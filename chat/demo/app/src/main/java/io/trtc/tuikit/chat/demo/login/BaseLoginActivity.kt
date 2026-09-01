@@ -5,20 +5,13 @@ import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
-import android.util.Log
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
-import com.tencent.cloud.tuikit.engine.call.TUICallEngine
-import com.tencent.cloud.tuikit.engine.common.TUICommonDefine
 import com.tencent.mmkv.MMKV
-import com.tencent.qcloud.tuikit.tuicallkit.TUICallKit
-import com.tencent.qcloud.tuikit.tuicallkit.manager.feature.CallingBellFeature
-import com.tencent.qcloud.tuikit.tuicallkit.manager.feature.CallingVibratorFeature
-import com.tencent.qcloud.tuikit.tuicallkit.manager.feature.NotificationFeature
 import com.tencent.qcloud.tuicore.TUILogin
 import io.trtc.tuikit.atomicx.theme.Theme
 import io.trtc.tuikit.atomicx.theme.ThemeStore
@@ -29,6 +22,7 @@ import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
+import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.ActionItem
@@ -118,7 +112,7 @@ abstract class BaseLoginActivity : BaseActivity() {
                         onFailure?.invoke(-1, getString(R.string.xingdun_error_company_mismatch))
                         return
                     }
-                    initCall(sdkAppId, userId, userSig)
+                    XingDunCallSessionInitializer.initialize(this@BaseLoginActivity, sdkAppId, userId, userSig)
                     XingDunPushManager.syncDeviceRegistration()
                     MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, userId)
                     onSuccess?.invoke()
@@ -182,25 +176,6 @@ abstract class BaseLoginActivity : BaseActivity() {
 
     protected fun dpToPx(value: Int): Int {
         return (value * resources.displayMetrics.density).toInt()
-    }
-
-    private fun initCall(sdkAppId: Int, userId: String, userSig: String?) {
-        TUICallEngine.createInstance(this).init(
-            sdkAppId, userId, userSig,
-            object : TUICommonDefine.Callback {
-                override fun onSuccess() {
-                    Log.i(TAG, "callEngine init success")
-                    NotificationFeature(this@BaseLoginActivity).registerNotificationBannerChannel()
-                    CallingBellFeature(this@BaseLoginActivity)
-                    CallingVibratorFeature(this@BaseLoginActivity)
-                    TUICallEngine.createInstance(this@BaseLoginActivity).enableMultiDeviceAbility(true, null)
-                    TUICallKit.createInstance(this@BaseLoginActivity).enableIncomingBanner(true)
-                }
-
-                override fun onError(errCode: Int, errMsg: String) {
-                    Log.e(TAG, "callEngine init failed, errCode: $errCode, errMsg: $errMsg")
-                }
-            })
     }
 
     private fun showThemeSelector() {

@@ -116,6 +116,7 @@ open class XingDunGroupNicknameActivity : BaseActivity() {
         divider = findViewById(R.id.demo_headerDivider)
         scroll = findViewById(R.id.xingdun_profileEditorScroll)
         content = findViewById(R.id.xingdun_profileEditorContent)
+        findViewById<View>(R.id.xingdun_profileEditorBottomNavigation).visibility = View.GONE
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             header.updatePadding(top = bars.top)

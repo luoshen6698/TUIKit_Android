@@ -19,6 +19,7 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseAccessActivity
+import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessagePresentation
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
@@ -96,6 +97,7 @@ class Application : Application() {
     }
 
     private fun redirectToLogin(messageResId: Int, clearSession: Boolean) {
+        XingDunCallSessionInitializer.reset()
         if (clearSession) {
             XingDunSessionManager.clear()
         }

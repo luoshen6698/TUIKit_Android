@@ -391,7 +391,7 @@
     <string name="xingdun_customer_service_group_load_failed">客服群加载失败，请检查网络后重试。</string>
     <string name="xingdun_open_customer_service">打开客服会话</string>
     <string name="xingdun_customer_service_unavailable">当前用户暂未分配可用客服。</string>
-    <string name="xingdun_add_friend_title">添加好友</string>
+    <string name="xingdun_add_friend_title">添加朋友</string>
     <string name="xingdun_friend_search_hint">登录名、星盾账号、IM 账号或手机号</string>
     <string name="xingdun_search_user">搜索用户</string>
     <string name="xingdun_friend_search_invalid">请输入有效的登录名、账号或手机号。</string>
@@ -1395,4 +1395,5 @@
     <string name="xingdun_chat_history_empty_hint">请返回选择其他分类或日期。</string>
     <string name="xingdun_chat_history_message">消息</string>
     <string name="xingdun_chat_history_load_failed">聊天记录加载失败，请稍后重试。</string>
+    <string name="xingdun_conversation_refresh_failed">会话刷新失败，请稍后重试。</string>
 </resources>

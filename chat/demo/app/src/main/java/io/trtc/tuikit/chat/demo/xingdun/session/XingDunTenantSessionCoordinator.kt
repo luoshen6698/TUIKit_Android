@@ -7,6 +7,7 @@ import com.tencent.mmkv.MMKV
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.common.AppConstants
+import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketStatusLoader
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunAutoDeleteRepository
@@ -73,6 +74,7 @@ internal object XingDunTenantSessionCoordinator {
             XingDunPinnedMessageRepository.clearTenantCache()
             XingDunMessageFavoriteRepository.clearTenantCache()
             XingDunForegroundNotificationManager.resetTenantState()
+            XingDunCallSessionInitializer.reset()
             MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, "")
             if (clearEnterprise) {
                 XingDunSessionManager.clearEnterpriseSelection()

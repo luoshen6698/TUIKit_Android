@@ -22,6 +22,7 @@ import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import io.trtc.tuikit.chat.uikit.R
 import io.trtc.tuikit.chat.uikit.components.conversationlist.adapter.ConversationItemLayout
@@ -52,6 +53,10 @@ class ConversationListView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : ConstraintLayout(context, attrs, defStyleAttr) {
 
+    private companion object {
+        const val SWIPE_MENU_SETTLE_DELAY_MS = 120L
+    }
+
     private val recyclerView: RecyclerView
     private val emptyView: LinearLayout
     private val emptyTextView: TextView
@@ -62,6 +67,7 @@ class ConversationListView @JvmOverloads constructor(
     private var scrollListenerAttached = false
     private var pendingAnchorToTop = false
     private var anchorObserver: RecyclerView.AdapterDataObserver? = null
+    private var swipeActionHelper: ItemTouchHelper? = null
     private val viewModelKey = "${ConversationListViewModel::class.java.name}:${System.identityHashCode(this)}"
 
     private var onConversationClick: (ConversationInfo) -> Unit = {}
@@ -111,6 +117,10 @@ class ConversationListView @JvmOverloads constructor(
             }
         )
         recyclerView.adapter = adapter
+        swipeActionHelper?.attachToRecyclerView(null)
+        swipeActionHelper = ItemTouchHelper(conversationSwipeCallback()).also {
+            it.attachToRecyclerView(recyclerView)
+        }
         anchorObserver = createAnchorObserver().also { adapter.registerAdapterDataObserver(it) }
         dividerDecoration = ConversationDividerDecoration(context, themeStore).also {
             recyclerView.addItemDecoration(it)
@@ -130,6 +140,16 @@ class ConversationListView @JvmOverloads constructor(
         recyclerView.adapter = null
     }
 
+    fun refresh(onComplete: (success: Boolean, description: String?) -> Unit = { _, _ -> }) {
+        if (!::viewModel.isInitialized) {
+            onComplete(false, null)
+            return
+        }
+        viewModel.refresh { success, description ->
+            post { onComplete(success, description) }
+        }
+    }
+
     private val loadMoreScrollListener = object : RecyclerView.OnScrollListener() {
         override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
             if (!::viewModel.isInitialized) return
@@ -140,6 +160,34 @@ class ConversationListView @JvmOverloads constructor(
                 viewModel.loadMoreConversation()
             }
         }
+    }
+
+    private fun conversationSwipeCallback() = object : ItemTouchHelper.SimpleCallback(
+        0,
+        ItemTouchHelper.LEFT,
+    ) {
+        override fun onMove(
+            recyclerView: RecyclerView,
+            viewHolder: RecyclerView.ViewHolder,
+            target: RecyclerView.ViewHolder,
+        ): Boolean = false
+
+        override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+            val position = viewHolder.bindingAdapterPosition
+            if (position == RecyclerView.NO_POSITION) return
+            val conversation = adapter.currentList.getOrNull(position)
+            viewHolder.itemView.translationX = 0f
+            adapter.notifyItemChanged(position)
+            if (conversation != null) {
+                recyclerView.postDelayed({
+                    val anchor = recyclerView.findViewHolderForAdapterPosition(position)?.itemView
+                        ?: return@postDelayed
+                    showPopupMenu(conversation, anchor, alignToEnd = true)
+                }, SWIPE_MENU_SETTLE_DELAY_MS)
+            }
+        }
+
+        override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float = 0.28f
     }
 
     override fun onAttachedToWindow() {
@@ -193,6 +241,8 @@ class ConversationListView @JvmOverloads constructor(
 
     private fun cleanupBinding() {
         currentPopup?.dismissImmediately()
+        swipeActionHelper?.attachToRecyclerView(null)
+        swipeActionHelper = null
         viewScope?.cancel()
         viewScope = null
         if (scrollListenerAttached) {
@@ -251,7 +301,11 @@ class ConversationListView @JvmOverloads constructor(
         }
     }
 
-    private fun showPopupMenu(conversation: ConversationInfo, anchorView: View) {
+    private fun showPopupMenu(
+        conversation: ConversationInfo,
+        anchorView: View,
+        alignToEnd: Boolean = false,
+    ) {
         val colors = themeStore.themeState.value.currentTheme.tokens.color
 
         val defaults = viewModel.getDefaultActions(conversation)
@@ -305,7 +359,9 @@ class ConversationListView @JvmOverloads constructor(
         val aboveOverlap = dp2px(context, 8f)
         val belowOverlap = (anchorHeight * 3 / 5).coerceAtLeast(dp2px(context, 24f))
         val isRtl = anchorView.layoutDirection == View.LAYOUT_DIRECTION_RTL
-        val preferredX = if (isRtl) {
+        val preferredX = if (alignToEnd) {
+            if (isRtl) horizontalInset else hostWidth - popupWidth - horizontalInset
+        } else if (isRtl) {
             anchorX + horizontalInset
         } else {
             anchorX + anchorWidth - popupWidth - horizontalInset

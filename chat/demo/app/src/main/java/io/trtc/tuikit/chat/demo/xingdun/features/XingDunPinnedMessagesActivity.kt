@@ -109,6 +109,7 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
         divider = findViewById(R.id.demo_headerDivider)
         scroll = findViewById(R.id.xingdun_profileEditorScroll)
         content = findViewById(R.id.xingdun_profileEditorContent)
+        findViewById<View>(R.id.xingdun_profileEditorBottomNavigation).visibility = View.GONE
         val more = findViewById<ImageView>(R.id.demo_btnMore)
         more.visibility = View.GONE
         findViewById<FrameLayout>(R.id.demo_badgeContainer).visibility = View.GONE

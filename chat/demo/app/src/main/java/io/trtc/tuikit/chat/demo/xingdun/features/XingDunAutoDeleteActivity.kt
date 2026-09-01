@@ -26,6 +26,7 @@ import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunAutoDeleteConfiguration
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiException
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import kotlinx.coroutines.CoroutineScope
@@ -114,6 +115,7 @@ open class XingDunAutoDeleteActivity : BaseActivity() {
         divider = findViewById(R.id.demo_headerDivider)
         scroll = findViewById(R.id.xingdun_profileEditorScroll)
         content = findViewById(R.id.xingdun_profileEditorContent)
+        findViewById<View>(R.id.xingdun_profileEditorBottomNavigation).visibility = View.GONE
         findViewById<ImageView>(R.id.demo_btnMore).visibility = View.GONE
         findViewById<FrameLayout>(R.id.demo_badgeContainer).visibility = View.GONE
         findViewById<LinearLayout>(R.id.demo_leftContainer).setOnClickListener { if (!isUpdating) finish() }
@@ -243,9 +245,14 @@ open class XingDunAutoDeleteActivity : BaseActivity() {
                     ).show()
                     render()
                 }
-                .onFailure {
+                .onFailure { error ->
                     isUpdating = false
-                    showError(R.string.xingdun_auto_delete_update_failed)
+                    val businessMessage = (error as? XingDunApiException)?.message.orEmpty().trim()
+                    if (businessMessage.isNotEmpty()) {
+                        showError(businessMessage)
+                    } else {
+                        showError(R.string.xingdun_auto_delete_update_failed)
+                    }
                 }
         }
     }
@@ -303,6 +310,13 @@ open class XingDunAutoDeleteActivity : BaseActivity() {
 
     private fun showError(message: Int) {
         status.setText(message)
+        status.visibility = View.VISIBLE
+        retry.visibility = if (configuration == null) View.VISIBLE else View.GONE
+        renderState()
+    }
+
+    private fun showError(message: String) {
+        status.text = message
         status.visibility = View.VISIBLE
         retry.visibility = if (configuration == null) View.VISIBLE else View.GONE
         renderState()

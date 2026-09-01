@@ -111,6 +111,7 @@ class XingDunGroupAvatarActivity : BaseActivity() {
         divider = findViewById(R.id.demo_headerDivider)
         scroll = findViewById(R.id.xingdun_profileEditorScroll)
         content = findViewById(R.id.xingdun_profileEditorContent)
+        findViewById<View>(R.id.xingdun_profileEditorBottomNavigation).visibility = View.GONE
         saveAction = TextView(this).apply {
             setText(R.string.xingdun_group_info_save)
             gravity = Gravity.END or Gravity.CENTER_VERTICAL

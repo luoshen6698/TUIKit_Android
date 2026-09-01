@@ -187,4 +187,9 @@ class ConversationsPageView @JvmOverloads constructor(
             onConversationClick = onConversationClick ?: {}
         )
     }
+
+    /** Reloads the official conversation store while preserving XingDun page customizations. */
+    fun refresh(onComplete: (success: Boolean, description: String?) -> Unit = { _, _ -> }) {
+        conversationListView.refresh(onComplete)
+    }
 }

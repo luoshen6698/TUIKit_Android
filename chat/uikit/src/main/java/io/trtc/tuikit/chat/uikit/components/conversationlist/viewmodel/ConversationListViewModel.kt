@@ -276,6 +276,22 @@ class ConversationListViewModel(
         })
     }
 
+    /** Reloads the first conversation page for product-level pull-to-refresh. */
+    fun refresh(onComplete: (success: Boolean, description: String?) -> Unit = { _, _ -> }) {
+        conversationListStore.loadConversations(
+            ConversationLoadOption(),
+            object : CompletionHandler {
+                override fun onSuccess() {
+                    onComplete(true, null)
+                }
+
+                override fun onFailure(code: Int, desc: String) {
+                    onComplete(false, desc)
+                }
+            }
+        )
+    }
+
     override fun onCleared() {
         super.onCleared()
     }
