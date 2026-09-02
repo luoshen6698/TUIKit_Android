@@ -79,7 +79,10 @@ class XingDunMinePageView @JvmOverloads constructor(
         content = findViewById(R.id.xingdun_mine_content)
         profileCard = findViewById(R.id.xingdun_mine_profile_card)
         avatarRing = findViewById(R.id.xingdun_mine_avatar_ring)
-        avatar = findViewById<Avatar>(R.id.xingdun_mine_avatar).apply { setSize(Avatar.AvatarSize.L) }
+        avatar = findViewById<Avatar>(R.id.xingdun_mine_avatar).apply {
+            setSize(Avatar.AvatarSize.L)
+            setShape(Avatar.AvatarShape.Round)
+        }
         name = findViewById(R.id.xingdun_mine_name)
         account = findViewById(R.id.xingdun_mine_account)
         profileArrow = findViewById(R.id.xingdun_mine_profile_arrow)
