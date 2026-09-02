@@ -5546,6 +5546,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                     setText(question)
                     textSize = 15f
                     setTextColor(Color.BLACK)
+                    gravity = Gravity.CENTER_VERTICAL
                 }, LinearLayout.LayoutParams(0, 46.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
                 addView(arrow, LinearLayout.LayoutParams(24.dp(), 46.dp()))
             })
@@ -5610,6 +5611,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 setText(title)
                 textSize = 15f
                 setTextColor(Color.BLACK)
+                gravity = Gravity.CENTER_VERTICAL
             }, LinearLayout.LayoutParams(0, 48.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
             detail?.let {
                 addView(TextView(context).apply {
