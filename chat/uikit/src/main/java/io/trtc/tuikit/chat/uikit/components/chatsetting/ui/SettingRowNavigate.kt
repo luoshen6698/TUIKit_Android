@@ -27,9 +27,14 @@ class SettingRowNavigate @JvmOverloads constructor(
     private val titleTextView: TextView
     private val valueTextView: TextView
     private val accessoryImageView: ImageView
+    private val leadingImageView: ImageView
     private var viewScope: CoroutineScope? = null
     private var showArrow: Boolean = true
     private var customAccessoryResId: Int? = null
+    private var leadingIconResId: Int? = null
+    private var leadingIconUsesAccentColor: Boolean = false
+    private var dangerStyle: Boolean = false
+    private var primaryTitleStyle: Boolean = false
 
     init {
         orientation = HORIZONTAL
@@ -41,6 +46,12 @@ class SettingRowNavigate @JvmOverloads constructor(
         setMinimumHeight(dp2px(48f, resources.displayMetrics).toInt())
         isClickable = true
         isFocusable = true
+
+        leadingImageView = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            visibility = GONE
+        }
+        addView(leadingImageView)
 
         titleTextView = TextView(context).apply {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
@@ -94,11 +105,57 @@ class SettingRowNavigate @JvmOverloads constructor(
         applyAccessory(getColors())
     }
 
+    fun setLeadingIcon(drawableResId: Int?, useAccentColor: Boolean = true) {
+        leadingIconResId = drawableResId
+        leadingIconUsesAccentColor = useAccentColor
+        applyLeadingIcon(getColors())
+    }
+
+    fun setDangerStyle(isDanger: Boolean) {
+        dangerStyle = isDanger
+        applyThemeColors(getColors())
+    }
+
+    fun setPrimaryTitleStyle(usePrimary: Boolean) {
+        primaryTitleStyle = usePrimary
+        applyThemeColors(getColors())
+    }
+
     private fun applyThemeColors(colors: ColorTokens) {
         setBackgroundColor(colors.bgColorOperate)
-        titleTextView.setTextColor(colors.textColorSecondary)
+        titleTextView.setTextColor(
+            when {
+                dangerStyle -> colors.textColorError
+                primaryTitleStyle -> colors.textColorPrimary
+                else -> colors.textColorSecondary
+            }
+        )
         valueTextView.setTextColor(colors.textColorPrimary)
+        applyLeadingIcon(colors)
         applyAccessory(colors)
+    }
+
+    private fun applyLeadingIcon(colors: ColorTokens) {
+        val drawableResId = leadingIconResId
+        if (drawableResId == null) {
+            leadingImageView.visibility = GONE
+            return
+        }
+        leadingImageView.visibility = VISIBLE
+        leadingImageView.setImageResource(drawableResId)
+        leadingImageView.setColorFilter(
+            when {
+                dangerStyle -> colors.textColorError
+                leadingIconUsesAccentColor -> colors.textColorLink
+                else -> colors.textColorSecondary
+            }
+        )
+        leadingImageView.layoutParams = LayoutParams(
+            dp2px(22f, resources.displayMetrics).toInt(),
+            dp2px(22f, resources.displayMetrics).toInt()
+        ).apply {
+            marginEnd = dp2px(14f, resources.displayMetrics).toInt()
+        }
     }
 
     private fun applyAccessory(colors: ColorTokens) {

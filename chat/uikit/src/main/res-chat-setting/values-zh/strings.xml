@@ -7,6 +7,10 @@
     <string name="chat_setting_modify_contact_remark">修改联系人备注</string>
     <string name="chat_setting_do_not_disturb">消息免打扰</string>
     <string name="chat_setting_pin">置顶聊天</string>
+    <string name="chat_setting_pin_conversation">置顶会话</string>
+    <string name="chat_setting_conversation_section">会话</string>
+    <string name="chat_setting_history_section">聊天记录</string>
+    <string name="chat_setting_create_group">创建群聊</string>
     <string name="chat_setting_add_blacklist">加入黑名单</string>
     <string name="chat_setting_send_messages">发送消息</string>
     <string name="chat_setting_clear_history_messages">清空聊天记录</string>

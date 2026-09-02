@@ -29,6 +29,7 @@ object ContactFlowLauncher {
         context: Context,
         contactStore: ContactStore = ContactStore.shared,
         groupStore: GroupStore = GroupStore.shared,
+        initialSelectedUserIDs: List<String> = emptyList(),
         onCreateChat: ((String) -> Unit)? = null
     ) {
         AddNewChatDialog(
@@ -36,6 +37,7 @@ object ContactFlowLauncher {
             chatType = ChatType.GROUP,
             contactStore = contactStore,
             groupStore = groupStore,
+            initialSelectedUserIDs = initialSelectedUserIDs,
             onCreateChat = onCreateChat
         ).show()
     }

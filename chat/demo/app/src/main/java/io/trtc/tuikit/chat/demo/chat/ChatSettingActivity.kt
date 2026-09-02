@@ -147,6 +147,15 @@ open class ChatSettingActivity : BaseActivity() {
                     finish()
                 },
                 showChatBackground = false,
+                onCreateGroupClick = {
+                    ContactFlowLauncher.showCreateGroupChatPage(
+                        context = this,
+                        initialSelectedUserIDs = listOf(userID),
+                    ) { conversationID ->
+                        ChatActivity.start(this, conversationID)
+                    }
+                },
+                layoutStyle = C2CChatSettingView.LayoutStyle.XINGDUN_INSET_GROUPED,
             )
         } else if (!groupID.isNullOrEmpty()) {
             tvTitle.text = getString(R.string.demo_chat_setting_group_settings)

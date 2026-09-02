@@ -68,6 +68,7 @@ internal class AddNewChatDialog(
     private val chatType: ChatType = ChatType.GROUP,
     private val contactStore: ContactStore = ContactStore.shared,
     private val groupStore: GroupStore = GroupStore.shared,
+    private val initialSelectedUserIDs: List<String> = emptyList(),
     private val onCreateChat: ((String) -> Unit)? = null
 ) : Dialog(context, android.R.style.Theme_NoTitleBar) {
 
@@ -239,6 +240,7 @@ internal class AddNewChatDialog(
     private var currentDisplayedStep: GroupFlowStep? = null
     private var userPickerView: UserPickerView? = null
     private var allContactDataSource: List<UserPickerData<ContactInfo>> = emptyList()
+    private var hasAppliedInitialSelection = false
     private var recentContactDataSource: List<UserPickerData<ContactInfo>> = emptyList()
     private var currentSearchQuery = ""
     private var showsRecentContacts = true
@@ -384,6 +386,14 @@ internal class AddNewChatDialog(
 
     private fun updateUserPickerIfVisible(dataSource: List<UserPickerData<ContactInfo>>) {
         allContactDataSource = dataSource
+        if (!hasAppliedInitialSelection && chatType == ChatType.GROUP && initialSelectedUserIDs.isNotEmpty()) {
+            val initialItems = dataSource.filter { it.key in initialSelectedUserIDs }
+            if (initialItems.isNotEmpty()) {
+                viewModel.setSelectedContacts(initialItems)
+                updateSelectionBottomBar(viewModel.uiState.value.selectedContacts)
+            }
+            hasAppliedInitialSelection = dataSource.isNotEmpty()
+        }
         applyFilteredContactDataSource()
     }
 

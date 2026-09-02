@@ -1,10 +1,13 @@
 package io.trtc.tuikit.chat.uikit.components.chatsetting.ui
 import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -41,6 +44,11 @@ class C2CChatSettingView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
 
+    enum class LayoutStyle {
+        DEFAULT,
+        XINGDUN_INSET_GROUPED,
+    }
+
     private var onSendMessageClick: (() -> Unit)? = null
     private var onVoiceCallClick: (() -> Unit)? = null
     private var onVideoCallClick: (() -> Unit)? = null
@@ -50,6 +58,8 @@ class C2CChatSettingView @JvmOverloads constructor(
     private var searchMessagesTitle: String? = null
     private var onContactDeleted: (() -> Unit)? = null
     private var showChatBackground = true
+    private var onCreateGroupClick: (() -> Unit)? = null
+    private var layoutStyle: LayoutStyle = LayoutStyle.DEFAULT
 
     private var viewModel: C2CChatSettingViewModel? = null
     private var viewScope: CoroutineScope? = null
@@ -63,7 +73,7 @@ class C2CChatSettingView @JvmOverloads constructor(
     private lateinit var idTextView: TextView
     private lateinit var signatureTextView: TextView
 
-    private lateinit var remarkRow: SettingRowNavigate
+    private var remarkRow: SettingRowNavigate? = null
 
     private lateinit var doNotDisturbRow: SettingRowToggle
     private lateinit var pinRow: SettingRowToggle
@@ -78,6 +88,8 @@ class C2CChatSettingView @JvmOverloads constructor(
 
     private val spacers = mutableListOf<View>()
     private val dividers = mutableListOf<View>()
+    private val sectionCards = mutableListOf<LinearLayout>()
+    private val sectionTitles = mutableListOf<TextView>()
 
     private var currentUserID: String? = null
     private var isUiBuilt = false
@@ -93,6 +105,8 @@ class C2CChatSettingView @JvmOverloads constructor(
         onSearchMessagesClick: (() -> Unit)? = null,
         onContactDeleted: (() -> Unit)? = null,
         showChatBackground: Boolean = true,
+        onCreateGroupClick: (() -> Unit)? = null,
+        layoutStyle: LayoutStyle = LayoutStyle.DEFAULT,
     ) {
         this.onSendMessageClick = onSendMessageClick
         this.onVoiceCallClick = onVoiceCallClick
@@ -103,6 +117,8 @@ class C2CChatSettingView @JvmOverloads constructor(
         this.onSearchMessagesClick = onSearchMessagesClick
         this.onContactDeleted = onContactDeleted
         this.showChatBackground = showChatBackground
+        this.onCreateGroupClick = onCreateGroupClick
+        this.layoutStyle = layoutStyle
 
         val owner = context.findViewModelStoreOwner() ?: return
 
@@ -127,6 +143,8 @@ class C2CChatSettingView @JvmOverloads constructor(
         removeAllViews()
         spacers.clear()
         dividers.clear()
+        sectionCards.clear()
+        sectionTitles.clear()
         val dm = resources.displayMetrics
         val colors = ThemeStore.shared(context).themeState.value.currentTheme.tokens.color
 
@@ -141,6 +159,13 @@ class C2CChatSettingView @JvmOverloads constructor(
             layoutDirection = LAYOUT_DIRECTION_LOCALE
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
             setBackgroundColor(colors.bgColorTopBar)
+        }
+
+        if (layoutStyle == LayoutStyle.XINGDUN_INSET_GROUPED) {
+            buildXingDunInsetGroupedUI(colors)
+            scrollView.addView(contentLayout)
+            addView(scrollView)
+            return
         }
 
         userInfoLayout = LinearLayout(context).apply {
@@ -200,8 +225,8 @@ class C2CChatSettingView @JvmOverloads constructor(
 
         remarkRow = SettingRowNavigate(context).apply {
             setShowArrow(true)
-        }
-        remarkRow.setOnClickListener {
+        }.also { row ->
+            row.setOnClickListener {
             val vm = viewModel ?: return@setOnClickListener
             TextInputDialog(
                 context = context,
@@ -209,8 +234,9 @@ class C2CChatSettingView @JvmOverloads constructor(
                 initialText = vm.friendRemark.value,
                 onConfirm = { vm.setFriendRemark(it) }
             ).show()
+            }
         }
-        contentLayout.addView(remarkRow)
+        remarkRow?.let(contentLayout::addView)
 
         addSpacer(contentLayout)
 
@@ -290,6 +316,191 @@ class C2CChatSettingView @JvmOverloads constructor(
         addView(scrollView)
     }
 
+    private fun buildXingDunInsetGroupedUI(colors: ColorTokens) {
+        val dm = resources.displayMetrics
+        val horizontalInset = dp2px(16f, dm).toInt()
+        contentLayout.setPadding(horizontalInset, dp2px(8f, dm).toInt(), horizontalInset, dp2px(28f, dm).toInt())
+        contentLayout.setBackgroundColor(colors.bgColorDefault)
+        scrollView.setBackgroundColor(colors.bgColorDefault)
+
+        val memberCard = createInsetCard(colors)
+        userInfoLayout = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+            setPadding(
+                dp2px(16f, dm).toInt(),
+                dp2px(14f, dm).toInt(),
+                dp2px(16f, dm).toInt(),
+                dp2px(12f, dm).toInt(),
+            )
+        }
+
+        val memberColumn = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(dp2px(72f, dm).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        avatarView = Avatar(context).apply {
+            setSize(Avatar.AvatarSize.L)
+            setShape(Avatar.AvatarShape.Round)
+        }
+        memberColumn.addView(avatarView)
+        nicknameTextView = TextView(context).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            gravity = Gravity.CENTER
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp2px(6f, dm).toInt() }
+        }
+        memberColumn.addView(nicknameTextView)
+        userInfoLayout.addView(memberColumn)
+
+        onCreateGroupClick?.let { createGroupAction ->
+            val createGroupColumn = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                isClickable = true
+                isFocusable = true
+                contentDescription = context.getString(R.string.chat_setting_create_group)
+                layoutParams = LinearLayout.LayoutParams(dp2px(72f, dm).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    marginStart = dp2px(4f, dm).toInt()
+                }
+                setOnClickListener { createGroupAction() }
+            }
+            val addIcon = ImageView(context).apply {
+                setImageResource(R.drawable.uikit_ic_user_add)
+                setColorFilter(colors.textColorSecondary)
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                background = roundedBackground(colors.bgColorDefault, 9f)
+                setPadding(
+                    dp2px(11f, dm).toInt(),
+                    dp2px(11f, dm).toInt(),
+                    dp2px(11f, dm).toInt(),
+                    dp2px(11f, dm).toInt(),
+                )
+            }
+            createGroupColumn.addView(
+                addIcon,
+                LinearLayout.LayoutParams(dp2px(48f, dm).toInt(), dp2px(48f, dm).toInt()),
+            )
+            createGroupColumn.addView(TextView(context).apply {
+                text = context.getString(R.string.chat_setting_create_group)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                setTextColor(colors.textColorSecondary)
+                gravity = Gravity.CENTER
+                maxLines = 2
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp2px(6f, dm).toInt() }
+            })
+            userInfoLayout.addView(createGroupColumn)
+        }
+
+        idTextView = TextView(context).apply { visibility = View.GONE }
+        signatureTextView = TextView(context).apply { visibility = View.GONE }
+        memberCard.addView(userInfoLayout)
+        contentLayout.addView(memberCard)
+
+        addSectionTitle(context.getString(R.string.chat_setting_conversation_section))
+        val conversationCard = createInsetCard(colors)
+        pinRow = SettingRowToggle(context).apply {
+            setTitle(context.getString(R.string.chat_setting_pin_conversation))
+            onToggleChanged = { checked -> viewModel?.setPinChat(checked) }
+        }
+        conversationCard.addView(pinRow)
+        addDivider(conversationCard)
+        doNotDisturbRow = SettingRowToggle(context).apply {
+            setTitle(context.getString(R.string.chat_setting_do_not_disturb))
+            onToggleChanged = { checked -> viewModel?.setDoNotDisturb(checked) }
+        }
+        conversationCard.addView(doNotDisturbRow)
+        addDivider(conversationCard)
+        blacklistRow = SettingRowToggle(context).apply {
+            setTitle(context.getString(R.string.chat_setting_add_blacklist))
+            onToggleChanged = { viewModel?.toggleBlacklist() }
+        }
+        conversationCard.addView(blacklistRow)
+        contentLayout.addView(conversationCard)
+
+        addSectionTitle(context.getString(R.string.chat_setting_history_section))
+        val historyCard = createInsetCard(colors)
+        val historyRows = mutableListOf<View>()
+        if (onSearchMessagesClick != null && !searchMessagesTitle.isNullOrBlank()) {
+            historyRows += SettingRowNavigate(context).apply {
+                setTitle(searchMessagesTitle.orEmpty())
+                setPrimaryTitleStyle(true)
+                setLeadingIcon(R.drawable.uikit_ic_search)
+                setShowArrow(true)
+                setOnClickListener { onSearchMessagesClick?.invoke() }
+            }
+        }
+        if (onAutoDeleteClick != null && !autoDeleteTitle.isNullOrBlank()) {
+            historyRows += SettingRowNavigate(context).apply {
+                setTitle(autoDeleteTitle.orEmpty())
+                setPrimaryTitleStyle(true)
+                setLeadingIcon(R.drawable.uikit_ic_history_timer)
+                setShowArrow(true)
+                setOnClickListener { onAutoDeleteClick?.invoke() }
+            }
+        }
+        historyRows += SettingRowNavigate(context).apply {
+            setTitle(context.getString(R.string.chat_setting_clear_history_messages))
+            setLeadingIcon(R.drawable.uikit_ic_delete_outline)
+            setShowArrow(false)
+            setDangerStyle(true)
+            setOnClickListener { showClearHistoryConfirmation(this) }
+        }
+        historyRows.forEachIndexed { index, row ->
+            historyCard.addView(row)
+            if (index != historyRows.lastIndex) addDivider(historyCard)
+        }
+        contentLayout.addView(historyCard)
+    }
+
+    private fun createInsetCard(colors: ColorTokens): LinearLayout {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedBackground(colors.bgColorOperate, 18f)
+            clipToOutline = true
+            outlineProvider = ViewOutlineProvider.BACKGROUND
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+        }.also(sectionCards::add)
+    }
+
+    private fun addSectionTitle(title: String) {
+        val dm = resources.displayMetrics
+        val titleView = TextView(context).apply {
+            text = title
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextColor(ThemeStore.shared(context).themeState.value.currentTheme.tokens.color.textColorTertiary)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp2px(22f, dm).toInt()
+                bottomMargin = dp2px(8f, dm).toInt()
+                marginStart = dp2px(10f, dm).toInt()
+            }
+        }
+        sectionTitles += titleView
+        contentLayout.addView(titleView)
+    }
+
+    private fun roundedBackground(color: Int, radiusDp: Float): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(color)
+            cornerRadius = dp2px(radiusDp, resources.displayMetrics)
+        }
+    }
+
     private fun appendCustomActions(parent: LinearLayout, hasPrecedingActions: Boolean) {
         val provider = ChatSettingActionConfig.customActionProvider ?: return
         val actions = provider.getActions(
@@ -364,44 +575,46 @@ class C2CChatSettingView @JvmOverloads constructor(
         return SettingRowButton(context).apply {
             setTitle(context.getString(R.string.chat_setting_clear_history_messages))
             setDangerStyle(true)
-            setOnClickListener {
-                AtomicAlertDialog(context).apply {
-                    init {
-                        title = context.getString(R.string.chat_setting_clear_history_confirmation_title)
-                        content = context.getString(R.string.chat_setting_clear_history_confirmation_message)
-                        autoDismiss = true
-                        confirmButton(
-                            context.getString(R.string.chat_setting_clear_history_confirm),
-                            type = AtomicAlertDialog.TextColorPreset.RED,
-                        ) { _ ->
-                            isEnabled = false
-                            alpha = 0.6f
-                            viewModel?.clearChatHistory(
-                                onSuccess = {
-                                    isEnabled = true
-                                    alpha = 1f
-                                    AtomicToast.show(
-                                        context,
-                                        context.getString(R.string.chat_setting_clear_history_success),
-                                        style = AtomicToast.Style.SUCCESS,
-                                    )
-                                },
-                                onFailure = { _, _ ->
-                                    isEnabled = true
-                                    alpha = 1f
-                                    AtomicToast.show(
-                                        context,
-                                        context.getString(R.string.chat_setting_clear_history_failed),
-                                        style = AtomicToast.Style.ERROR,
-                                    )
-                                },
+            setOnClickListener { showClearHistoryConfirmation(this) }
+        }
+    }
+
+    private fun showClearHistoryConfirmation(sourceView: View) {
+        AtomicAlertDialog(context).apply {
+            init {
+                title = context.getString(R.string.chat_setting_clear_history_confirmation_title)
+                content = context.getString(R.string.chat_setting_clear_history_confirmation_message)
+                autoDismiss = true
+                confirmButton(
+                    context.getString(R.string.chat_setting_clear_history_confirm),
+                    type = AtomicAlertDialog.TextColorPreset.RED,
+                ) { _ ->
+                    sourceView.isEnabled = false
+                    sourceView.alpha = 0.6f
+                    viewModel?.clearChatHistory(
+                        onSuccess = {
+                            sourceView.isEnabled = true
+                            sourceView.alpha = 1f
+                            AtomicToast.show(
+                                context,
+                                context.getString(R.string.chat_setting_clear_history_success),
+                                style = AtomicToast.Style.SUCCESS,
                             )
-                        }
-                        cancelButton(context.getString(R.string.uikit_cancel))
-                    }
-                    show()
+                        },
+                        onFailure = { _, _ ->
+                            sourceView.isEnabled = true
+                            sourceView.alpha = 1f
+                            AtomicToast.show(
+                                context,
+                                context.getString(R.string.chat_setting_clear_history_failed),
+                                style = AtomicToast.Style.ERROR,
+                            )
+                        },
+                    )
                 }
+                cancelButton(context.getString(R.string.uikit_cancel))
             }
+            show()
         }
     }
 
@@ -488,8 +701,8 @@ class C2CChatSettingView @JvmOverloads constructor(
                 } else {
                     signatureTextView.visibility = View.GONE
                 }
-                remarkRow.setTitle(context.getString(R.string.chat_setting_remark_name))
-                remarkRow.setValue(remark.ifEmpty { displayName })
+                remarkRow?.setTitle(context.getString(R.string.chat_setting_remark_name))
+                remarkRow?.setValue(remark.ifEmpty { displayName })
             }
         }
         scope.launch {
@@ -548,13 +761,17 @@ class C2CChatSettingView @JvmOverloads constructor(
     fun currentContactAvatarURL(): String? = viewModel?.avatar?.value?.takeIf { it.isNotBlank() }
 
     private fun applyThemeColors(colors: ColorTokens) {
-        setBackgroundColor(colors.bgColorTopBar)
-        scrollView.setBackgroundColor(colors.bgColorTopBar)
-        contentLayout.setBackgroundColor(colors.bgColorTopBar)
-        userInfoLayout.setBackgroundColor(colors.bgColorOperate)
+        val isInsetGrouped = layoutStyle == LayoutStyle.XINGDUN_INSET_GROUPED
+        val pageBackground = if (isInsetGrouped) colors.bgColorDefault else colors.bgColorTopBar
+        setBackgroundColor(pageBackground)
+        scrollView.setBackgroundColor(pageBackground)
+        contentLayout.setBackgroundColor(pageBackground)
+        if (!isInsetGrouped) userInfoLayout.setBackgroundColor(colors.bgColorOperate)
         nicknameTextView.setTextColor(colors.textColorPrimary)
         idTextView.setTextColor(colors.textColorTertiary)
         signatureTextView.setTextColor(colors.textColorTertiary)
+        sectionCards.forEach { it.background = roundedBackground(colors.bgColorOperate, 18f) }
+        sectionTitles.forEach { it.setTextColor(colors.textColorTertiary) }
         spacers.forEach { it.setBackgroundColor(colors.bgColorTopBar) }
         dividers.forEach { it.setBackgroundColor(colors.strokeColorPrimary) }
     }

@@ -7,6 +7,10 @@
     <string name="chat_setting_modify_contact_remark">Edit Contact Remark</string>
     <string name="chat_setting_do_not_disturb">Mute Notifications</string>
     <string name="chat_setting_pin">Pin Chat</string>
+    <string name="chat_setting_pin_conversation">Pin Conversation</string>
+    <string name="chat_setting_conversation_section">Conversation</string>
+    <string name="chat_setting_history_section">Chat History</string>
+    <string name="chat_setting_create_group">Create Group Chat</string>
     <string name="chat_setting_add_blacklist">Add to Blacklist</string>
     <string name="chat_setting_send_messages">Message</string>
     <string name="chat_setting_clear_history_messages">Clear Chat History</string>
