@@ -284,6 +284,7 @@
                 android:layout_height="10dp" />
 
             <View
+                android:id="@+id/demo_settingsBottomFiller"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1" />

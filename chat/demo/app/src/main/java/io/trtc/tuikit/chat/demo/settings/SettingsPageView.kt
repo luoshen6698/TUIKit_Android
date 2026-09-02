@@ -305,7 +305,13 @@ class SettingsPageView @JvmOverloads constructor(
         settingsGroup2.visibility = View.GONE
         findViewById<View>(R.id.demo_spacer2).visibility = View.GONE
         findViewById<View>(R.id.demo_spacer4).visibility = View.GONE
+        findViewById<View>(R.id.demo_settingsBottomFiller).visibility = View.GONE
         rebuildSystemSettingsMenu()
+        (btnLogout.layoutParams as LinearLayout.LayoutParams).apply {
+            topMargin = 12.dp()
+            bottomMargin = 16.dp()
+            btnLogout.layoutParams = this
+        }
         btnLogout.setCompoundDrawablesWithIntrinsicBounds(R.drawable.xingdun_ic_settings_logout, 0, 0, 0)
         btnLogout.compoundDrawablePadding = 10.dp()
         btnLogout.gravity = Gravity.START or Gravity.CENTER_VERTICAL
