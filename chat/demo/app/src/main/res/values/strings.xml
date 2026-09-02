@@ -507,6 +507,7 @@
     <string name="xingdun_profile_nickname_required">Nickname cannot be empty.</string>
     <string name="xingdun_profile_signature_too_long">The signature can contain up to 255 characters.</string>
     <string name="xingdun_profile_load_failed">Unable to load your profile. Try again later.</string>
+    <string name="xingdun_tencent_service_suspended">Tencent Cloud service is suspended. Contact your administrator to check the plan or account balance.</string>
     <string name="xingdun_profile_loading">Loading profile…</string>
     <string name="xingdun_profile_saving">Saving…</string>
     <string name="xingdun_profile_copy_account">Copy</string>

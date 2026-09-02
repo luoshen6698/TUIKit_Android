@@ -644,7 +644,16 @@ open class SelfDetailActivity : BaseActivity() {
         fallbackRes: Int = R.string.xingdun_action_failed,
         showToast: Boolean = true,
     ) {
-        val message = error.localizedMessage?.takeIf { it.isNotBlank() } ?: getString(fallbackRes)
+        val rawMessage = error.localizedMessage?.takeIf { it.isNotBlank() }
+        val message = if (
+            rawMessage?.contains("service suspended", ignoreCase = true) == true ||
+            rawMessage?.contains("account is in arrears", ignoreCase = true) == true ||
+            rawMessage?.contains("until you recharge", ignoreCase = true) == true
+        ) {
+            getString(R.string.xingdun_tencent_service_suspended)
+        } else {
+            rawMessage ?: getString(fallbackRes)
+        }
         errorBanner.text = message
         errorBanner.visibility = View.VISIBLE
         if (showToast) Toast.makeText(this, message, Toast.LENGTH_LONG).show()
