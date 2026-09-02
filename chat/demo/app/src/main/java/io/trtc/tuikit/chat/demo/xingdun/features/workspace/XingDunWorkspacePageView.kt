@@ -48,7 +48,7 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
             setTitle(context.getString(R.string.xingdun_workspace_title))
             setEditContent(TextView(context).apply {
                 text = "▤"
-                textSize = 22f
+                textSize = 26f
                 gravity = Gravity.CENTER
                 setTextColor(0xFF168F83.toInt())
                 contentDescription = context.getString(R.string.xingdun_workspace_my)
@@ -187,10 +187,11 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
                 "reimburse" -> "¥"
                 else -> "□"
             }
-            textSize = 20f
+            textSize = 26f
             gravity = Gravity.CENTER
             setTextColor(if (type.available) 0xFF168F83.toInt() else 0xFF8A8A8F.toInt())
-        })
+            background = roundedDrawable(0xFFE1F3EE.toInt(), 10f)
+        }, LayoutParams(42.dp(), 42.dp()).apply { bottomMargin = 4.dp() })
         addView(TextView(context).apply {
             text = typeDisplayName(type)
             textSize = 12f
@@ -248,10 +249,10 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
                         gravity = Gravity.CENTER_VERTICAL
                         addView(TextView(context).apply {
                             text = icon
-                            textSize = 18f
+                            textSize = 24f
                             gravity = Gravity.CENTER
                             setTextColor(categoryColor(category))
-                        }, LayoutParams(28.dp(), 28.dp()).apply { marginEnd = 6.dp() })
+                        }, LayoutParams(34.dp(), 34.dp()).apply { marginEnd = 8.dp() })
                         addView(TextView(context).apply {
                             setText(title)
                             textSize = 15f
@@ -337,10 +338,11 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
         setPadding(4.dp(), 8.dp(), 4.dp(), 8.dp())
         addView(TextView(context).apply {
             text = when (type.category) { "finance" -> "¥"; "hr" -> "♟"; else -> "◷" }
-            textSize = 20f
+            textSize = 26f
             gravity = Gravity.CENTER
             setTextColor(if (type.available) 0xFF20A88F.toInt() else 0xFF8A8A8F.toInt())
-        })
+            background = roundedDrawable(0xFFE1F3EE.toInt(), 10f)
+        }, LayoutParams(40.dp(), 40.dp()).apply { bottomMargin = 4.dp() })
         addView(TextView(context).apply {
             text = typeDisplayName(type)
             textSize = 12f
@@ -364,6 +366,7 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
             addView(TextView(context).apply {
                 text = label
                 textSize = 15f
+                gravity = Gravity.CENTER_VERTICAL
                 setTextColor(0xFF1C1C1E.toInt())
             }, LayoutParams(0, 52.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
             if (count != null && count > 0) addView(TextView(context).apply {
