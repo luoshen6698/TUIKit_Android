@@ -227,7 +227,12 @@ class XingDunWorkspacePageView(context: Context) : LinearLayout(context) {
             return
         }
         val id = recent.int("id")
-        val detail = listOfNotNull(recent.string("type_name"), recent.string("status_text")).joinToString(" · ")
+        val statusText = if (recent.int("status") == 3) {
+            context.getString(R.string.xingdun_workspace_status_submitted)
+        } else {
+            recent.string("status_text")
+        }
+        val detail = listOfNotNull(recent.string("type_name"), statusText).joinToString(" · ")
         addInformationRow(recent.string("title") ?: context.getString(R.string.xingdun_workspace_untitled), detail) {
             if (id > 0) XingDunFeatureActivity.start(context, XingDunFeatureActivity.MODE_WORKSPACE_DETAIL, id)
         }
