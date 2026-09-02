@@ -111,10 +111,6 @@ class ChatActivity : BaseActivity() {
     private lateinit var leftContainer: LinearLayout
     private lateinit var btnMultiSelectCancel: TextView
     private lateinit var chatPageView: ChatPageView
-    private lateinit var chatSecurityBar: LinearLayout
-    private lateinit var securityWarningIcon: ImageView
-    private lateinit var securityWarningText: TextView
-    private lateinit var securityWarningClose: ImageView
     private lateinit var pinnedMessageBar: LinearLayout
     private lateinit var pinnedMessageIcon: ImageView
     private lateinit var pinnedMessageSummary: TextView
@@ -228,10 +224,6 @@ class ChatActivity : BaseActivity() {
         btnMultiSelectCancel.text = getString(R.string.demo_chat_header_cancel)
         updateChatTitle(ChatTitleResolver.resolve(conversationID = conversationID))
         val chatPageContainer = findViewById<FrameLayout>(R.id.demo_chatPageContainer)
-        chatSecurityBar = findViewById(R.id.demo_chatSecurityBar)
-        securityWarningIcon = findViewById(R.id.demo_securityWarningIcon)
-        securityWarningText = findViewById(R.id.demo_securityWarningText)
-        securityWarningClose = findViewById(R.id.demo_securityWarningClose)
         pinnedMessageBar = findViewById(R.id.demo_pinnedMessageBar)
         pinnedMessageIcon = findViewById(R.id.demo_pinnedMessageIcon)
         pinnedMessageSummary = findViewById(R.id.demo_pinnedMessageSummary)
@@ -241,10 +233,6 @@ class ChatActivity : BaseActivity() {
         messagePinEnabled = XingDunSessionManager.currentSession()?.features?.messagePin == true
         canManagePinnedMessages = conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)
         pinnedMessageBar.setOnClickListener { XingDunPinnedMessagesActivity.start(this, conversationID) }
-        securityWarningText.setOnClickListener { openSecurityReport(conversationID) }
-        securityWarningIcon.setOnClickListener { openSecurityReport(conversationID) }
-        securityWarningClose.setOnClickListener { chatSecurityBar.visibility = View.GONE }
-
         ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.updatePadding(top = systemBars.top)
@@ -935,14 +923,6 @@ class ChatActivity : BaseActivity() {
         super.onPause()
     }
 
-    private fun openSecurityReport(conversationID: String) {
-        val targetType = if (conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)) "user" else "team"
-        val targetID = if (targetType == "user") getUserID(conversationID) else getGroupID(conversationID)
-        if (!targetID.isNullOrBlank()) {
-            XingDunFeatureActivity.startReport(this, targetType, targetID, latestChatTitle, targetID)
-        }
-    }
-
     private fun applyColors(colors: ColorTokens) {
         rootContainer.setBackgroundColor(colors.bgColorOperate)
         headerContainer.setBackgroundColor(colors.bgColorOperate)
@@ -959,10 +939,6 @@ class ChatActivity : BaseActivity() {
         badgeContainer.background = badgeBg
         tvUnreadBadge.setTextColor(colors.textColorButton)
 
-        chatSecurityBar.setBackgroundColor(colors.toastColorWarning)
-        securityWarningIcon.imageTintList = ColorStateList.valueOf(colors.textColorWarning)
-        securityWarningText.setTextColor(colors.textColorWarning)
-        securityWarningClose.imageTintList = ColorStateList.valueOf(colors.textColorWarning)
         pinnedMessageBar.setBackgroundColor(colors.bgColorInput)
         pinnedMessageIcon.imageTintList = ColorStateList.valueOf(colors.textColorLink)
         pinnedMessageSummary.setTextColor(colors.textColorPrimary)
