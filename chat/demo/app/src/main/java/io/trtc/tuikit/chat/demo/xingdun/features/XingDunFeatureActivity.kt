@@ -5140,6 +5140,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 setText(title)
                 textSize = 15f
                 setTextColor(0xFF168F83.toInt())
+                gravity = Gravity.CENTER_VERTICAL
             }, LinearLayout.LayoutParams(0, 52.dp(), 1f).apply { gravity = Gravity.CENTER_VERTICAL })
             addView(TextView(context).apply {
                 text = "›"
