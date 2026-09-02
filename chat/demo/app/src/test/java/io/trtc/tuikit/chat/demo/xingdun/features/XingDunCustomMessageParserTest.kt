@@ -66,4 +66,55 @@ class XingDunCustomMessageParserTest {
         assertFalse(XingDunRedpacketAccessPolicy.canOpen(featureEnabled = false))
         assertTrue(XingDunRedpacketAccessPolicy.canOpen(featureEnabled = true))
     }
+
+    @Test
+    fun parsesLegacySnakeCaseContactCardContract() {
+        val card = requireNotNull(
+            XingDunCustomMessageParser.parse(
+                """{"type":"xingdun_contact_card","version":1,"data":{"user_id":"xd_xc2026_59","custom_id":"b002","display_name":"不会","avatar_url":"https://example.com/avatar.png","department":"产品部"}}"""
+            )?.contactCard()
+        )
+
+        assertEquals("xd_xc2026_59", card.userID)
+        assertEquals("b002", card.customID)
+        assertEquals("不会", card.displayName)
+        assertEquals("https://example.com/avatar.png", card.avatarURL)
+        assertEquals("产品部", card.department)
+    }
+
+    @Test
+    fun parsesCurrentIosContactCardContract() {
+        val card = requireNotNull(
+            XingDunCustomMessageParser.parse(
+                """{"type":"contact_card","data":{"accid":"xd_xc2026_59","name":"不会","avatar":"https://example.com/ios-avatar.png","customId":"b002"}}"""
+            )?.contactCard()
+        )
+
+        assertEquals("xd_xc2026_59", card.userID)
+        assertEquals("b002", card.customID)
+        assertEquals("不会", card.displayName)
+        assertEquals("https://example.com/ios-avatar.png", card.avatarURL)
+    }
+
+    @Test
+    fun parsesLegacyCamelCaseContactCardAndFallsBackToUserId() {
+        val card = requireNotNull(
+            XingDunCustomMessageParser.parse(
+                """{"type":"contact_card","payload":{"timUserId":"xd_xc2026_270","nickname":"b002"}}"""
+            )?.contactCard()
+        )
+
+        assertEquals("xd_xc2026_270", card.userID)
+        assertEquals("b002", card.displayName)
+        assertNull(card.customID)
+    }
+
+    @Test
+    fun rejectsContactCardWithoutUserIdentity() {
+        val message = XingDunCustomMessageParser.parse(
+            """{"type":"xingdun_contact_card","display_name":"无效名片"}"""
+        )
+
+        assertNull(message?.contactCard())
+    }
 }

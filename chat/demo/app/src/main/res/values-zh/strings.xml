@@ -841,6 +841,8 @@
     <string name="xingdun_redpacket_closed_detail">红包功能当前未开放，此消息仅作兼容展示。</string>
     <string name="xingdun_custom_contact">名片</string>
     <string name="xingdun_custom_contact_summary">[名片] %1$s</string>
+    <string name="xingdun_custom_contact_card_footer">联系人名片</string>
+    <string name="xingdun_custom_contact_card_accessibility">%1$s 的联系人名片，账号 %2$s</string>
     <string name="xingdun_audio_call">语音通话</string>
     <string name="xingdun_video_call">视频通话</string>
     <string name="xingdun_custom_call_summary">[%1$s] 通话已结束</string>

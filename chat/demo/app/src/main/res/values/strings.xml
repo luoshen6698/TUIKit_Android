@@ -847,6 +847,8 @@
     <string name="xingdun_redpacket_closed_detail">Red packets are currently unavailable. This message is shown for compatibility only.</string>
     <string name="xingdun_custom_contact">Contact</string>
     <string name="xingdun_custom_contact_summary">[Contact] %1$s</string>
+    <string name="xingdun_custom_contact_card_footer">Contact card</string>
+    <string name="xingdun_custom_contact_card_accessibility">Contact card for %1$s, account %2$s</string>
     <string name="xingdun_audio_call">Audio call</string>
     <string name="xingdun_video_call">Video call</string>
     <string name="xingdun_custom_call_summary">[%1$s] Call ended</string>

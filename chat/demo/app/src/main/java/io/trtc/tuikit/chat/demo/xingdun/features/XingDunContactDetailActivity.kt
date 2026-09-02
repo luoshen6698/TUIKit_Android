@@ -57,6 +57,7 @@ class XingDunContactDetailActivity : BaseActivity() {
     private lateinit var detailRefresh: SwipeRefreshLayout
 
     private val timUserID: String by lazy { intent.getStringExtra(EXTRA_USER_ID).orEmpty().trim() }
+    private val fallbackCustomID: String? by lazy { intent.getStringExtra(EXTRA_CUSTOM_ID).normalized() }
     private var detail: XingDunContactDetail? = null
     private var isOperating = false
     private var operationError: String? = null
@@ -196,6 +197,7 @@ class XingDunContactDetailActivity : BaseActivity() {
                 }
                 detail = response.copy(
                     timUserId = response.timUserId.trim().ifEmpty { timUserID },
+                    customId = response.customId.normalized() ?: detail?.customId ?: fallbackCustomID,
                     nickname = response.nickname.normalized() ?: detail?.nickname,
                     avatar = response.avatar.normalized() ?: detail?.avatar
                 )
@@ -205,7 +207,7 @@ class XingDunContactDetailActivity : BaseActivity() {
                     XingDunSessionManager.apiClient().getNullable<JsonObject>(
                         session,
                         "user/searchForFriend",
-                        mapOf("keyword" to timUserID),
+                        mapOf("keyword" to (detail?.customId.normalized() ?: fallbackCustomID ?: timUserID)),
                         JsonObject::class.java,
                     )
                 }.onSuccess { profile ->
@@ -501,12 +503,12 @@ class XingDunContactDetailActivity : BaseActivity() {
         if (conversationIDs.isEmpty()) return
         val payload = JsonObject().apply {
             addProperty("type", CONTACT_CARD_TYPE)
-            addProperty("version", 1)
-            addProperty("user_id", current.timUserId.ifBlank { timUserID })
-            current.customId.normalized()?.let { addProperty("custom_id", it) }
-            addProperty("display_name", current.alias.normalized() ?: current.nickname.normalized() ?: timUserID)
-            current.avatar.normalized()?.let { addProperty("avatar_url", it) }
-            current.departmentPath.takeIf(List<String>::isNotEmpty)?.joinToString(" / ")?.let { addProperty("department", it) }
+            add("data", JsonObject().apply {
+                addProperty("accid", current.timUserId.ifBlank { timUserID })
+                addProperty("name", current.alias.normalized() ?: current.nickname.normalized() ?: timUserID)
+                current.avatar.normalized()?.let { addProperty("avatar", it) }
+                current.customId.normalized()?.let { addProperty("customId", it) }
+            })
         }.toString()
         val remaining = AtomicInteger(conversationIDs.size)
         val failures = AtomicInteger(0)
@@ -708,6 +710,7 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun fallbackDetail(): XingDunContactDetail = XingDunContactDetail(
+        customId = fallbackCustomID,
         nickname = intent.getStringExtra(EXTRA_NICKNAME).normalized() ?: timUserID,
         avatar = intent.getStringExtra(EXTRA_AVATAR).normalized(),
         signature = intent.getStringExtra(EXTRA_SIGNATURE).normalized(),
@@ -729,6 +732,7 @@ class XingDunContactDetailActivity : BaseActivity() {
 
     companion object {
         private const val EXTRA_USER_ID = "user_id"
+        private const val EXTRA_CUSTOM_ID = "custom_id"
         private const val EXTRA_NICKNAME = "nickname"
         private const val EXTRA_AVATAR = "avatar"
         private const val EXTRA_SIGNATURE = "signature"
@@ -738,7 +742,7 @@ class XingDunContactDetailActivity : BaseActivity() {
         private const val MENU_RECOMMEND = 1
         private const val MENU_REPORT = 2
         private const val MENU_DELETE = 3
-        private const val CONTACT_CARD_TYPE = "xingdun_contact_card"
+        private const val CONTACT_CARD_TYPE = "contact_card"
         private const val RELATIONSHIP_UNKNOWN = "unknown"
         private const val RELATIONSHIP_NONE = "none"
         private const val RELATIONSHIP_FRIEND = "friend"
@@ -764,8 +768,13 @@ class XingDunContactDetailActivity : BaseActivity() {
         }
 
         fun start(context: Context, userID: String, nickname: String?, avatar: String?) {
+            start(context, userID, null, nickname, avatar)
+        }
+
+        fun start(context: Context, userID: String, customID: String?, nickname: String?, avatar: String?) {
             context.startActivity(Intent(context, XingDunContactDetailActivity::class.java).apply {
                 putExtra(EXTRA_USER_ID, userID)
+                putExtra(EXTRA_CUSTOM_ID, customID)
                 putExtra(EXTRA_NICKNAME, nickname)
                 putExtra(EXTRA_AVATAR, avatar)
                 if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

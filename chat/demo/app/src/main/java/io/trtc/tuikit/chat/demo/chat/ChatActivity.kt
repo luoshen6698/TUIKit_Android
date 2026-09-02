@@ -167,7 +167,7 @@ class ChatActivity : BaseActivity() {
         private const val REPORT_ACTION_ID = "xingdun.message.report"
         private const val CONTACT_CARD_ACTION_ID = "xingdun.messageInput.contactCard"
         private const val MENTION_ACTION_ID = "xingdun.messageInput.mention"
-        private const val CONTACT_CARD_TYPE = "xingdun_contact_card"
+        private const val CONTACT_CARD_TYPE = "contact_card"
 
         fun start(context: Context, conversationID: String) {
             start(context, conversationID, null)
@@ -785,10 +785,11 @@ class ChatActivity : BaseActivity() {
             .ifBlank { contact?.avatarURL?.trim().orEmpty() }
         val payload = JsonObject().apply {
             addProperty("type", CONTACT_CARD_TYPE)
-            addProperty("version", 1)
-            addProperty("user_id", userID)
-            addProperty("display_name", displayName)
-            avatar.takeIf(String::isNotEmpty)?.let { addProperty("avatar_url", it) }
+            add("data", JsonObject().apply {
+                addProperty("accid", userID)
+                addProperty("name", displayName)
+                avatar.takeIf(String::isNotEmpty)?.let { addProperty("avatar", it) }
+            })
         }.toString()
         MessageInputStore.create(conversationID).sendMessage(
             SendMessagePayload.CustomSendMessagePayload(payload, CONTACT_CARD_TYPE, ""),

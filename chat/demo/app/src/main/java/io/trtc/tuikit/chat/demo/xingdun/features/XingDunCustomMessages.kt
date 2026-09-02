@@ -1,12 +1,16 @@
 package io.trtc.tuikit.chat.demo.xingdun.features
 
 import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.gson.JsonElement
@@ -26,6 +30,7 @@ import io.trtc.tuikit.chat.uikit.components.messagelist.ui.MessageRenderConfig
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.MessageRenderContext
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.MessageSummaryProvider
 import io.trtc.tuikit.chat.uikit.components.messagelist.utils.MessageListMessageSummaryRegistry
+import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,12 +38,35 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
+internal data class XingDunContactCardPayload(
+    val userID: String,
+    val customID: String?,
+    val displayName: String,
+    val avatarURL: String?,
+    val department: String?,
+)
+
 internal data class XingDunCustomMessage(
     val type: String,
     val values: Map<String, String>,
     val isControl: Boolean,
     val isXingDunEnvelope: Boolean
 ) {
+    fun contactCard(): XingDunContactCardPayload? {
+        if (type !in CONTACT_CARD_TYPES) return null
+        fun first(vararg names: String): String? = names.firstNotNullOfOrNull { name ->
+            values[name]?.trim()?.takeIf(String::isNotEmpty)
+        }
+        val userID = first("accid", "user_id", "userId", "tim_user_id", "timUserId", "identifier") ?: return null
+        return XingDunContactCardPayload(
+            userID = userID,
+            customID = first("custom_id", "customId", "account", "username"),
+            displayName = first("display_name", "displayName", "nickname", "name") ?: userID,
+            avatarURL = first("avatar_url", "avatarURL", "avatar"),
+            department = first("department", "department_name", "departmentName"),
+        )
+    }
+
     fun summary(context: Context): String {
         fun first(vararg names: String): String? = names.firstNotNullOfOrNull { values[it]?.trim()?.takeIf(String::isNotEmpty) }
         return when (type) {
@@ -92,6 +120,10 @@ internal data class XingDunCustomMessage(
         String.format(Locale.ROOT, "%d:%02d:%02d", seconds / 3_600, seconds % 3_600 / 60, seconds % 60)
     } else {
         String.format(Locale.ROOT, "%02d:%02d", seconds / 60, seconds % 60)
+    }
+
+    private companion object {
+        val CONTACT_CARD_TYPES = setOf("contact_card", "xingdun_contact_card", "card")
     }
 }
 
@@ -207,6 +239,9 @@ internal object XingDunCustomMessagePresentation {
     private val controlMatcher = MessageMatcher { message ->
         XingDunCustomMessageParser.parse(message)?.isControl == true
     }
+    private val contactCardMatcher = MessageMatcher { message ->
+        XingDunCustomMessageParser.parse(message)?.takeUnless(XingDunCustomMessage::isControl)?.contactCard() != null
+    }
     private val summaryProvider = MessageSummaryProvider { context ->
         XingDunCustomMessageParser.parse(context.message)?.takeUnless(XingDunCustomMessage::isControl)?.summary(context.context)
     }
@@ -218,12 +253,126 @@ internal object XingDunCustomMessagePresentation {
     fun configure(config: ChatMessageListConfig) {
         config.addMessageExclusion(controlMatcher)
         config.addCustomMessageRenderer(
+            matcher = contactCardMatcher,
+            renderer = XingDunContactCardMessageRenderer,
+            priority = 200,
+            summaryProvider = summaryProvider
+        )
+        config.addCustomMessageRenderer(
             matcher = matcher,
             renderer = XingDunCustomMessageRenderer,
             priority = 100,
             summaryProvider = summaryProvider
         )
     }
+}
+
+private object XingDunContactCardMessageRenderer : MessageContentRenderer {
+    override val renderConfig = MessageRenderConfig(
+        showMessageMeta = true,
+        useDefaultBubble = false,
+        bubbleStyle = BubbleStyle.CARD
+    )
+
+    override fun createView(context: Context, parent: ViewGroup): View = XingDunContactCardView(context)
+
+    override fun bindView(view: View, context: MessageRenderContext) {
+        val payload = XingDunCustomMessageParser.parse(context.message)?.contactCard() ?: return
+        (view as XingDunContactCardView).bind(payload, context)
+    }
+}
+
+private class XingDunContactCardView(context: Context) : LinearLayout(context) {
+    private val avatar = Avatar(context).apply {
+        setSize(Avatar.AvatarSize.L)
+        setShape(Avatar.AvatarShape.Round)
+    }
+    private val name = TextView(context).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+        typeface = Typeface.DEFAULT_BOLD
+        maxLines = 1
+    }
+    private val account = TextView(context).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+        maxLines = 1
+    }
+    private val divider = View(context)
+    private val footerIcon = ImageView(context).apply {
+        setImageResource(R.drawable.xingdun_ic_contact_card)
+    }
+    private val footer = TextView(context).apply {
+        setText(R.string.xingdun_custom_contact_card_footer)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+    }
+
+    init {
+        orientation = VERTICAL
+        isClickable = true
+        isFocusable = true
+        setPadding(14.dp(), 13.dp(), 14.dp(), 10.dp())
+        layoutParams = LayoutParams(270.dp(), ViewGroup.LayoutParams.WRAP_CONTENT)
+
+        addView(LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(avatar, LayoutParams(48.dp(), 48.dp()))
+            addView(LinearLayout(context).apply {
+                orientation = VERTICAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(12.dp(), 0, 0, 0)
+                addView(name, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                addView(account, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = 3.dp()
+                })
+            }, LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        addView(divider, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1.dp()).apply {
+            topMargin = 12.dp()
+            bottomMargin = 8.dp()
+        })
+        addView(LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(footerIcon, LayoutParams(15.dp(), 15.dp()))
+            addView(footer, LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = 6.dp()
+            })
+        })
+    }
+
+    fun bind(payload: XingDunContactCardPayload, renderContext: MessageRenderContext) {
+        val accountText = payload.userID
+        avatar.setContent(Avatar.AvatarContent.Image(payload.avatarURL, payload.displayName))
+        name.text = payload.displayName
+        account.text = accountText
+        name.setTextColor(renderContext.colors.textColorPrimary)
+        account.setTextColor(renderContext.colors.textColorSecondary)
+        footer.setTextColor(renderContext.colors.textColorSecondary)
+        footerIcon.imageTintList = ColorStateList.valueOf(renderContext.colors.textColorSecondary)
+        divider.setBackgroundColor(renderContext.colors.strokeColorPrimary)
+        background = GradientDrawable().apply {
+            setColor(renderContext.colors.bgColorOperate)
+            setStroke(1.dp(), renderContext.colors.strokeColorPrimary)
+            cornerRadius = 12.dp().toFloat()
+        }
+        contentDescription = context.getString(
+            R.string.xingdun_custom_contact_card_accessibility,
+            payload.displayName,
+            accountText,
+        )
+        setOnClickListener {
+            XingDunContactDetailActivity.start(
+                context = it.context,
+                userID = payload.userID,
+                customID = payload.customID,
+                nickname = payload.displayName,
+                avatar = payload.avatarURL,
+            )
+        }
+    }
+
+    private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
 }
 
 private object XingDunCustomMessageRenderer : MessageContentRenderer {
