@@ -157,6 +157,7 @@ class ChatActivity : BaseActivity() {
         private const val EXTRA_CONVERSATION_ID = "conversationID"
         private const val EXTRA_LOCATE_MESSAGE = "locateMessage"
         private const val EXTRA_LOCATE_MESSAGE_ID = "locateMessageID"
+        private const val EXTRA_LOCATE_MESSAGE_SEQUENCE = "locateMessageSequence"
         private const val EXTRA_LOCATE_PIN_VERSION = "locatePinnedMessageVersion"
         private const val C2C_CONVERSATION_ID_PREFIX = "c2c_"
         private const val GROUP_CONVERSATION_ID_PREFIX = "group_"
@@ -185,11 +186,20 @@ class ChatActivity : BaseActivity() {
             })
         }
 
-        fun startForMessageID(context: Context, conversationID: String, messageID: String, pinVersion: Int = 0) {
+        fun startForMessageID(
+            context: Context,
+            conversationID: String,
+            messageID: String,
+            messageSequence: Long? = null,
+            pinVersion: Int = 0,
+        ) {
             context.startActivity(Intent(context, ChatActivity::class.java).apply {
                 if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 putExtra(EXTRA_CONVERSATION_ID, conversationID)
                 putExtra(EXTRA_LOCATE_MESSAGE_ID, messageID)
+                messageSequence?.takeIf { it > 0L }?.let {
+                    putExtra(EXTRA_LOCATE_MESSAGE_SEQUENCE, it)
+                }
                 putExtra(EXTRA_LOCATE_PIN_VERSION, pinVersion)
             })
         }
@@ -209,6 +219,7 @@ class ChatActivity : BaseActivity() {
         @Suppress("DEPRECATION")
         val locateMessage = intent?.getParcelableExtra<MessageInfo>(EXTRA_LOCATE_MESSAGE)
         val locateMessageID = intent?.getStringExtra(EXTRA_LOCATE_MESSAGE_ID)
+        val locateMessageSequence = intent?.getLongExtra(EXTRA_LOCATE_MESSAGE_SEQUENCE, 0L) ?: 0L
         val locatePinVersion = intent?.getIntExtra(EXTRA_LOCATE_PIN_VERSION, 0) ?: 0
 
         rootContainer = findViewById(R.id.demo_chatRootContainer)
@@ -290,7 +301,10 @@ class ChatActivity : BaseActivity() {
         )
         if (!locateMessageID.isNullOrBlank()) {
             chatPageView.post {
-                chatPageView.locateMessageByID(locateMessageID) { located ->
+                chatPageView.locateMessageByID(
+                    messageID = locateMessageID,
+                    messageSequence = locateMessageSequence.takeIf { it > 0L },
+                ) { located ->
                     if (located && locatePinVersion > 0) {
                         XingDunPinnedMessageRepository.markRead(
                             this,

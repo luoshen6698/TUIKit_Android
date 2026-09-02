@@ -150,6 +150,9 @@ class MessageListViewModel(
     }
     private val hiddenResendingMessageIds = MutableStateFlow<Set<String>>(emptySet())
 
+    private val _initialMessageLoadResult = MutableStateFlow<Boolean?>(null)
+    internal val initialMessageLoadResult: StateFlow<Boolean?> = _initialMessageLoadResult.asStateFlow()
+
     val messageList: StateFlow<List<MessageInfo>> = combine(
         messageListState.messageList,
         AlbumPickerProcessingMessageStore.messagesByConversation,
@@ -260,7 +263,16 @@ class MessageListViewModel(
             MessageLoadOption(
                 cursor = locateMessage,
                 direction = if (locateMessage != null) MessageLoadDirection.BOTH else MessageLoadDirection.OLDER
-            )
+            ),
+            object : CompletionHandler {
+                override fun onSuccess() {
+                    _initialMessageLoadResult.value = true
+                }
+
+                override fun onFailure(code: Int, desc: String) {
+                    _initialMessageLoadResult.value = false
+                }
+            }
         )
     }
 
@@ -1352,4 +1364,3 @@ internal object AuxiliaryTextProcessingStatePolicy {
         )
     }
 }
-

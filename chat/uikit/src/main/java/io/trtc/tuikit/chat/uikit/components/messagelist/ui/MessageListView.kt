@@ -65,7 +65,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MessageListView @JvmOverloads constructor(
     context: Context,
@@ -75,6 +78,7 @@ class MessageListView @JvmOverloads constructor(
 
     private companion object {
         const val MENTION_LOCATE_MAX_LOAD_COUNT = 20
+        const val PINNED_MESSAGE_LOCATE_TIMEOUT_MS = 3_000L
         const val UNREAD_CLEAR_DEBOUNCE_MS = 300L
     }
 
@@ -110,30 +114,168 @@ class MessageListView @JvmOverloads constructor(
 
     fun locateMessageByID(
         messageID: String,
-        maxOlderLoads: Int = 5,
+        messageSequence: Long? = null,
+        maxOlderLoads: Int = MENTION_LOCATE_MAX_LOAD_COUNT,
         completion: (Boolean) -> Unit = {},
     ) {
-        if (messageID.isBlank()) {
+        if (messageID.isBlank() && (messageSequence ?: 0L) <= 0L) {
             completion(false)
             return
         }
         if (!::viewModel.isInitialized) {
-            post { locateMessageByID(messageID, maxOlderLoads, completion) }
+            post {
+                locateMessageByID(
+                    messageID = messageID,
+                    messageSequence = messageSequence,
+                    maxOlderLoads = maxOlderLoads,
+                    completion = completion,
+                )
+            }
             return
         }
-        if (viewModel.messageList.value.any { it.msgID == messageID }) {
-            locateCoordinator.requestLocateMessage(messageID)
+
+        val scope = viewScope
+        if (scope == null) {
+            post {
+                locateMessageByID(
+                    messageID = messageID,
+                    messageSequence = messageSequence,
+                    maxOlderLoads = maxOlderLoads,
+                    completion = completion,
+                )
+            }
+            return
+        }
+
+        scope.launch {
+            val initialLoaded = viewModel.initialMessageLoadResult.filterNotNull().first()
+            post {
+                if (initialLoaded) {
+                    locatePinnedMessage(
+                        messageID = messageID,
+                        messageSequence = messageSequence,
+                        maxOlderLoads = maxOlderLoads,
+                        completion = completion,
+                    )
+                } else {
+                    completion(false)
+                }
+            }
+        }
+    }
+
+    private fun locatePinnedMessage(
+        messageID: String,
+        messageSequence: Long?,
+        maxOlderLoads: Int,
+        completion: (Boolean) -> Unit,
+    ) {
+        val loadedMessageID = findLoadedPinnedMessageID(messageID, messageSequence)
+        if (loadedMessageID != null) {
+            locateCoordinator.requestLocateMessage(loadedMessageID)
             completion(true)
             return
         }
-        if (maxOlderLoads <= 0 || !viewModel.hasMoreOlderMessage.value) {
+
+        if ((messageSequence ?: 0L) <= 0L) {
+            locateLoadedMessageOrLoadOlder(
+                messageID = messageID,
+                messageSequence = messageSequence,
+                remainingOlderLoads = maxOlderLoads,
+                completion = completion,
+            )
+            return
+        }
+
+        viewModel.loadMessagesAroundMessage(
+            MessageInfo(msgID = messageID, sequence = messageSequence),
+            object : CompletionHandler {
+                override fun onSuccess() {
+                    awaitAndLocatePinnedMessage(
+                        messageID = messageID,
+                        messageSequence = messageSequence,
+                        maxOlderLoads = maxOlderLoads,
+                        completion = completion,
+                    )
+                }
+
+                override fun onFailure(code: Int, desc: String) {
+                    post {
+                        locateLoadedMessageOrLoadOlder(
+                            messageID = messageID,
+                            messageSequence = messageSequence,
+                            remainingOlderLoads = maxOlderLoads,
+                            completion = completion,
+                        )
+                    }
+                }
+            }
+        )
+    }
+
+    private fun awaitAndLocatePinnedMessage(
+        messageID: String,
+        messageSequence: Long?,
+        maxOlderLoads: Int,
+        completion: (Boolean) -> Unit,
+    ) {
+        val scope = viewScope
+        if (scope == null) {
+            completion(false)
+            return
+        }
+        scope.launch {
+            val messages = withTimeoutOrNull(PINNED_MESSAGE_LOCATE_TIMEOUT_MS) {
+                viewModel.messageList.first {
+                    findLoadedPinnedMessageID(it, messageID, messageSequence) != null
+                }
+            }
+            val loadedMessageID = messages?.let {
+                findLoadedPinnedMessageID(it, messageID, messageSequence)
+            }
+            post {
+                if (loadedMessageID != null) {
+                    locateCoordinator.requestLocateMessage(loadedMessageID)
+                    completion(true)
+                } else {
+                    locateLoadedMessageOrLoadOlder(
+                        messageID = messageID,
+                        messageSequence = messageSequence,
+                        remainingOlderLoads = maxOlderLoads,
+                        completion = completion,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun locateLoadedMessageOrLoadOlder(
+        messageID: String,
+        messageSequence: Long?,
+        remainingOlderLoads: Int,
+        completion: (Boolean) -> Unit,
+    ) {
+        val loadedMessageID = findLoadedPinnedMessageID(messageID, messageSequence)
+        if (loadedMessageID != null) {
+            locateCoordinator.requestLocateMessage(loadedMessageID)
+            completion(true)
+            return
+        }
+        if (remainingOlderLoads <= 0 || !viewModel.hasMoreOlderMessage.value) {
             completion(false)
             return
         }
         viewModel.loadOlderMessagesForLocate(
             object : CompletionHandler {
                 override fun onSuccess() {
-                    locateMessageByID(messageID, maxOlderLoads - 1, completion)
+                    post {
+                        locateLoadedMessageOrLoadOlder(
+                            messageID = messageID,
+                            messageSequence = messageSequence,
+                            remainingOlderLoads = remainingOlderLoads - 1,
+                            completion = completion,
+                        )
+                    }
                 }
 
                 override fun onFailure(code: Int, desc: String) {
@@ -141,6 +283,25 @@ class MessageListView @JvmOverloads constructor(
                 }
             }
         )
+    }
+
+    private fun findLoadedPinnedMessageID(
+        messageID: String,
+        messageSequence: Long?,
+    ): String? {
+        return findLoadedPinnedMessageID(viewModel.messageList.value, messageID, messageSequence)
+    }
+
+    private fun findLoadedPinnedMessageID(
+        messages: List<MessageInfo>,
+        messageID: String,
+        messageSequence: Long?,
+    ): String? {
+        return messages.firstOrNull { messageID.isNotBlank() && it.msgID == messageID }
+            ?.msgID
+            ?: messages.firstOrNull {
+                (messageSequence ?: 0L) > 0L && it.sequence == messageSequence
+            }?.msgID
     }
 
     private var config: MessageListConfigProtocol = ChatMessageListConfig()

@@ -144,8 +144,16 @@ class ChatPageView @JvmOverloads constructor(
         return messageListView.isInMultiSelectMode()
     }
 
-    fun locateMessageByID(messageID: String, completion: (Boolean) -> Unit = {}) {
-        messageListView.locateMessageByID(messageID, completion = completion)
+    fun locateMessageByID(
+        messageID: String,
+        messageSequence: Long? = null,
+        completion: (Boolean) -> Unit = {},
+    ) {
+        messageListView.locateMessageByID(
+            messageID = messageID,
+            messageSequence = messageSequence,
+            completion = completion,
+        )
     }
 
     fun refreshMessagePresentation(messageID: String) {

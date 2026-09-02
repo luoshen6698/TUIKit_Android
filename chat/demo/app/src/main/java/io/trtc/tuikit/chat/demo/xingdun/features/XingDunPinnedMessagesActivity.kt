@@ -358,7 +358,8 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
             this,
             pin.conversationId.ifBlank { conversationID },
             pin.messageId,
-            pin.version,
+            messageSequence = pin.messageSequence,
+            pinVersion = pin.version,
         )
         finish()
     }
