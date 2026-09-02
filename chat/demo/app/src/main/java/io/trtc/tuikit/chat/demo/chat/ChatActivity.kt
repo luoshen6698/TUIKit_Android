@@ -54,6 +54,7 @@ import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessagePresentation
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessageParser
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactDetailActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactForwardPickerActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
@@ -285,7 +286,7 @@ class ChatActivity : BaseActivity() {
             messageInputConfig = messageInputConfig,
             locateMessage = locateMessage,
             onUserClick = { userID ->
-                handleChatSettingNavigation(userID = userID)
+                openContactDetailFromMessage(userID)
             },
             onMultiSelectStateChanged = { isMultiSelect ->
                 updateHeaderForMultiSelect(isMultiSelect)
@@ -844,6 +845,43 @@ class ChatActivity : BaseActivity() {
         } else if (!groupID.isNullOrEmpty()) {
             ChatSettingActivity.startGroup(this, groupID)
         }
+    }
+
+    private fun openContactDetailFromMessage(userID: String) {
+        val peerUserID = getUserID(conversationID) ?: return
+        if (userID != peerUserID) return
+
+        contactStore.getContactInfo(
+            userIDList = listOf(peerUserID),
+            completion = object : GetContactInfoCompletionHandler {
+                override fun onSuccess(contactInfoList: List<ContactInfo>) {
+                    runOnUiThread {
+                        val contact = contactInfoList.firstOrNull()
+                        if (contact?.isFriend == true) {
+                            XingDunContactDetailActivity.start(this@ChatActivity, contact)
+                        } else {
+                            XingDunContactDetailActivity.start(
+                                this@ChatActivity,
+                                peerUserID,
+                                contact?.nickname ?: latestChatTitle,
+                                contact?.avatarURL,
+                            )
+                        }
+                    }
+                }
+
+                override fun onFailure(code: Int, desc: String) {
+                    runOnUiThread {
+                        XingDunContactDetailActivity.start(
+                            this@ChatActivity,
+                            peerUserID,
+                            latestChatTitle,
+                            null,
+                        )
+                    }
+                }
+            },
+        )
     }
 
     private fun getUserID(conversationID: String): String? {

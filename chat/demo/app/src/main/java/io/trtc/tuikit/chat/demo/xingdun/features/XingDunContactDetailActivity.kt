@@ -159,9 +159,10 @@ class XingDunContactDetailActivity : BaseActivity() {
         })
         more = TextView(context).apply {
             text = "•••"
-            textSize = 18f
+            textSize = 15f
             gravity = Gravity.CENTER
-            setTextColor(TEXT_PRIMARY)
+            isSingleLine = true
+            setTextColor(BRAND)
             background = rounded(0xFFF0F2F5.toInt(), 21f)
             contentDescription = getString(R.string.xingdun_contact_detail_more)
             setOnClickListener { showMoreMenu(this) }
@@ -304,6 +305,7 @@ class XingDunContactDetailActivity : BaseActivity() {
         val name = current.nickname.normalized() ?: timUserID
         addView(Avatar(context).apply {
             setSize(Avatar.AvatarSize.L)
+            setShape(Avatar.AvatarShape.Round)
             setContent(Avatar.AvatarContent.Image(current.avatar.orEmpty(), name))
         }, LinearLayout.LayoutParams(52.dp(), 52.dp()))
         addView(LinearLayout(context).apply {
