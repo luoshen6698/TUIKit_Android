@@ -88,6 +88,8 @@
     <string name="contact_list_community_id_edit_format_tips">社群 ID 前缀必须为 @TGS#_ !</string>
     <string name="contact_list_group_id_edit_format_tips">群组 ID 前缀不能为 @TGS# !</string>
     <string name="contact_list_confirm_selection">确定(%1$d)</string>
+    <string name="contact_list_confirm_selection_progress">确定 (%1$d/%2$d)</string>
+    <string name="contact_list_remove_selected_contact">移除%1$s</string>
     <string name="contact_list_cannot_found_group">未找到相关群组</string>
     <string name="contact_list_cannot_found_blacklist_user">未找到相关黑名单用户</string>
 </resources>

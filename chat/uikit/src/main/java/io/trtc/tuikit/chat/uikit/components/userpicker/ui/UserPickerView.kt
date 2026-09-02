@@ -63,6 +63,7 @@ class UserPickerView @JvmOverloads constructor(
     private var maxCount: Int? = null
     private var hasReachedEnd = false
     private var showCheckbox: Boolean = true
+    private var showIdentifierSubtitle: Boolean = false
 
     private var onSelectedChangedListener: ((List<UserPickerData<Any?>>) -> Unit)? = null
     private var onMaxCountExceedListener: ((List<UserPickerData<Any?>>) -> Unit)? = null
@@ -74,6 +75,7 @@ class UserPickerView @JvmOverloads constructor(
         listAdapter = UserPickerAdapter(
             context = context,
             showCheckbox = showCheckbox,
+            showIdentifierSubtitle = showIdentifierSubtitle,
             selectedKeys = selectionState.keys,
             lockedKeys = lockedKeys,
             onItemClick = ::handleItemClick
@@ -168,6 +170,12 @@ class UserPickerView @JvmOverloads constructor(
     fun setShowCheckbox(show: Boolean) {
         if (this.showCheckbox == show) return
         this.showCheckbox = show
+        rebuildAdapter()
+    }
+
+    fun setShowIdentifierSubtitle(show: Boolean) {
+        if (showIdentifierSubtitle == show) return
+        showIdentifierSubtitle = show
         rebuildAdapter()
     }
 
@@ -364,6 +372,7 @@ class UserPickerView @JvmOverloads constructor(
 
     private fun rebuildAdapter() {
         listAdapter.showCheckbox = showCheckbox
+        listAdapter.showIdentifierSubtitle = showIdentifierSubtitle
         listAdapter.lockedKeys = lockedKeys
         listAdapter.items = flatItems
         listAdapter.notifyDataSetChanged()

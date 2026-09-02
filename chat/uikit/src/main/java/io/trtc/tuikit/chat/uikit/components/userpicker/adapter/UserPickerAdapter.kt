@@ -23,6 +23,7 @@ internal sealed class FlatItem {
 internal class UserPickerAdapter(
     private val context: Context,
     var showCheckbox: Boolean,
+    var showIdentifierSubtitle: Boolean,
     private val selectedKeys: Set<String>,
     var lockedKeys: Set<String>,
     private val onItemClick: (UserPickerData<Any?>) -> Unit
@@ -33,7 +34,7 @@ internal class UserPickerAdapter(
         private const val TYPE_USER_ITEM = 1
         private const val PAYLOAD_SELECTION_STATE = "payload_selection_state"
 
-        private const val ITEM_HEIGHT_DP = 60f
+        private const val ITEM_HEIGHT_DP = 64f
         private const val ITEM_HORIZONTAL_PADDING_DP = 16f
         private const val AVATAR_TEXT_SPACING_DP = 12f
         private const val CHECKBOX_SIZE_DP = 16f
@@ -42,6 +43,8 @@ internal class UserPickerAdapter(
         private const val HEADER_HORIZONTAL_PADDING_DP = 16f
         private const val HEADER_VERTICAL_PADDING_DP = 6f
         private const val ITEM_TEXT_SIZE_SP = 18f
+        private const val ITEM_TEXT_WITH_SUBTITLE_SIZE_SP = 16f
+        private const val ITEM_SUBTITLE_SIZE_SP = 12f
         private const val HEADER_TEXT_SIZE_SP = 14f
     }
 
@@ -108,7 +111,16 @@ internal class UserPickerAdapter(
         val isLocked = lockedKeys.contains(data.key)
 
         holder.textView.text = data.label
+        holder.textView.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (showIdentifierSubtitle) ITEM_TEXT_WITH_SUBTITLE_SIZE_SP else ITEM_TEXT_SIZE_SP,
+        )
         holder.textView.setTextColor(colors.textColorPrimary)
+        holder.identifierTextView.apply {
+            text = data.key
+            setTextColor(colors.textColorSecondary)
+            visibility = if (showIdentifierSubtitle) View.VISIBLE else View.GONE
+        }
         holder.itemView.setBackgroundColor(colors.bgColorOperate)
         holder.avatar.setContent(
             Avatar.AvatarContent.Image(data.avatarUrl, data.label)
@@ -220,6 +232,7 @@ internal class UserPickerAdapter(
         val avatar = Avatar(context).apply {
             tag = "avatar"
             setSize(Avatar.AvatarSize.M)
+            setShape(Avatar.AvatarShape.Round)
         }
         rowLayout.addView(
             avatar,
@@ -234,6 +247,11 @@ internal class UserPickerAdapter(
         }
         rowLayout.addView(spacer)
 
+        val textContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+        }
         val textView = TextView(context).apply {
             tag = "label"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, ITEM_TEXT_SIZE_SP)
@@ -246,9 +264,23 @@ internal class UserPickerAdapter(
             )
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
         }
-        rowLayout.addView(textView)
+        textContainer.addView(textView)
+        textContainer.addView(TextView(context).apply {
+            tag = "identifier"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, ITEM_SUBTITLE_SIZE_SP)
+            textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+            textDirection = View.TEXT_DIRECTION_LOCALE
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            visibility = View.GONE
+        })
+        rowLayout.addView(textContainer)
 
         val endSpacer = View(context).apply {
             layoutParams = LinearLayout.LayoutParams(indexBarReservedPx, 1)
@@ -267,6 +299,7 @@ internal class UserPickerAdapter(
         val rowLayout: LinearLayout = view.findViewWithTag("row")
         val avatar: Avatar = view.findViewWithTag("avatar")
         val textView: TextView = view.findViewWithTag("label")
+        val identifierTextView: TextView = view.findViewWithTag("identifier")
         val checkBox: SelectionCheckBoxView = view.findViewWithTag("checkBox")
     }
 

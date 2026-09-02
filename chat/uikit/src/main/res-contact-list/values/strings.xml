@@ -88,6 +88,8 @@
     <string name="contact_list_community_id_edit_format_tips">Community ID prefix must start with @TGS#_!</string>
     <string name="contact_list_group_id_edit_format_tips">Group ID prefix cannot start with @TGS#!</string>
     <string name="contact_list_confirm_selection">Confirm(%1$d)</string>
+    <string name="contact_list_confirm_selection_progress">Confirm (%1$d/%2$d)</string>
+    <string name="contact_list_remove_selected_contact">Remove %1$s</string>
     <string name="contact_list_cannot_found_group">No related groups found</string>
     <string name="contact_list_cannot_found_blacklist_user">No related blacklisted users found</string>
 </resources>

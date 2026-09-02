@@ -341,10 +341,16 @@ class C2CChatSettingView @JvmOverloads constructor(
             layoutParams = LinearLayout.LayoutParams(dp2px(72f, dm).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT)
         }
         avatarView = Avatar(context).apply {
-            setSize(Avatar.AvatarSize.L)
+            setSize(Avatar.AvatarSize.M)
             setShape(Avatar.AvatarShape.Round)
         }
-        memberColumn.addView(avatarView)
+        memberColumn.addView(
+            avatarView,
+            LinearLayout.LayoutParams(
+                dp2px(48f, context.resources.displayMetrics).toInt(),
+                dp2px(48f, context.resources.displayMetrics).toInt(),
+            ),
+        )
         nicknameTextView = TextView(context).apply {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             gravity = Gravity.CENTER

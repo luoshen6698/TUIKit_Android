@@ -113,6 +113,13 @@ internal class AddNewChatDialog(
                 mode = DialogNavBar.Mode.BackTitle,
                 colors = colors,
                 onLeadingClick = { handleBack() },
+                onConfirmClick = { handleContactSelectionConfirm() },
+                showConfirm = chatType == ChatType.GROUP,
+                confirmText = context.getString(
+                    R.string.contact_list_confirm_selection_progress,
+                    0,
+                    MIN_GROUP_MEMBER_COUNT,
+                ),
                 leadingContentDescription = context.getString(R.string.uikit_back)
             )
         )
@@ -266,6 +273,7 @@ internal class AddNewChatDialog(
                 context.getString(R.string.contact_list_create_c2c)
             }
         )
+        navBar.setConfirmVisible(chatType == ChatType.GROUP)
 
         applyWindowTheme()
 
@@ -318,6 +326,18 @@ internal class AddNewChatDialog(
         appBarLayout.addView(searchBarView, searchBarParams)
         if (chatType == ChatType.GROUP) {
             appBarLayout.addView(createSelectionTabs())
+            val selectedContactsBar = SelectedContactsBottomBar(
+                context = context,
+                selectedContacts = viewModel.uiState.value.selectedContacts,
+                lockedUserIDs = initialSelectedUserIDs.toSet(),
+                onContactRemove = { contact ->
+                    viewModel.removeSelectedContact(contact)
+                    applyFilteredContactDataSource()
+                    updateSelectionBottomBar(viewModel.uiState.value.selectedContacts)
+                },
+            )
+            selectionBottomBar = selectedContactsBar
+            appBarLayout.addView(selectedContactsBar)
         }
 
         val pickerContainer = FrameLayout(context).apply {
@@ -338,32 +358,13 @@ internal class AddNewChatDialog(
             )
             setMaxCount(if (chatType == ChatType.SINGLE) 1 else 199)
             setShowCheckbox(chatType != ChatType.SINGLE)
+            setLockedItems(initialSelectedUserIDs)
+            setShowIdentifierSubtitle(chatType == ChatType.GROUP)
         }
         userPickerView = picker
         pickerContainer.addView(picker)
 
         rootContainer.addView(coordinatorLayout)
-
-        if (chatType == ChatType.GROUP) {
-            val bottomBar = SelectedContactsBottomBar(
-                context = context,
-                selectedContacts = viewModel.uiState.value.selectedContacts,
-                onConfirmClick = {
-                    val count = viewModel.uiState.value.selectedContacts.size
-                    if (count >= 2) {
-                        viewModel.startChat()
-                    } else {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.contact_list_select_two_friends),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-            )
-            selectionBottomBar = bottomBar
-            rootContainer.addView(bottomBar)
-        }
 
         picker.setOnSelectedChangedListener<ContactInfo> { selectedItems ->
             if (chatType == ChatType.SINGLE) {
@@ -373,6 +374,7 @@ internal class AddNewChatDialog(
                 }
             } else {
                 updateSelectedContactsFromVisibleItems(selectedItems)
+                updateSelectionBottomBar(viewModel.uiState.value.selectedContacts)
             }
         }
 
@@ -382,6 +384,26 @@ internal class AddNewChatDialog(
 
     private fun updateSelectionBottomBar(selectedContacts: List<ContactInfo>) {
         selectionBottomBar?.update(selectedContacts)
+        if (chatType == ChatType.GROUP && currentDisplayedStep == GroupFlowStep.CONTACT_SELECTION) {
+            navBar.confirmView.text = context.getString(
+                R.string.contact_list_confirm_selection_progress,
+                selectedContacts.size,
+                MIN_GROUP_MEMBER_COUNT,
+            )
+            navBar.setConfirmEnabled(selectedContacts.size >= MIN_GROUP_MEMBER_COUNT, getColors())
+        }
+    }
+
+    private fun handleContactSelectionConfirm() {
+        if (viewModel.uiState.value.selectedContacts.size >= MIN_GROUP_MEMBER_COUNT) {
+            viewModel.startChat()
+        } else {
+            Toast.makeText(
+                context,
+                context.getString(R.string.contact_list_select_two_friends),
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
     }
 
     private fun updateUserPickerIfVisible(dataSource: List<UserPickerData<ContactInfo>>) {
@@ -530,6 +552,7 @@ internal class AddNewChatDialog(
             }
 
         navBar.setTitle(context.getString(R.string.contact_list_confirm_group_profile))
+        navBar.setConfirmVisible(false)
         applyWindowTheme()
 
         val rootContainer = LinearLayout(context).apply {
@@ -753,6 +776,7 @@ internal class AddNewChatDialog(
         val groupTypes = AddNewChatViewModel.getGroupTypeOptionList()
 
         navBar.setTitle(context.getString(R.string.contact_list_group_type_select_text))
+        navBar.setConfirmVisible(false)
         applyWindowTheme()
 
         contentContainer.addView(
@@ -870,6 +894,7 @@ internal class AddNewChatDialog(
     }
 
     private companion object {
+        const val MIN_GROUP_MEMBER_COUNT = 2
         const val MAX_CUSTOM_AVATAR_BYTES = 5 * 1024 * 1024
         val SUPPORTED_CUSTOM_AVATAR_MIME_TYPES = setOf("image/jpeg", "image/png", "image/webp")
     }
