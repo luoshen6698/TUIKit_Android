@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tencent.imsdk.v2.V2TIMAdvancedMsgListener
 import com.tencent.imsdk.v2.V2TIMManager
+import com.tencent.imsdk.v2.V2TIMMessage
 import com.tencent.imsdk.v2.V2TIMMessageReceipt
 import com.tencent.imsdk.v2.V2TIMUserFullInfo
 import com.tencent.imsdk.v2.V2TIMValueCallback
@@ -42,6 +43,7 @@ import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.conversation.ConversationInfo
 import io.trtc.tuikit.atomicxcore.api.conversation.ConversationListStore
 import io.trtc.tuikit.atomicxcore.api.conversation.ConversationMarkType
+import io.trtc.tuikit.atomicxcore.api.conversation.ConversationType
 import io.trtc.tuikit.atomicxcore.api.conversation.GetConversationInfoCompletionHandler
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.message.AudioMessagePayload
@@ -62,6 +64,7 @@ import io.trtc.tuikit.atomicxcore.api.message.MessageLoadDirection
 import io.trtc.tuikit.atomicxcore.api.message.MessageLoadOption
 import io.trtc.tuikit.atomicxcore.api.message.MessageQuoteInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageReceipt
+import io.trtc.tuikit.atomicxcore.api.message.MessageStatus
 import io.trtc.tuikit.atomicxcore.api.message.MessageType
 import io.trtc.tuikit.atomicxcore.api.message.OfflinePushInfo
 import io.trtc.tuikit.atomicxcore.api.message.SendMessageOption
@@ -106,6 +109,7 @@ class MessageListViewModel(
     }
     private val conversationListStore = ConversationListStore.create()
     private val c2cPeerUserID = ConversationIDUtil.userIdOrNull(conversationID)
+    private var lastC2CReceiptRefreshMessageIDs: Set<String> = emptySet()
     private val c2cReadReceiptListener = object : V2TIMAdvancedMsgListener() {
         override fun onRecvC2CReadReceipt(receiptList: MutableList<V2TIMMessageReceipt>?) {
             val peerUserID = c2cPeerUserID ?: return
@@ -275,6 +279,7 @@ class MessageListViewModel(
         viewModelScope.launch {
             messageList.collect { messages ->
                 syncPendingAuxiliaryTextProcessing(messages)
+                refreshLoadedC2CReadReceipts(messages)
             }
         }
 
@@ -660,14 +665,19 @@ class MessageListViewModel(
         }
     }
 
-    private fun applyC2CReadReceipt(peerUserID: String, receiptTimestamp: Long) {
+    private fun applyC2CReadReceipt(
+        peerUserID: String,
+        receiptTimestamp: Long,
+        readMessageIDs: Set<String> = emptySet()
+    ) {
         messageListState.messageList.value.forEach { message ->
             if (
                 C2CReadReceiptPolicy.shouldMarkRead(
                     message = message,
                     conversationPeerUserID = peerUserID,
                     receiptPeerUserID = peerUserID,
-                    receiptTimestamp = receiptTimestamp
+                    receiptTimestamp = receiptTimestamp,
+                    readMessageIDs = readMessageIDs
                 )
             ) {
                 val receipt = message.readReceiptInfo ?: MessageReceipt()
@@ -675,6 +685,82 @@ class MessageListViewModel(
                 message.readReceiptInfo = receipt
             }
         }
+    }
+
+    private fun refreshLoadedC2CReadReceipts(messages: List<MessageInfo>) {
+        val peerUserID = c2cPeerUserID ?: return
+        val messageIDs = messages.asSequence()
+            .filter {
+                it.conversationType == ConversationType.C2C &&
+                    it.isSentBySelf &&
+                    it.status == MessageStatus.SEND_SUCCESS &&
+                    it.msgID.isNotBlank()
+            }
+            .map { it.msgID }
+            .toSet()
+        if (messageIDs.isEmpty() || messageIDs == lastC2CReceiptRefreshMessageIDs) {
+            return
+        }
+        lastC2CReceiptRefreshMessageIDs = messageIDs
+        V2TIMManager.getMessageManager().findMessages(
+            messageIDs.toList(),
+            object : V2TIMValueCallback<List<V2TIMMessage>?> {
+                override fun onSuccess(sdkMessages: List<V2TIMMessage>?) {
+                    val resolvedMessages = sdkMessages.orEmpty()
+                    if (resolvedMessages.isEmpty()) {
+                        lastC2CReceiptRefreshMessageIDs = emptySet()
+                        return
+                    }
+                    val locallyReadMessageIDs = resolvedMessages.asSequence()
+                        .filter { sdkMessage ->
+                            sdkMessage.isSelf &&
+                                sdkMessage.userID == peerUserID &&
+                                sdkMessage.isPeerRead
+                        }
+                        .mapNotNull { sdkMessage -> sdkMessage.msgID?.takeIf(String::isNotBlank) }
+                        .toSet()
+                    V2TIMManager.getMessageManager().getMessageReadReceipts(
+                        resolvedMessages,
+                        object : V2TIMValueCallback<List<V2TIMMessageReceipt>?> {
+                            override fun onSuccess(receipts: List<V2TIMMessageReceipt>?) {
+                                val matchingReceipts = receipts.orEmpty().filter { receipt ->
+                                    receipt.groupID.isNullOrBlank() &&
+                                        (receipt.userID.isNullOrBlank() || receipt.userID == peerUserID)
+                                }
+                                val readMessageIDs = locallyReadMessageIDs + matchingReceipts.asSequence()
+                                    .filter { receipt -> receipt.isPeerRead }
+                                    .mapNotNull { receipt -> receipt.msgID?.takeIf(String::isNotBlank) }
+                                    .toSet()
+                                val peerReadTimestamp = matchingReceipts.maxOfOrNull { receipt -> receipt.timestamp } ?: 0L
+                                applyC2CReadReceipt(
+                                    peerUserID = peerUserID,
+                                    receiptTimestamp = peerReadTimestamp,
+                                    readMessageIDs = readMessageIDs
+                                )
+                            }
+
+                            override fun onError(code: Int, desc: String?) {
+                                if (locallyReadMessageIDs.isNotEmpty()) {
+                                    applyC2CReadReceipt(
+                                        peerUserID = peerUserID,
+                                        receiptTimestamp = 0L,
+                                        readMessageIDs = locallyReadMessageIDs
+                                    )
+                                }
+                                Log.w(TAG, "get C2C read receipts failed: code=$code")
+                            }
+                        }
+                    )
+                }
+
+                override fun onError(code: Int, desc: String?) {
+                    if (lastC2CReceiptRefreshMessageIDs == messageIDs) {
+                        lastC2CReceiptRefreshMessageIDs = emptySet()
+                    }
+                    Log.w(TAG, "refresh C2C read receipts failed: code=$code")
+                }
+            }
+        )
     }
 
     fun markVisibleCallMessagesRead(messages: List<MessageInfo>): List<String> {

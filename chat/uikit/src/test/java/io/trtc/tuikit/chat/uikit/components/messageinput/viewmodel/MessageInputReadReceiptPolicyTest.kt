@@ -7,14 +7,14 @@ import org.junit.Test
 
 class MessageInputReadReceiptPolicyTest {
     @Test
-    fun enabledFeatureRequestsReceiptsForC2CAndSupportedGroups() {
-        assertTrue(MessageInputReadReceiptPolicy.needReadReceipt(true, null))
-        assertTrue(MessageInputReadReceiptPolicy.needReadReceipt(true, GroupType.WORK))
+    fun enabledFeatureRequestsReceiptsOnlyForSupportedGroups() {
+        assertFalse(MessageInputReadReceiptPolicy.needReadReceipt(true, false, null))
+        assertTrue(MessageInputReadReceiptPolicy.needReadReceipt(true, true, GroupType.WORK))
     }
 
     @Test
     fun disabledFeatureAndCommunityDoNotRequestReceipts() {
-        assertFalse(MessageInputReadReceiptPolicy.needReadReceipt(false, null))
-        assertFalse(MessageInputReadReceiptPolicy.needReadReceipt(true, GroupType.COMMUNITY))
+        assertFalse(MessageInputReadReceiptPolicy.needReadReceipt(false, true, GroupType.WORK))
+        assertFalse(MessageInputReadReceiptPolicy.needReadReceipt(true, true, GroupType.COMMUNITY))
     }
 }

@@ -19,7 +19,6 @@ import io.trtc.tuikit.atomicx.widget.basicwidget.alertdialog.confirmButton
 import io.trtc.tuikit.atomicxcore.api.conversation.ConversationType
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageStatus
-import io.trtc.tuikit.atomicxcore.api.message.MessageType
 import kotlin.math.ceil
 
 internal class MessageStatusController(
@@ -152,11 +151,7 @@ internal class MessageStatusController(
         message: MessageInfo,
         showMessageReadReceipt: Boolean
     ): Int {
-        if (!showMessageReadReceipt ||
-            !message.isSentBySelf ||
-            !message.needReadReceipt ||
-            message.messageType == MessageType.TIPS
-        ) {
+        if (!message.shouldShowReadReceiptIndicator(showMessageReadReceipt)) {
             return 0
         }
         return readReceiptIndicatorView.resolvePotentialWidth(message)

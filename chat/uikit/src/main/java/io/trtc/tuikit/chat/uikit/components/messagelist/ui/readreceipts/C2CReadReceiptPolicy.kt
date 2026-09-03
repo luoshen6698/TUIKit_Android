@@ -8,15 +8,16 @@ internal object C2CReadReceiptPolicy {
         message: MessageInfo,
         conversationPeerUserID: String,
         receiptPeerUserID: String?,
-        receiptTimestamp: Long
+        receiptTimestamp: Long,
+        readMessageIDs: Set<String> = emptySet()
     ): Boolean {
         val messageTimestamp = message.timestamp ?: return false
-        return receiptTimestamp > 0 &&
-            receiptPeerUserID == conversationPeerUserID &&
+        val matchesReadBoundary = receiptTimestamp > 0 && messageTimestamp <= receiptTimestamp
+        val matchesMessageID = message.msgID.isNotBlank() && message.msgID in readMessageIDs
+        return receiptPeerUserID == conversationPeerUserID &&
             message.conversationType == ConversationType.C2C &&
             message.isSentBySelf &&
-            message.needReadReceipt &&
             message.readReceiptInfo?.isPeerRead != true &&
-            messageTimestamp <= receiptTimestamp
+            (matchesReadBoundary || matchesMessageID)
     }
 }

@@ -745,6 +745,7 @@ class MessageInputViewModel(
             quotedMessage = quotedMessage,
             needReadReceipt = MessageInputReadReceiptPolicy.needReadReceipt(
                 isReadReceiptEnabled = AppBuilderConfig.enableReadReceipt,
+                isGroupConversation = ConversationIDUtil.isGroup(conversationID),
                 groupType = conversationInfo.value?.groupType
             ),
             offlinePushInfo = createOfflinePushInfo(context, payload)

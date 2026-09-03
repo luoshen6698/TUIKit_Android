@@ -24,8 +24,13 @@ enum class MessageReadReceiptDisplayState {
 
 val MessageInfo.isShowReadReceipt: Boolean
     get() {
+        val isReceiptSupported = when (conversationType) {
+            ConversationType.C2C -> true
+            ConversationType.GROUP -> needReadReceipt
+            else -> false
+        }
         return isSentBySelf &&
-            needReadReceipt &&
+            isReceiptSupported &&
             status == MessageStatus.SEND_SUCCESS &&
             messageType != MessageType.TIPS
     }
