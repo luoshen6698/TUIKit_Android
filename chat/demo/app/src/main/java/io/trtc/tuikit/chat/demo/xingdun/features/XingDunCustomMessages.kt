@@ -2,6 +2,7 @@ package io.trtc.tuikit.chat.demo.xingdun.features
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
@@ -10,6 +11,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -113,7 +115,9 @@ internal data class XingDunCustomMessage(
         return buildString {
             append(greeting).append('\n').append(status).append('\n')
             append(context.getString(if (values["packet_type"] == "team_exclusive") R.string.xingdun_redpacket_exclusive else R.string.xingdun_redpacket_normal))
-            if (count != null) append(" · ").append(context.getString(R.string.xingdun_redpacket_total_count, count))
+            if (count != null) append(" · ").append(
+                context.resources.getQuantityString(R.plurals.xingdun_redpacket_total_count, count, count),
+            )
         }
     }
 
@@ -148,15 +152,22 @@ internal object XingDunRedpacketAccessPolicy {
 }
 
 internal object XingDunRedpacketStatusLoader {
+    private data class CachedStatus(val values: Map<String, String>, val loadedAtMillis: Long)
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val cache = ConcurrentHashMap<String, Map<String, String>>()
+    private val cache = ConcurrentHashMap<String, CachedStatus>()
 
     fun load(packetNo: String, completion: (Map<String, String>) -> Unit) {
         val session = XingDunSessionManager.currentSession() ?: return
         val tenantKey = XingDunTenantBoundary.identity(session)?.key ?: return
         val cacheKey = "$tenantKey:$packetNo"
-        cache[cacheKey]?.let(completion) ?: scope.launch {
+        val cached = cache[cacheKey]
+        if (cached != null && System.currentTimeMillis() - cached.loadedAtMillis < CACHE_TTL_MILLIS) {
+            completion(cached.values)
+            return
+        }
+        scope.launch {
             val values = runCatching {
                 val response = XingDunSessionManager.apiClient().get<JsonObject>(
                     session,
@@ -173,7 +184,7 @@ internal object XingDunRedpacketStatusLoader {
             }.getOrNull() ?: return@launch
             val stillCurrentTenant = XingDunTenantBoundary.identity(XingDunSessionManager.currentSession())?.key == tenantKey
             if (values.isNotEmpty() && stillCurrentTenant) {
-                cache[cacheKey] = values
+                cache[cacheKey] = CachedStatus(values, System.currentTimeMillis())
             }
             if (stillCurrentTenant) mainHandler.post { completion(values) }
         }
@@ -182,6 +193,8 @@ internal object XingDunRedpacketStatusLoader {
     fun clearTenantCache() {
         cache.clear()
     }
+
+    private const val CACHE_TTL_MILLIS = 30_000L
 }
 
 internal object XingDunCustomMessageParser {
@@ -243,6 +256,9 @@ internal object XingDunCustomMessagePresentation {
     private val contactCardMatcher = MessageMatcher { message ->
         XingDunCustomMessageParser.parse(message)?.takeUnless(XingDunCustomMessage::isControl)?.contactCard() != null
     }
+    private val redpacketMatcher = MessageMatcher { message ->
+        XingDunCustomMessageParser.parse(message)?.let { it.type == "redpacket" && !it.isControl } == true
+    }
     private val summaryProvider = MessageSummaryProvider { context ->
         XingDunCustomMessageParser.parse(context.message)?.takeUnless(XingDunCustomMessage::isControl)?.summary(context.context)
     }
@@ -260,11 +276,196 @@ internal object XingDunCustomMessagePresentation {
             summaryProvider = summaryProvider
         )
         config.addCustomMessageRenderer(
+            matcher = redpacketMatcher,
+            renderer = XingDunRedpacketMessageRenderer,
+            priority = 190,
+            summaryProvider = summaryProvider
+        )
+        config.addCustomMessageRenderer(
             matcher = matcher,
             renderer = XingDunCustomMessageRenderer,
             priority = 100,
             summaryProvider = summaryProvider
         )
+    }
+
+    fun redpacketPreview(context: Context, packetNo: String, status: Int, hasClaimed: Boolean = false): View =
+        XingDunRedpacketMessageView(context).apply {
+            bind(
+                XingDunCustomMessage(
+                    type = "redpacket",
+                    values = mapOf(
+                        "packet_no" to packetNo,
+                        "greeting" to context.getString(R.string.xingdun_redpacket_default_greeting),
+                        "packet_type" to "team_random",
+                        "count" to "3",
+                        "status" to status.toString(),
+                        "has_claimed" to hasClaimed.toString(),
+                    ),
+                    isControl = false,
+                    isXingDunEnvelope = true,
+                ),
+            )
+        }
+}
+
+private object XingDunRedpacketMessageRenderer : MessageContentRenderer {
+    override val renderConfig = MessageRenderConfig(
+        showMessageMeta = true,
+        useDefaultBubble = false,
+        bubbleStyle = BubbleStyle.CARD,
+    )
+
+    override fun createView(context: Context, parent: ViewGroup): View = XingDunRedpacketMessageView(context)
+
+    override fun bindView(view: View, context: MessageRenderContext) {
+        val message = XingDunCustomMessageParser.parse(context.message) ?: return
+        (view as XingDunRedpacketMessageView).bind(message)
+    }
+}
+
+private class XingDunRedpacketMessageView(context: Context) : LinearLayout(context) {
+    private val refreshHandler = Handler(Looper.getMainLooper())
+    private var boundMessage: XingDunCustomMessage? = null
+    private var boundPacketNo: String? = null
+    private var statusRefreshEnabled = false
+    private val refreshRunnable = Runnable {
+        loadStatus()
+        scheduleStatusRefresh()
+    }
+    private val gift = ImageView(context).apply {
+        setImageResource(R.drawable.xingdun_ic_gift_white)
+        imageTintList = ColorStateList.valueOf(Color.WHITE)
+    }
+    private val greeting = TextView(context).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+        typeface = Typeface.DEFAULT_BOLD
+        setTextColor(Color.WHITE)
+        maxLines = 2
+    }
+    private val status = TextView(context).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        setTextColor(0xE0FFFFFF.toInt())
+        maxLines = 1
+    }
+    private val footer = LinearLayout(context).apply {
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(14.dp(), 7.dp(), 14.dp(), 7.dp())
+    }
+    private val kind = TextView(context).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        setTextColor(0xE8FFFFFF.toInt())
+    }
+    private val count = TextView(context).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        setTextColor(0xE8FFFFFF.toInt())
+        gravity = Gravity.END
+    }
+
+    init {
+        orientation = VERTICAL
+        isClickable = true
+        isFocusable = true
+        clipToOutline = true
+        outlineProvider = ViewOutlineProvider.BACKGROUND
+        layoutParams = LayoutParams(248.dp(), ViewGroup.LayoutParams.WRAP_CONTENT)
+
+        addView(LinearLayout(context).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(14.dp(), 13.dp(), 14.dp(), 13.dp())
+            addView(gift, LayoutParams(42.dp(), 42.dp()))
+            addView(LinearLayout(context).apply {
+                orientation = VERTICAL
+                addView(greeting, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                addView(status, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = 3.dp()
+                })
+            }, LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 12.dp() })
+        })
+        footer.addView(kind, LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        footer.addView(count, LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        addView(footer, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
+    fun bind(message: XingDunCustomMessage) {
+        val packetNo = message.values["packet_no"] ?: message.values["packetNo"]
+        boundMessage = message
+        boundPacketNo = packetNo
+        tag = packetNo
+        render(message)
+        val enabled = XingDunRuntimeFeaturePolicy.redpacketEnabled(XingDunSessionManager.currentSession()?.features)
+        statusRefreshEnabled = enabled && !packetNo.isNullOrBlank()
+        setOnClickListener(if (XingDunRedpacketAccessPolicy.canOpen(enabled) && !packetNo.isNullOrBlank()) {
+            OnClickListener {
+                XingDunFeatureActivity.start(it.context, XingDunFeatureActivity.MODE_REDPACKET_DETAIL, packetNo)
+            }
+        } else null)
+        loadStatus()
+        scheduleStatusRefresh()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        scheduleStatusRefresh()
+    }
+
+    override fun onDetachedFromWindow() {
+        refreshHandler.removeCallbacks(refreshRunnable)
+        super.onDetachedFromWindow()
+    }
+
+    private fun loadStatus() {
+        val packetNo = boundPacketNo ?: return
+        val message = boundMessage ?: return
+        if (!statusRefreshEnabled) return
+        XingDunRedpacketStatusLoader.load(packetNo) { statusValues ->
+            if (tag == packetNo && statusValues.isNotEmpty()) {
+                val updated = message.copy(values = message.values + statusValues)
+                boundMessage = updated
+                render(updated)
+            }
+        }
+    }
+
+    private fun scheduleStatusRefresh() {
+        refreshHandler.removeCallbacks(refreshRunnable)
+        if (isAttachedToWindow && statusRefreshEnabled) {
+            refreshHandler.postDelayed(refreshRunnable, STATUS_REFRESH_INTERVAL_MILLIS)
+        }
+    }
+
+    private fun render(message: XingDunCustomMessage) {
+        val greetingText = message.values["greeting"]?.trim()?.takeIf(String::isNotEmpty)
+            ?: context.getString(R.string.xingdun_redpacket_default_greeting)
+        val statusText = XingDunRedpacketAccessPolicy.statusText(context, message.values)
+        val statusValue = message.values["status"]?.toIntOrNull() ?: 0
+        val claimed = message.values["has_claimed"].equals("true", true) || message.values["has_claimed"] == "1"
+        val terminal = XingDunRedpacketPresentationPolicy.isTerminal(statusValue, claimed)
+        val packetCount = message.values["count"]?.toIntOrNull()?.takeIf { it > 1 }
+        greeting.text = greetingText
+        status.text = statusText
+        kind.setText(if (message.values["packet_type"] == "team_exclusive") R.string.xingdun_redpacket_exclusive else R.string.xingdun_redpacket_normal)
+        count.text = packetCount?.let {
+            context.resources.getQuantityString(R.plurals.xingdun_redpacket_total_count, it, it)
+        }.orEmpty()
+        background = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            if (terminal) intArrayOf(0xFF945C54.toInt(), 0xFF7A4945.toInt())
+            else intArrayOf(0xFFE8453A.toInt(), 0xFFC51F24.toInt()),
+        ).apply { cornerRadius = 12.dp().toFloat() }
+        footer.setBackgroundColor(if (terminal) 0x24000000 else 0x14000000)
+        contentDescription = context.getString(
+            R.string.xingdun_redpacket_message_accessibility,
+            if (message.values["packet_type"] == "team_exclusive") context.getString(R.string.xingdun_redpacket_exclusive) else context.getString(R.string.xingdun_redpacket_normal),
+            greetingText,
+            statusText,
+        )
+    }
+
+    private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        const val STATUS_REFRESH_INTERVAL_MILLIS = 30_000L
     }
 }
 

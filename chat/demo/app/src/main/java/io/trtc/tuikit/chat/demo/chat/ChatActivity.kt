@@ -784,7 +784,8 @@ class ChatActivity : BaseActivity() {
                     MessageInputMenuAction(
                         ID = REDPACKET_ACTION_ID,
                         title = getString(R.string.xingdun_chat_more_redpacket),
-                        iconResID = R.drawable.xingdun_ic_redpacket,
+                        iconResID = R.drawable.xingdun_ic_gift_white,
+                        iconTintColor = 0xFF20B79A.toInt(),
                         onClick = {
                             XingDunFeatureActivity.start(
                                 this@ChatActivity,

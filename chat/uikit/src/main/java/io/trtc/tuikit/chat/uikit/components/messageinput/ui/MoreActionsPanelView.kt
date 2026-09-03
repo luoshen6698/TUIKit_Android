@@ -298,7 +298,7 @@ class MoreActionsPanelView @JvmOverloads constructor(
             val colors = ThemeStore.shared(context).themeState.value.currentTheme.tokens.color
 
             holder.iconView.setImageResource(action.iconResID)
-            holder.iconView.setColorFilter(colors.textColorPrimary)
+            holder.iconView.setColorFilter(action.iconTintColor ?: colors.textColorPrimary)
             holder.titleView.text = action.title
             holder.titleView.setTextColor(colors.textColorSecondary)
 

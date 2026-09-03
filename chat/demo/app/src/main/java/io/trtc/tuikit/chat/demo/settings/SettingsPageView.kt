@@ -475,9 +475,6 @@ class SettingsPageView @JvmOverloads constructor(
             if (session?.features?.messageFavorite == true) {
                 add(R.string.xingdun_message_favorites to XingDunFeatureActivity.MODE_FAVORITES)
             }
-            if (session?.features?.redpacket == true) {
-                add(R.string.xingdun_redpacket_account to XingDunFeatureActivity.MODE_REDPACKET_ACCOUNT)
-            }
             add(R.string.xingdun_personal_qr to XingDunFeatureActivity.MODE_PERSONAL_QR)
             add(R.string.xingdun_scan_qr to XingDunFeatureActivity.MODE_QR_SCANNER)
             add(R.string.xingdun_invite_title to XingDunFeatureActivity.MODE_INVITE)

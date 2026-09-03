@@ -17,6 +17,7 @@ data class MessageInputMenuAction(
     override val ID: String,
     val title: String = "",
     val iconResID: Int = 0,
+    val iconTintColor: Int? = null,
     val dangerous: Boolean = false,
     val onClick: () -> Unit = {},
 ) : CustomItem
