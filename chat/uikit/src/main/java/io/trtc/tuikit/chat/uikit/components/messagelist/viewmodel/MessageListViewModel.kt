@@ -3,7 +3,9 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tencent.imsdk.v2.V2TIMAdvancedMsgListener
 import com.tencent.imsdk.v2.V2TIMManager
+import com.tencent.imsdk.v2.V2TIMMessageReceipt
 import com.tencent.imsdk.v2.V2TIMUserFullInfo
 import com.tencent.imsdk.v2.V2TIMValueCallback
 import com.tencent.cloud.tuikit.engine.common.ContextProvider
@@ -28,6 +30,7 @@ import io.trtc.tuikit.chat.uikit.components.messagelist.viewmodel.MessageListAct
 import io.trtc.tuikit.chat.uikit.components.messagelist.viewmodel.MessageListActionFactory
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.MessageQuoteLocatePolicy
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.messagerenderers.CallMessageDisplayPolicy
+import io.trtc.tuikit.chat.uikit.components.messagelist.ui.readreceipts.C2CReadReceiptPolicy
 import io.trtc.tuikit.chat.uikit.components.messagelist.utils.AuxiliaryTextVisibilityStore
 import io.trtc.tuikit.chat.uikit.components.messagelist.utils.CallMessageParser
 import io.trtc.tuikit.chat.uikit.components.messagelist.utils.CallMessageReadState
@@ -58,6 +61,7 @@ import io.trtc.tuikit.atomicxcore.api.message.MessageListStore
 import io.trtc.tuikit.atomicxcore.api.message.MessageLoadDirection
 import io.trtc.tuikit.atomicxcore.api.message.MessageLoadOption
 import io.trtc.tuikit.atomicxcore.api.message.MessageQuoteInfo
+import io.trtc.tuikit.atomicxcore.api.message.MessageReceipt
 import io.trtc.tuikit.atomicxcore.api.message.MessageType
 import io.trtc.tuikit.atomicxcore.api.message.OfflinePushInfo
 import io.trtc.tuikit.atomicxcore.api.message.SendMessageOption
@@ -101,6 +105,22 @@ class MessageListViewModel(
         private const val TAG = "MessageListViewModel"
     }
     private val conversationListStore = ConversationListStore.create()
+    private val c2cPeerUserID = ConversationIDUtil.userIdOrNull(conversationID)
+    private val c2cReadReceiptListener = object : V2TIMAdvancedMsgListener() {
+        override fun onRecvC2CReadReceipt(receiptList: MutableList<V2TIMMessageReceipt>?) {
+            val peerUserID = c2cPeerUserID ?: return
+            // C2C callbacks report the peer's read boundary by timestamp; the callback receipt's
+            // per-message isPeerRead value can remain false because it does not carry a message ID.
+            receiptList.orEmpty()
+                .filter { receipt -> receipt.userID == peerUserID }
+                .maxOfOrNull { receipt -> receipt.timestamp }
+                ?.let { receiptTimestamp ->
+                    viewModelScope.launch {
+                        applyC2CReadReceipt(peerUserID, receiptTimestamp)
+                    }
+                }
+        }
+    }
     val conversationListState = conversationListStore.state
     val messageListState = messageListStore.state
     val messageEvent = messageListStore.messageEventFlow.filter { event ->
@@ -240,6 +260,9 @@ class MessageListViewModel(
     var forwardType = MessageForwardType.SEPARATE
 
     init {
+        if (messageListConfig.isShowReadReceipt && c2cPeerUserID != null) {
+            V2TIMManager.getMessageManager().addAdvancedMsgListener(c2cReadReceiptListener)
+        }
         viewModelScope.launch {
             messageEvent.collect { event ->
                 when (event) {
@@ -633,6 +656,23 @@ class MessageListViewModel(
             val filtered = messages.filter { !it.isSentBySelf && it.needReadReceipt }
             if (filtered.isNotEmpty()) {
                 messageListStore.sendMessageReadReceipts(filtered)
+            }
+        }
+    }
+
+    private fun applyC2CReadReceipt(peerUserID: String, receiptTimestamp: Long) {
+        messageListState.messageList.value.forEach { message ->
+            if (
+                C2CReadReceiptPolicy.shouldMarkRead(
+                    message = message,
+                    conversationPeerUserID = peerUserID,
+                    receiptPeerUserID = peerUserID,
+                    receiptTimestamp = receiptTimestamp
+                )
+            ) {
+                val receipt = message.readReceiptInfo ?: MessageReceipt()
+                receipt.isPeerRead = true
+                message.readReceiptInfo = receipt
             }
         }
     }
@@ -1291,6 +1331,9 @@ class MessageListViewModel(
     }
 
     override fun onCleared() {
+        if (messageListConfig.isShowReadReceipt && c2cPeerUserID != null) {
+            V2TIMManager.getMessageManager().removeAdvancedMsgListener(c2cReadReceiptListener)
+        }
         mediaPreviewController.clear()
         audioController.release()
         listenFromHereController.stop()
