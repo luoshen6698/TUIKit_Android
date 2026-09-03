@@ -134,6 +134,13 @@ class MessageListView @JvmOverloads constructor(
             return
         }
 
+        val loadedMessageID = findLoadedPinnedMessageID(messageID, messageSequence)
+        if (loadedMessageID != null) {
+            locateCoordinator.requestLocateMessage(loadedMessageID)
+            completion(true)
+            return
+        }
+
         val scope = viewScope
         if (scope == null) {
             post {
@@ -150,7 +157,11 @@ class MessageListView @JvmOverloads constructor(
         scope.launch {
             val initialLoaded = viewModel.initialMessageLoadResult.filterNotNull().first()
             post {
-                if (initialLoaded) {
+                val currentMessageID = findLoadedPinnedMessageID(messageID, messageSequence)
+                if (currentMessageID != null) {
+                    locateCoordinator.requestLocateMessage(currentMessageID)
+                    completion(true)
+                } else if (initialLoaded) {
                     locatePinnedMessage(
                         messageID = messageID,
                         messageSequence = messageSequence,
