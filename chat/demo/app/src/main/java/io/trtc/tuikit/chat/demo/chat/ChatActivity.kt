@@ -146,6 +146,22 @@ class ChatActivity : BaseActivity() {
             )
         }
     }
+    private val pinnedMessagesLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val selection = XingDunPinnedMessagesActivity.readLocateSelection(result.data)
+            ?: return@registerForActivityResult
+        if (
+            ::conversationID.isInitialized &&
+            ::chatPageView.isInitialized &&
+            selection.conversationID == conversationID
+        ) {
+            locatePinnedMessage(
+                messageID = selection.messageID,
+                messageSequence = selection.messageSequence,
+                pinVersion = selection.pinVersion,
+            )
+        }
+    }
 
     private val pinnedRepositoryListener: (String) -> Unit = { changedID ->
         if (::conversationID.isInitialized && changedID == conversationID) {
@@ -243,7 +259,11 @@ class ChatActivity : BaseActivity() {
         messageFavoriteEnabled = XingDunSessionManager.currentSession()?.features?.messageFavorite == true
         messagePinEnabled = XingDunSessionManager.currentSession()?.features?.messagePin == true
         canManagePinnedMessages = conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)
-        pinnedMessageBar.setOnClickListener { XingDunPinnedMessagesActivity.start(this, conversationID) }
+        pinnedMessageBar.setOnClickListener {
+            pinnedMessagesLauncher.launch(
+                XingDunPinnedMessagesActivity.createSelectionIntent(this, conversationID),
+            )
+        }
         ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.updatePadding(top = systemBars.top)
@@ -300,26 +320,11 @@ class ChatActivity : BaseActivity() {
             }
         )
         if (!locateMessageID.isNullOrBlank()) {
-            chatPageView.post {
-                chatPageView.locateMessageByID(
-                    messageID = locateMessageID,
-                    messageSequence = locateMessageSequence.takeIf { it > 0L },
-                ) { located ->
-                    if (located && locatePinVersion > 0) {
-                        XingDunPinnedMessageRepository.markRead(
-                            this,
-                            XingDunPinnedMessage(
-                                messageId = locateMessageID,
-                                conversationId = conversationID,
-                                isPinned = true,
-                                version = locatePinVersion,
-                            ),
-                        )
-                    } else if (!located) {
-                        Toast.makeText(this, R.string.xingdun_pinned_locate_failed, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
+            locatePinnedMessage(
+                messageID = locateMessageID,
+                messageSequence = locateMessageSequence.takeIf { it > 0L },
+                pinVersion = locatePinVersion,
+            )
         }
         btnMultiSelectCancel.setOnClickListener {
             chatPageView.exitMultiSelectMode()
@@ -645,6 +650,30 @@ class ChatActivity : BaseActivity() {
                 .onFailure {
                     if (pinnedPage.items.isEmpty()) pinnedMessageBar.visibility = View.GONE
                 }
+        }
+    }
+
+    private fun locatePinnedMessage(messageID: String, messageSequence: Long?, pinVersion: Int) {
+        if (!::chatPageView.isInitialized || messageID.isBlank()) return
+        chatPageView.post {
+            chatPageView.locateMessageByID(
+                messageID = messageID,
+                messageSequence = messageSequence,
+            ) { located ->
+                if (located && pinVersion > 0) {
+                    XingDunPinnedMessageRepository.markRead(
+                        this,
+                        XingDunPinnedMessage(
+                            messageId = messageID,
+                            conversationId = conversationID,
+                            isPinned = true,
+                            version = pinVersion,
+                        ),
+                    )
+                } else if (!located) {
+                    Toast.makeText(this, R.string.xingdun_pinned_locate_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 

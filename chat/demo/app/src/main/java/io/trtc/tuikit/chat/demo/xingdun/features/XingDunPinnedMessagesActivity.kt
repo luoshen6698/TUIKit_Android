@@ -46,6 +46,7 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
 
     private val conversationID by lazy { intent.getStringExtra(EXTRA_CONVERSATION_ID).orEmpty() }
     private val isDebugPreview by lazy { intent.getBooleanExtra(EXTRA_DEBUG_PREVIEW, false) }
+    private val returnsLocateSelection by lazy { intent.getBooleanExtra(EXTRA_RETURN_LOCATE_SELECTION, false) }
     private val themeStore by lazy { ThemeStore.shared(this) }
     private var activityScope: CoroutineScope? = null
     private var page = XingDunPinnedMessagePage()
@@ -354,9 +355,25 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
             Toast.makeText(this, R.string.xingdun_pinned_locate_preview, Toast.LENGTH_SHORT).show()
             return
         }
+        val targetConversationID = pin.conversationId.ifBlank { conversationID }
+        if (returnsLocateSelection) {
+            setResult(
+                RESULT_OK,
+                Intent().apply {
+                    putExtra(EXTRA_RESULT_CONVERSATION_ID, targetConversationID)
+                    putExtra(EXTRA_RESULT_MESSAGE_ID, pin.messageId)
+                    pin.messageSequence?.takeIf { it > 0L }?.let {
+                        putExtra(EXTRA_RESULT_MESSAGE_SEQUENCE, it)
+                    }
+                    putExtra(EXTRA_RESULT_PIN_VERSION, pin.version)
+                },
+            )
+            finish()
+            return
+        }
         ChatActivity.startForMessageID(
             this,
-            pin.conversationId.ifBlank { conversationID },
+            targetConversationID,
             pin.messageId,
             messageSequence = pin.messageSequence,
             pinVersion = pin.version,
@@ -482,8 +499,20 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
     private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     private fun Int.dp() = (this * resources.displayMetrics.density).toInt()
 
+    data class LocateSelection(
+        val conversationID: String,
+        val messageID: String,
+        val messageSequence: Long?,
+        val pinVersion: Int,
+    )
+
     companion object {
         private const val EXTRA_CONVERSATION_ID = "conversation_id"
+        private const val EXTRA_RETURN_LOCATE_SELECTION = "return_locate_selection"
+        private const val EXTRA_RESULT_CONVERSATION_ID = "result_conversation_id"
+        private const val EXTRA_RESULT_MESSAGE_ID = "result_message_id"
+        private const val EXTRA_RESULT_MESSAGE_SEQUENCE = "result_message_sequence"
+        private const val EXTRA_RESULT_PIN_VERSION = "result_pin_version"
         const val EXTRA_DEBUG_PREVIEW = "xingdun_debug_pinned_messages_preview"
         private const val TAG_PRIMARY = "pinned_primary"
         private const val TAG_SECONDARY = "pinned_secondary"
@@ -496,6 +525,27 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
             context.startActivity(Intent(context, XingDunPinnedMessagesActivity::class.java).apply {
                 putExtra(EXTRA_CONVERSATION_ID, conversationID)
             })
+        }
+
+        fun createSelectionIntent(context: Context, conversationID: String) =
+            Intent(context, XingDunPinnedMessagesActivity::class.java).apply {
+                putExtra(EXTRA_CONVERSATION_ID, conversationID)
+                putExtra(EXTRA_RETURN_LOCATE_SELECTION, true)
+            }
+
+        fun readLocateSelection(data: Intent?): LocateSelection? {
+            val resultData = data ?: return null
+            val conversationID = resultData.getStringExtra(EXTRA_RESULT_CONVERSATION_ID)?.trim().orEmpty()
+            val messageID = resultData.getStringExtra(EXTRA_RESULT_MESSAGE_ID)?.trim().orEmpty()
+            if (conversationID.isEmpty() || messageID.isEmpty()) return null
+            return LocateSelection(
+                conversationID = conversationID,
+                messageID = messageID,
+                messageSequence = resultData
+                    .getLongExtra(EXTRA_RESULT_MESSAGE_SEQUENCE, 0L)
+                    .takeIf { it > 0L },
+                pinVersion = resultData.getIntExtra(EXTRA_RESULT_PIN_VERSION, 0),
+            )
         }
     }
 }
