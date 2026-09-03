@@ -101,6 +101,9 @@
     <string name="message_list_read_receipt_read_by_count">%d 人已读</string>
     <string name="message_list_read_receipt_delivered_to">未读</string>
     <string name="message_list_read_receipt_all_read">全部已读</string>
+    <string name="message_list_read_receipt_group_owner">群主</string>
+    <string name="message_list_read_receipt_group_admin">管理员</string>
+    <string name="message_list_read_receipt_group_member">群成员</string>
     <string name="message_list_loading_more">加载更多</string>
     <string name="message_list_floating_back_to_latest">回到最新位置</string>
     <string name="message_list_floating_someone_mentioned_me">有人@我</string>

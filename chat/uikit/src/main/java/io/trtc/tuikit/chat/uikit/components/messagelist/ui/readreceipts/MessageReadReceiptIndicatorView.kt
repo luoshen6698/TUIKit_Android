@@ -61,25 +61,19 @@ class MessageReadReceiptIndicatorView(
     }
 
     private fun displayText(message: MessageInfo): String {
+        if (message.conversationType == ConversationType.GROUP) {
+            return context.getString(
+                R.string.message_list_read_receipt_read_by_count,
+                MessageReadReceiptCountPolicy.normalizeReadCount(message.groupReadCount)
+            )
+        }
         return when (message.readReceiptDisplayState) {
             MessageReadReceiptDisplayState.UNREAD -> {
                 context.getString(R.string.message_list_read_receipt_delivered_to)
             }
-            MessageReadReceiptDisplayState.READ -> {
-                if (message.conversationType != ConversationType.GROUP) {
-                    context.getString(R.string.message_list_read_receipt_read_by)
-                } else {
-                    context.getString(
-                        R.string.message_list_read_receipt_read_by_count,
-                        message.groupReadCount
-                    )
-                }
-            }
+            MessageReadReceiptDisplayState.READ -> context.getString(R.string.message_list_read_receipt_read_by)
             MessageReadReceiptDisplayState.ALL_READ -> {
                 context.getString(R.string.message_list_read_receipt_all_read)
-            }
-            else -> {
-                context.getString(R.string.message_list_read_receipt_delivered_to)
             }
         }
     }

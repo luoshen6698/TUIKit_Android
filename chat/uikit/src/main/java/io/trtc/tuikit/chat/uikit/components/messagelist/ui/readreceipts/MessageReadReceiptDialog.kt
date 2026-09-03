@@ -1,6 +1,7 @@
 package io.trtc.tuikit.chat.uikit.components.messagelist.ui.readreceipts
 import android.app.Dialog
 import android.content.Context
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
@@ -19,12 +20,14 @@ import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import io.trtc.tuikit.chat.uikit.components.widgets.DialogNavBar
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.group.GroupMember
+import io.trtc.tuikit.atomicxcore.api.group.GroupMemberRole
 import io.trtc.tuikit.atomicxcore.api.message.MessageActionStore
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -42,6 +45,8 @@ class MessageReadReceiptDialog(
 
     private lateinit var readTabButton: TextView
     private lateinit var unreadTabButton: TextView
+    private lateinit var readCountView: TextView
+    private lateinit var unreadCountView: TextView
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: MemberAdapter
 
@@ -51,6 +56,7 @@ class MessageReadReceiptDialog(
     private var hasMoreUnreadMembers: Boolean = false
     private var isLoadingMoreRead: Boolean = false
     private var isLoadingMoreUnread: Boolean = false
+    private var pendingRefreshRequests: Int = 0
     private var selectedReadTab = (message.readReceiptInfo?.readCount ?: 0) > 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,7 +76,8 @@ class MessageReadReceiptDialog(
             WindowThemeUtil.applyDialogSystemBarStyle(this, colors)
         }
         collectState()
-        loadInitialData()
+        refreshMemberLists()
+        startAutomaticRefresh()
         refreshTabState()
     }
 
@@ -136,6 +143,25 @@ class MessageReadReceiptDialog(
             orientation = LinearLayout.VERTICAL
             setPadding(20.dp, 16.dp, 20.dp, 16.dp)
         }
+        readCountView = createCountValueView()
+        unreadCountView = createCountValueView()
+        content.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            addView(
+                createSummaryCount(readCountView, context.getString(R.string.message_list_read_receipt_read_by)),
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            )
+            addView(
+                createSummaryCount(unreadCountView, context.getString(R.string.message_list_read_receipt_delivered_to)),
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            )
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            bottomMargin = 12.dp
+        })
         content.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -181,6 +207,37 @@ class MessageReadReceiptDialog(
         }
     }
 
+    private fun createCountValueView(): TextView {
+        return TextView(context).apply {
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+        }
+    }
+
+    private fun createSummaryCount(valueView: TextView, title: String): LinearLayout {
+        val colors = themeStore.themeState.value.currentTheme.tokens.color
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            addView(valueView, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+            addView(TextView(context).apply {
+                text = title
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setTextColor(colors.textColorSecondary)
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = 2.dp
+            })
+        }
+    }
+
     private fun collectState() {
         dialogScope.launch {
             messageActionStore.state.readMemberList.collectLatest { members ->
@@ -206,15 +263,44 @@ class MessageReadReceiptDialog(
         }
     }
 
-    private fun loadInitialData() {
-        messageActionStore.loadReadMembers(PAGE_SIZE, object : CompletionHandler {
-            override fun onSuccess() {}
-            override fun onFailure(code: Int, desc: String) {}
-        })
-        messageActionStore.loadUnreadMembers(PAGE_SIZE, object : CompletionHandler {
-            override fun onSuccess() {}
-            override fun onFailure(code: Int, desc: String) {}
-        })
+    private fun startAutomaticRefresh() {
+        dialogScope.launch {
+            repeat(AUTOMATIC_REFRESH_ATTEMPT_LIMIT) {
+                delay(AUTOMATIC_REFRESH_INTERVAL_MS)
+                refreshTabState()
+                if (!needsAutomaticRefresh()) {
+                    return@launch
+                }
+                refreshMemberLists()
+            }
+        }
+    }
+
+    private fun needsAutomaticRefresh(): Boolean {
+        return MessageReadReceiptCountPolicy.shouldAutomaticallyRefresh(
+            readCount = resolvedReadCount(),
+            unreadCount = resolvedUnreadCount()
+        )
+    }
+
+    private fun refreshMemberLists() {
+        if (pendingRefreshRequests > 0) {
+            return
+        }
+        pendingRefreshRequests = 2
+        val completion = object : CompletionHandler {
+            override fun onSuccess() = completeRefreshRequest()
+
+            override fun onFailure(code: Int, desc: String) = completeRefreshRequest()
+        }
+        messageActionStore.loadReadMembers(PAGE_SIZE, completion)
+        messageActionStore.loadUnreadMembers(PAGE_SIZE, completion)
+    }
+
+    private fun completeRefreshRequest() {
+        dialogScope.launch {
+            pendingRefreshRequests = (pendingRefreshRequests - 1).coerceAtLeast(0)
+        }
     }
 
     private fun maybeLoadMore() {
@@ -271,16 +357,30 @@ class MessageReadReceiptDialog(
         }
         readTabButton.background = if (selectedReadTab) selectedBackground else normalBackground
         unreadTabButton.background = if (selectedReadTab) normalBackground else selectedBackground
-        readTabButton.text = context.getString(
-            R.string.message_list_read_receipt_read_by,
-        ) + " (${readMembers.size})"
-        unreadTabButton.text = context.getString(
-            R.string.message_list_read_receipt_delivered_to,
-        ) + " (${unreadMembers.size})"
+        readTabButton.text = context.getString(R.string.message_list_read_receipt_read_by)
+        unreadTabButton.text = context.getString(R.string.message_list_read_receipt_delivered_to)
+        readCountView.text = resolvedReadCount().toString()
+        unreadCountView.text = resolvedUnreadCount().toString()
+        readCountView.setTextColor(colors.textColorPrimary)
+        unreadCountView.setTextColor(colors.textColorPrimary)
         readTabButton.setTextColor(if (selectedReadTab) colors.textColorPrimary else colors.textColorSecondary)
         unreadTabButton.setTextColor(if (selectedReadTab) colors.textColorSecondary else colors.textColorPrimary)
         adapter.submitList(if (selectedReadTab) readMembers else unreadMembers)
         recyclerView.post { maybeLoadMore() }
+    }
+
+    private fun resolvedReadCount(): Int {
+        return MessageReadReceiptCountPolicy.resolveTotal(
+            reportedCount = message.readReceiptInfo?.readCount,
+            loadedCount = readMembers.size
+        )
+    }
+
+    private fun resolvedUnreadCount(): Int {
+        return MessageReadReceiptCountPolicy.resolveTotal(
+            reportedCount = message.readReceiptInfo?.unreadCount,
+            loadedCount = unreadMembers.size
+        )
     }
 
     private inner class MemberAdapter(
@@ -306,15 +406,31 @@ class MessageReadReceiptDialog(
             val nameView = TextView(parent.context).apply {
                 textSize = 14f
             }
-            row.addView(avatarView, LinearLayout.LayoutParams(36.dp, 36.dp))
-            row.addView(nameView, LinearLayout.LayoutParams(
+            val roleView = TextView(parent.context).apply {
+                textSize = 12f
+            }
+            val labels = LinearLayout(parent.context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(nameView, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ))
+                addView(roleView, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = 2.dp
+                })
+            }
+            row.addView(avatarView, LinearLayout.LayoutParams(40.dp, 40.dp))
+            row.addView(labels, LinearLayout.LayoutParams(
                 0,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 1f
             ).apply {
                 marginStart = 12.dp
             })
-            return MemberViewHolder(row, avatarView, nameView)
+            return MemberViewHolder(row, avatarView, nameView, roleView)
         }
 
         override fun onBindViewHolder(holder: MemberViewHolder, position: Int) {
@@ -326,6 +442,14 @@ class MessageReadReceiptDialog(
                 ?: member.userID
             holder.nameView.text = displayName
             holder.nameView.setTextColor(colors.textColorPrimary)
+            holder.roleView.text = context.getString(
+                when (member.role) {
+                    GroupMemberRole.OWNER -> R.string.message_list_read_receipt_group_owner
+                    GroupMemberRole.ADMIN -> R.string.message_list_read_receipt_group_admin
+                    else -> R.string.message_list_read_receipt_group_member
+                }
+            )
+            holder.roleView.setTextColor(colors.textColorSecondary)
             holder.avatarView.setContent(
                 Avatar.AvatarContent.Image(
                     url = member.avatarURL.orEmpty(),
@@ -343,14 +467,17 @@ class MessageReadReceiptDialog(
     private class MemberViewHolder(
         itemView: View,
         val avatarView: Avatar,
-        val nameView: TextView
+        val nameView: TextView,
+        val roleView: TextView
     ) : RecyclerView.ViewHolder(itemView)
 
     private val Int.dp: Int
         get() = (this * density).roundToInt()
 
     companion object {
-        private const val PAGE_SIZE = 20
+        private const val PAGE_SIZE = 100
         private const val LOAD_MORE_THRESHOLD = 5
+        private const val AUTOMATIC_REFRESH_INTERVAL_MS = 500L
+        private const val AUTOMATIC_REFRESH_ATTEMPT_LIMIT = 20
     }
 }

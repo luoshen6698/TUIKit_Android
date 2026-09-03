@@ -103,6 +103,9 @@
     <string name="message_list_read_receipt_read_by_count">Read by %d</string>
     <string name="message_list_read_receipt_delivered_to">Unread</string>
     <string name="message_list_read_receipt_all_read">Read by All</string>
+    <string name="message_list_read_receipt_group_owner">Group owner</string>
+    <string name="message_list_read_receipt_group_admin">Administrator</string>
+    <string name="message_list_read_receipt_group_member">Group member</string>
     <string name="message_list_loading_more">Loading more</string>
     <string name="message_list_floating_back_to_latest">Back to latest</string>
     <string name="message_list_floating_someone_mentioned_me">Someone mentioned me</string>

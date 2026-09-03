@@ -626,6 +626,9 @@ class MessageListViewModel(
     }
 
     fun sendReadReceipts(messages: List<MessageInfo>) {
+        if (!messageListConfig.isShowReadReceipt) {
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
             val filtered = messages.filter { !it.isSentBySelf && it.needReadReceipt }
             if (filtered.isNotEmpty()) {

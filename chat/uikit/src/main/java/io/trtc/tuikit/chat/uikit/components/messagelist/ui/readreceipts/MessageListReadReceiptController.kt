@@ -136,7 +136,7 @@ internal class MessageListReadReceiptController(
     }
 
     private companion object {
-        const val READ_RECEIPT_REFRESH_INTERVAL_MS = 1000L
+        const val READ_RECEIPT_REFRESH_INTERVAL_MS = 500L
     }
 }
 
