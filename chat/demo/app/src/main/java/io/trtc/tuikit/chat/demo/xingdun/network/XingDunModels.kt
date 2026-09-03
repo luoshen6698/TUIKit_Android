@@ -237,6 +237,12 @@ data class XingDunGroupDetail(
         get() = currentUserIsAssignedCs ||
             (muteAllLevel != MUTE_LEVEL_CUSTOMER_SERVICE && canEditManagement)
 
+    /** Matches the iOS composer rule for ordinary and customer-service mute levels. */
+    val canSendMessages: Boolean
+        get() = !muteAll ||
+            currentUserIsAssignedCs ||
+            (muteAllLevel != MUTE_LEVEL_CUSTOMER_SERVICE && canEditManagement)
+
     val supportsJoinMode: Boolean
         get() = groupType.equals("public", ignoreCase = true) ||
             groupType.equals("community", ignoreCase = true)

@@ -2,7 +2,10 @@ package io.trtc.tuikit.chat.uikit.pages
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
+import android.widget.TextView
 import io.trtc.tuikit.chat.uikit.components.common.ConversationIDUtil
 import io.trtc.tuikit.chat.uikit.components.messagelist.typing.TypingIndicatorController
 import io.trtc.tuikit.chat.uikit.components.messageinput.config.ChatMessageInputConfig
@@ -31,6 +34,7 @@ class ChatPageView @JvmOverloads constructor(
 
     private val messageListView: MessageListView
     private val messageInputView: MessageInputView
+    private val messageInputRestriction: TextView
 
     private val themeStore = ThemeStore.shared(context)
     private var viewScope: CoroutineScope? = null
@@ -41,11 +45,14 @@ class ChatPageView @JvmOverloads constructor(
     private var typingEnabled = false
 
     private var onTypingStatusChanged: (Boolean) -> Unit = {}
+    private var isMultiSelect = false
+    private var composerRestriction: CharSequence? = null
 
     init {
         LayoutInflater.from(context).inflate(R.layout.uikit_page_chat, this, true)
         messageListView = findViewById(R.id.uikit_message_list_view)
         messageInputView = findViewById(R.id.uikit_message_input_view)
+        messageInputRestriction = findViewById(R.id.uikit_message_input_restriction)
         applyColors(themeStore.themeState.value.currentTheme.tokens.color)
     }
 
@@ -70,6 +77,8 @@ class ChatPageView @JvmOverloads constructor(
 
     private fun applyColors(colors: ColorTokens) {
         setBackgroundColor(colors.bgColorOperate)
+        messageInputRestriction.setBackgroundColor(colors.bgColorInput)
+        messageInputRestriction.setTextColor(colors.textColorSecondary)
     }
 
     private fun obtainTypingControllerIfNeeded() {
@@ -119,7 +128,8 @@ class ChatPageView @JvmOverloads constructor(
             config = messageListConfig,
             locateMessage = locateMessage,
             onMultiSelectStateChanged = { isMultiSelect ->
-                messageInputView.visibility = if (isMultiSelect) GONE else VISIBLE
+                this.isMultiSelect = isMultiSelect
+                updateComposerVisibility()
                 onMultiSelectStateChanged(isMultiSelect)
             },
             onUserClick = onUserClick
@@ -162,5 +172,22 @@ class ChatPageView @JvmOverloads constructor(
 
     fun showMentionMemberDialog() {
         messageInputView.showMentionMemberDialog()
+    }
+
+    fun setComposerRestriction(reason: CharSequence?) {
+        composerRestriction = reason?.takeIf(CharSequence::isNotEmpty)
+        messageInputRestriction.text = composerRestriction
+        if (composerRestriction != null) {
+            messageInputView.clearFocus()
+            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                ?.hideSoftInputFromWindow(windowToken, 0)
+        }
+        updateComposerVisibility()
+    }
+
+    private fun updateComposerVisibility() {
+        val restricted = composerRestriction != null
+        messageInputView.visibility = if (!isMultiSelect && !restricted) View.VISIBLE else View.GONE
+        messageInputRestriction.visibility = if (!isMultiSelect && restricted) View.VISIBLE else View.GONE
     }
 }

@@ -110,4 +110,20 @@ class XingDunGroupDetailContractTest {
         assertTrue(detail.isCustomerService)
         assertTrue(detail.currentUserIsAssignedCs)
     }
+
+    @Test
+    fun composerPermissionMatchesIOSMuteLevels() {
+        val member = XingDunGroupDetail(currentUserRole = "member")
+        assertTrue(member.canSendMessages)
+        assertFalse(member.copy(muteAll = true, muteAllLevel = 1).canSendMessages)
+
+        val owner = member.copy(currentUserRole = "owner", muteAll = true, muteAllLevel = 1)
+        val administrator = member.copy(currentUserRole = "administrator", muteAll = true, muteAllLevel = 1)
+        assertTrue(owner.canSendMessages)
+        assertTrue(administrator.canSendMessages)
+
+        assertFalse(owner.copy(muteAllLevel = 2).canSendMessages)
+        assertFalse(administrator.copy(muteAllLevel = 2).canSendMessages)
+        assertTrue(member.copy(muteAll = true, muteAllLevel = 2, currentUserIsAssignedCs = true).canSendMessages)
+    }
 }
