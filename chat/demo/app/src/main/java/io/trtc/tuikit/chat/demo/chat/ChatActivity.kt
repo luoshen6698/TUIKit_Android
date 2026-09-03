@@ -69,6 +69,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagesActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessage
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessagePage
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunRuntimeFeaturePolicy
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.messageinput.config.ChatMessageInputConfig
 import io.trtc.tuikit.chat.uikit.components.messageinput.data.MessageInputActionIDs
@@ -183,6 +184,7 @@ class ChatActivity : BaseActivity() {
         private const val MARK_ACTION_ID = "xingdun.message.mark"
         private const val REPORT_ACTION_ID = "xingdun.message.report"
         private const val CONTACT_CARD_ACTION_ID = "xingdun.messageInput.contactCard"
+        private const val REDPACKET_ACTION_ID = "xingdun.messageInput.redpacket"
         private const val MENTION_ACTION_ID = "xingdun.messageInput.mention"
         private const val CONTACT_CARD_TYPE = "contact_card"
 
@@ -281,21 +283,28 @@ class ChatActivity : BaseActivity() {
         }
         btnMore.expandTouchTarget()
 
+        val isC2CConversation = conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)
+        val isGroupConversation = conversationID.startsWith(GROUP_CONVERSATION_ID_PREFIX)
+        val featureAvailability = XingDunRuntimeFeaturePolicy.chatAvailability(
+            features = XingDunSessionManager.currentSession()?.features,
+            isDirectConversation = isC2CConversation,
+            isGroupConversation = isGroupConversation,
+        )
         val messageListConfig = ChatMessageListConfig(
             isSupportReaction = false,
             isSupportConvertToText = false,
             isSupportTranslate = false,
             isSupportListenFromHere = false,
+            isGroupCallEnabled = featureAvailability.groupCall,
         )
         XingDunCustomMessagePresentation.configure(messageListConfig)
         configureBusinessMessageActions(messageListConfig)
-        val isC2CConversation = conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)
         val messageInputConfig = ChatMessageInputConfig(
-            isShowAudioCall = isC2CConversation,
-            isShowVideoCall = isC2CConversation,
+            isShowAudioCall = featureAvailability.audioCall,
+            isShowVideoCall = featureAvailability.videoCall,
         )
         messageInputConfig.transformOutgoingText(XingDunEmojiCompatibility::transformOutgoingText)
-        configureMessageInputActions(messageInputConfig, isC2CConversation)
+        configureMessageInputActions(messageInputConfig, isC2CConversation, featureAvailability.redpacket)
 
         chatPageView = ChatPageView(this)
         chatPageContainer.addView(chatPageView)
@@ -743,6 +752,7 @@ class ChatActivity : BaseActivity() {
     private fun configureMessageInputActions(
         config: ChatMessageInputConfig,
         isC2CConversation: Boolean,
+        redpacketEnabled: Boolean,
     ) {
         config.customizeActions {
             val takePhoto = items.firstOrNull { it.ID == MessageInputActionIDs.TAKE_PHOTO }
@@ -768,6 +778,22 @@ class ChatActivity : BaseActivity() {
 
             if (isC2CConversation) {
                 moveBefore(MessageInputActionIDs.AUDIO_CALL, MessageInputActionIDs.VIDEO_CALL)
+            }
+            if (redpacketEnabled) {
+                add(
+                    MessageInputMenuAction(
+                        ID = REDPACKET_ACTION_ID,
+                        title = getString(R.string.xingdun_chat_more_redpacket),
+                        iconResID = R.drawable.xingdun_ic_redpacket,
+                        onClick = {
+                            XingDunFeatureActivity.start(
+                                this@ChatActivity,
+                                XingDunFeatureActivity.MODE_REDPACKET_SEND,
+                                conversationID,
+                            )
+                        },
+                    )
+                )
             }
             add(
                 MessageInputMenuAction(

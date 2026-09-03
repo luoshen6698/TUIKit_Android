@@ -155,7 +155,7 @@ object XingDunSessionManager {
                 apiBaseUrl = resolveApiBaseUrl(bootstrap),
                 companyId = bootstrap.company?.id,
                 push = bootstrap.push,
-                features = bootstrap.features.copy(redpacket = false, groupCall = false),
+                features = bootstrap.features,
                 privacy = bootstrap.privacy
             )
         )
@@ -380,7 +380,7 @@ object XingDunSessionManager {
                 ?: response.username?.takeIf(String::isNotBlank)
                 ?: credential.userId,
             push = bootstrap.push,
-            features = bootstrap.features.copy(redpacket = false, groupCall = false),
+            features = bootstrap.features,
             privacy = bootstrap.privacy
         ).also {
             storeEnterprise(bootstrap)

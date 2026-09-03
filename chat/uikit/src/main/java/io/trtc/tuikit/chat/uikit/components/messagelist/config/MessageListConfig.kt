@@ -35,6 +35,9 @@ interface MessageListConfigProtocol {
     val avatarSpacing: Int
     val isShowReadReceipt: Boolean
 
+    val isGroupCallEnabled: Boolean
+        get() = true
+
     val isSupportCopy: Boolean
     val isSupportDelete: Boolean
     val isSupportRecall: Boolean
@@ -258,6 +261,7 @@ class ChatMessageListConfig : MessageListConfigProtocol {
     private var _horizontalPadding: Int? = null
     private var _avatarSpacing: Int? = null
     private var _isShowReadReceipt: Boolean? = null
+    private var _isGroupCallEnabled: Boolean? = null
     private var _isSupportCopy: Boolean? = null
     private var _isSupportDelete: Boolean? = null
     private var _isSupportRecall: Boolean? = null
@@ -290,6 +294,7 @@ class ChatMessageListConfig : MessageListConfigProtocol {
         horizontalPadding: Int? = null,
         avatarSpacing: Int? = null,
         isShowReadReceipt: Boolean? = null,
+        isGroupCallEnabled: Boolean? = null,
         isSupportCopy: Boolean? = null,
         isSupportDelete: Boolean? = null,
         isSupportRecall: Boolean? = null,
@@ -320,6 +325,7 @@ class ChatMessageListConfig : MessageListConfigProtocol {
         this._horizontalPadding = horizontalPadding
         this._avatarSpacing = avatarSpacing
         this._isShowReadReceipt = isShowReadReceipt
+        this._isGroupCallEnabled = isGroupCallEnabled
         this._isSupportCopy = isSupportCopy
         this._isSupportDelete = isSupportDelete
         this._isSupportRecall = isSupportRecall
@@ -455,6 +461,12 @@ class ChatMessageListConfig : MessageListConfigProtocol {
         get() = _isShowReadReceipt ?: AppBuilderConfig.enableReadReceipt
         set(value) {
             _isShowReadReceipt = value
+        }
+
+    override var isGroupCallEnabled: Boolean
+        get() = _isGroupCallEnabled ?: true
+        set(value) {
+            _isGroupCallEnabled = value
         }
 
     override var isSupportCopy: Boolean

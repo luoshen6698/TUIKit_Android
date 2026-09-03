@@ -74,9 +74,14 @@ import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
 import io.trtc.tuikit.atomicx.common.imageloader.ImageLoader
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.atomicxcore.api.contact.GetContactInfoCompletionHandler
+import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.group.GetGroupInfoCompletionHandler
 import io.trtc.tuikit.atomicxcore.api.group.GroupInfo
+import io.trtc.tuikit.atomicxcore.api.group.GroupMember
+import io.trtc.tuikit.atomicxcore.api.group.GroupMemberFilterRole
+import io.trtc.tuikit.atomicxcore.api.group.GroupMemberStore
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
+import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.app.BuildConfig
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
@@ -97,6 +102,7 @@ import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import io.trtc.tuikit.chat.uikit.components.audioplayer.AudioPlayer
 import io.trtc.tuikit.chat.uikit.components.audioplayer.AudioPlayerListener
+import io.trtc.tuikit.chat.uikit.components.common.displayName
 import io.trtc.tuikit.chat.uikit.components.imageviewer.EventHandler
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageElement
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageViewer
@@ -115,6 +121,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlin.coroutines.resume
 
 /** Thin, product-owned screens for XingDun services that are not provided by TUIKit. */
 open class XingDunFeatureActivity : BaseActivity() {
@@ -349,6 +356,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             MODE_FAVORITES -> showFavorites()
             MODE_REDPACKET_ACCOUNT -> showRedpacketAccount()
             MODE_REDPACKET_DETAIL -> showRedpacketDetail()
+            MODE_REDPACKET_SEND -> showRedpacketSend()
             else -> finish()
         }
     }
@@ -425,7 +433,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             textSize = 14f
         }
         root.addView(status)
-        if (mode != MODE_PERSONAL_QR && mode != MODE_INVITE && mode != MODE_REPORT_CREATE) {
+        if (mode != MODE_PERSONAL_QR && mode != MODE_INVITE && mode != MODE_REPORT_CREATE && mode != MODE_REDPACKET_SEND) {
             root.addView(
                 XingDunChildBottomNavigation(this).apply {
                     bind(
@@ -6777,6 +6785,236 @@ open class XingDunFeatureActivity : BaseActivity() {
         }
     }
 
+    private fun showRedpacketSend() {
+        val session = XingDunSessionManager.currentSession()
+        if (session?.features?.redpacket != true) {
+            addMessage(R.string.xingdun_redpacket_closed_detail)
+            return
+        }
+        val isDirect = targetID.startsWith("c2c_")
+        val isGroup = targetID.startsWith("group_")
+        if (!isDirect && !isGroup) {
+            addMessage(R.string.xingdun_redpacket_invalid_conversation)
+            return
+        }
+
+        var balance: Int? = null
+        var members: List<GroupMember> = emptyList()
+        var selectedReceiver: GroupMember? = null
+        var selectedType = if (isGroup) XingDunRedpacketType.TEAM_RANDOM else XingDunRedpacketType.SINGLE
+
+        val balanceView = TextView(this).apply {
+            setText(R.string.xingdun_redpacket_balance_loading)
+            textSize = 14f
+        }
+        val amount = input(R.string.xingdun_redpacket_amount_hint, decimal = true)
+        val greeting = input(R.string.xingdun_redpacket_greeting_hint).apply {
+            setText(R.string.xingdun_redpacket_default_greeting)
+        }
+        val count = input(R.string.xingdun_redpacket_count_hint).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText("1")
+        }
+        lateinit var receiver: Button
+        receiver = actionButton(R.string.xingdun_redpacket_select_receiver) {
+            if (members.isEmpty()) {
+                Toast.makeText(this, R.string.xingdun_redpacket_no_receivers, Toast.LENGTH_SHORT).show()
+                return@actionButton
+            }
+            val labels = members.map { it.displayName }.toTypedArray()
+            AlertDialog.Builder(this)
+                .setTitle(R.string.xingdun_redpacket_select_receiver)
+                .setSingleChoiceItems(labels, members.indexOf(selectedReceiver)) { dialog, index ->
+                    selectedReceiver = members[index]
+                    receiver.text = getString(R.string.xingdun_redpacket_selected_receiver, labels[index])
+                    dialog.dismiss()
+                }
+                .setNegativeButton(R.string.xingdun_cancel, null)
+                .show()
+        }.apply { visibility = View.GONE }
+
+        val typeOptions = if (isGroup) {
+            listOf(
+                XingDunRedpacketType.TEAM_RANDOM to R.string.xingdun_redpacket_type_random,
+                XingDunRedpacketType.TEAM_FIXED to R.string.xingdun_redpacket_type_fixed,
+                XingDunRedpacketType.TEAM_EXCLUSIVE to R.string.xingdun_redpacket_type_exclusive,
+            )
+        } else {
+            listOf(XingDunRedpacketType.SINGLE to R.string.xingdun_redpacket_type_normal)
+        }
+        val typeSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@XingDunFeatureActivity,
+                android.R.layout.simple_spinner_item,
+                typeOptions.map { getString(it.second) },
+            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    selectedType = typeOptions[position].first
+                    val exclusive = selectedType == XingDunRedpacketType.TEAM_EXCLUSIVE
+                    count.visibility = if (isGroup && !exclusive) View.VISIBLE else View.GONE
+                    receiver.visibility = if (exclusive) View.VISIBLE else View.GONE
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            }
+        }
+
+        content.addView(balanceView)
+        if (isGroup) {
+            content.addView(TextView(this).apply {
+                setText(R.string.xingdun_redpacket_type_label)
+                textSize = 14f
+                setPadding(0, 12.dp(), 0, 0)
+            })
+            content.addView(typeSpinner)
+        }
+        content.addView(amount)
+        if (isGroup) content.addView(count)
+        content.addView(receiver)
+        content.addView(greeting)
+
+        lateinit var sendButton: Button
+        sendButton = actionButton(R.string.xingdun_redpacket_send_action) {
+            if (XingDunSessionManager.currentSession()?.features?.redpacket != true) {
+                Toast.makeText(this, R.string.xingdun_redpacket_closed_detail, Toast.LENGTH_LONG).show()
+                return@actionButton
+            }
+            val draft = try {
+                XingDunRedpacketSendPolicy.validate(
+                    amountText = amount.text.toString(),
+                    requestedType = selectedType,
+                    requestedCount = count.text.toString().toIntOrNull() ?: 0,
+                    greeting = greeting.text.toString(),
+                    isGroup = isGroup,
+                    availableBalance = balance,
+                    groupMemberCount = members.size,
+                    exclusiveReceiverTimUserId = selectedReceiver?.userID,
+                    defaultGreeting = getString(R.string.xingdun_redpacket_default_greeting),
+                )
+            } catch (error: XingDunRedpacketValidationException) {
+                status.setText(redpacketValidationMessage(error.reason))
+                return@actionButton
+            }
+            sendButton.isEnabled = false
+            setBusy(true)
+            lifecycleScope.launch {
+                runCatching { sendRedpacket(session, targetID, isGroup, draft) }
+                    .onSuccess {
+                        setBusy(false)
+                        Toast.makeText(this@XingDunFeatureActivity, R.string.xingdun_redpacket_send_succeeded, Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                    .onFailure {
+                        sendButton.isEnabled = true
+                        showFailure(it)
+                    }
+            }
+        }.also { it.isEnabled = false }
+        content.addView(sendButton)
+
+        setBusy(true)
+        lifecycleScope.launch {
+            runCatching {
+                val balancePayload = XingDunSessionManager.apiClient().get<JsonObject>(
+                    session,
+                    "redpacket/myBalance",
+                    emptyMap(),
+                    JsonObject::class.java,
+                )
+                val loadedMembers = if (isGroup) loadRedpacketMembers(targetID.removePrefix("group_")) else emptyList()
+                (balancePayload.int("redpacket_balance") ?: 0) to loadedMembers
+            }.onSuccess { (loadedBalance, loadedMembers) ->
+                balance = loadedBalance
+                members = loadedMembers
+                balanceView.text = getString(R.string.xingdun_redpacket_available_balance, centsText(loadedBalance))
+                sendButton.isEnabled = true
+                setBusy(false)
+            }.onFailure(::showFailure)
+        }
+    }
+
+    private suspend fun sendRedpacket(
+        session: io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession,
+        conversationID: String,
+        isGroup: Boolean,
+        draft: XingDunValidatedRedpacketDraft,
+    ) {
+        val body = linkedMapOf<String, Any>(
+            "scene" to if (isGroup) "team" else "p2p",
+            "packet_type" to draft.type.wireValue,
+            "total_amount" to draft.totalAmount,
+            "count" to draft.count,
+            "greeting" to draft.greeting,
+            "conversation_id" to conversationID,
+        ).apply {
+            if (isGroup) put("tim_group_id", conversationID.removePrefix("group_"))
+            else put("receiver_tim_user_id", conversationID.removePrefix("c2c_"))
+            draft.exclusiveReceiverTimUserId?.let { put("exclusive_receiver_tim_user_id", it) }
+        }
+        val api = XingDunSessionManager.apiClient()
+        val prepared = api.post<JsonObject>(session, "redpacket/prepareSend", body, JsonObject::class.java)
+        val packetNo = prepared.string("packet_no")
+            ?: throw IllegalStateException(getString(R.string.xingdun_redpacket_prepare_failed))
+        try {
+            api.post<JsonObject>(
+                session,
+                "redpacket/confirmSent",
+                mapOf("packet_no" to packetNo),
+                JsonObject::class.java,
+            )
+        } catch (error: Throwable) {
+            runCatching {
+                api.postEmpty(
+                    session,
+                    "redpacket/cancelPending",
+                    mapOf("packet_no" to packetNo, "cancel_reason" to "Android confirm failed"),
+                )
+            }
+            throw error
+        }
+    }
+
+    private suspend fun loadRedpacketMembers(groupID: String): List<GroupMember> {
+        val store = GroupMemberStore.create(groupID)
+        suspendUntilGroupMembersLoaded { completion ->
+            store.loadMembers(listOf(GroupMemberFilterRole.ALL), completion)
+        }
+        while (store.state.hasMoreMembers.value) {
+            suspendUntilGroupMembersLoaded(store::loadMoreMembers)
+        }
+        val selfUserID = LoginStore.shared.loginState.loginUserInfo.value?.userID
+        return store.state.memberList.value
+            .filter { it.userID.isNotBlank() && it.userID != selfUserID }
+            .sortedBy { it.displayName.lowercase(Locale.getDefault()) }
+    }
+
+    private suspend fun suspendUntilGroupMembersLoaded(
+        load: (CompletionHandler) -> Unit,
+    ) = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+        load(object : CompletionHandler {
+            override fun onSuccess() {
+                if (continuation.isActive) continuation.resume(Unit)
+            }
+
+            override fun onFailure(code: Int, desc: String) {
+                if (continuation.isActive) continuation.resumeWith(
+                    Result.failure(IllegalStateException(desc.ifBlank { "Group member load failed: $code" })),
+                )
+            }
+        })
+    }
+
+    private fun redpacketValidationMessage(error: XingDunRedpacketValidationError): Int = when (error) {
+        XingDunRedpacketValidationError.INVALID_AMOUNT -> R.string.xingdun_redpacket_error_invalid_amount
+        XingDunRedpacketValidationError.AMOUNT_TOO_LARGE -> R.string.xingdun_redpacket_error_amount_too_large
+        XingDunRedpacketValidationError.INSUFFICIENT_BALANCE -> R.string.xingdun_redpacket_error_insufficient_balance
+        XingDunRedpacketValidationError.INVALID_COUNT -> R.string.xingdun_redpacket_error_invalid_count
+        XingDunRedpacketValidationError.AMOUNT_BELOW_COUNT -> R.string.xingdun_redpacket_error_amount_below_count
+        XingDunRedpacketValidationError.MISSING_EXCLUSIVE_RECEIVER -> R.string.xingdun_redpacket_error_missing_receiver
+        XingDunRedpacketValidationError.INVALID_GREETING -> R.string.xingdun_redpacket_error_invalid_greeting
+    }
+
     private fun showRedpacketAccount() {
         if (XingDunSessionManager.currentSession()?.features?.redpacket != true) {
             addMessage(R.string.xingdun_redpacket_closed_detail)
@@ -7285,6 +7523,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         MODE_FAVORITES -> R.string.xingdun_message_favorites
         MODE_REDPACKET_ACCOUNT -> R.string.xingdun_redpacket_account
         MODE_REDPACKET_DETAIL -> R.string.xingdun_redpacket_detail
+        MODE_REDPACKET_SEND -> R.string.xingdun_redpacket_send_title
         else -> R.string.demo_app_name
     })
 
@@ -7369,6 +7608,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         const val MODE_FAVORITES = "favorites"
         const val MODE_REDPACKET_ACCOUNT = "redpacket_account"
         const val MODE_REDPACKET_DETAIL = "redpacket_detail"
+        const val MODE_REDPACKET_SEND = "redpacket_send"
         private const val PERMISSION_PREFERENCES = "xingdun_permission_ui"
         private const val REPORT_PAGE_SIZE = 20
         private const val FAVORITE_PAGE_SIZE = 20

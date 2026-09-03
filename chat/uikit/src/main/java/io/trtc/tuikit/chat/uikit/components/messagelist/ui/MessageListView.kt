@@ -544,7 +544,11 @@ class MessageListView @JvmOverloads constructor(
         alignmentController.requestAlignment()
         recyclerView.addOnChildAttachStateChangeListener(locateCoordinator.childAttachStateChangeListener)
         applyMessageListBackground()
-        joinCallBannerController.bind(conversationID)
+        if (config.isGroupCallEnabled) {
+            joinCallBannerController.bind(conversationID)
+        } else {
+            joinCallBannerController.release()
+        }
         requestInitialMentionEntry(conversationID)
 
         if (isAttachedToWindow) {
@@ -559,7 +563,10 @@ class MessageListView @JvmOverloads constructor(
         if (!::viewModel.isInitialized) {
             return
         }
-        currentConversationID?.let { joinCallBannerController.bind(it) }
+        currentConversationID?.let {
+            if (config.isGroupCallEnabled) joinCallBannerController.bind(it)
+            else joinCallBannerController.release()
+        }
         bindHostLifecycle()
         bindViewModel()
     }

@@ -21,6 +21,7 @@ import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageType
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunRuntimeFeaturePolicy
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantBoundary
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.ChatMessageListConfig
 import io.trtc.tuikit.chat.uikit.components.messagelist.ui.BubbleStyle
@@ -406,14 +407,16 @@ private object XingDunCustomMessageRenderer : MessageContentRenderer {
             setColor(backgroundColor)
             cornerRadius = 12f * textView.resources.displayMetrics.density
         }
-        val redpacketEnabled = XingDunSessionManager.currentSession()?.features?.redpacket == true
+        val redpacketEnabled = XingDunRuntimeFeaturePolicy.redpacketEnabled(
+            XingDunSessionManager.currentSession()?.features,
+        )
         textView.setOnClickListener(
             if (message.type == "redpacket" && XingDunRedpacketAccessPolicy.canOpen(redpacketEnabled)) View.OnClickListener {
                 val destination = packetNo ?: return@OnClickListener
                 XingDunFeatureActivity.start(it.context, XingDunFeatureActivity.MODE_REDPACKET_DETAIL, destination)
             } else null
         )
-        if (message.type == "redpacket" && !packetNo.isNullOrBlank()) {
+        if (message.type == "redpacket" && redpacketEnabled && !packetNo.isNullOrBlank()) {
             XingDunRedpacketStatusLoader.load(packetNo) { statusValues ->
                 if (textView.tag == packetNo && statusValues.isNotEmpty()) {
                     textView.text = message.copy(values = message.values + statusValues).detail(textView.context)
