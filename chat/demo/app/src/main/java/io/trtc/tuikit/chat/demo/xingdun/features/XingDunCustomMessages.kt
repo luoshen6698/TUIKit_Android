@@ -151,13 +151,24 @@ internal object XingDunRedpacketAccessPolicy {
     }
 }
 
+internal object XingDunRedpacketClaimStatusPolicy {
+    fun values(result: XingDunRedpacketClaimResultPayload): Map<String, String> = mapOf(
+        "status" to (result.detail.status.takeIf { it > 0 } ?: result.status).toString(),
+        "status_name" to result.detail.statusName.ifBlank { result.statusName },
+        "has_claimed" to "true",
+        "claimed_count" to result.detail.claimedCount.toString(),
+        "count" to result.detail.count.toString(),
+        "remain_count" to result.detail.remainCount.toString(),
+    )
+}
+
 internal object XingDunRedpacketStatusLoader {
     private data class CachedStatus(val values: Map<String, String>, val loadedAtMillis: Long)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val cache = ConcurrentHashMap<String, CachedStatus>()
-    private val listeners = ConcurrentHashMap<String, MutableSet<() -> Unit>>()
+    private val listeners = ConcurrentHashMap<String, MutableSet<(Map<String, String>) -> Unit>>()
 
     fun load(
         packetNo: String,
@@ -201,11 +212,11 @@ internal object XingDunRedpacketStatusLoader {
         cache.remove("$tenantKey:$packetNo")
     }
 
-    fun addListener(packetNo: String, listener: () -> Unit) {
+    fun addListener(packetNo: String, listener: (Map<String, String>) -> Unit) {
         listeners.computeIfAbsent(packetNo) { ConcurrentHashMap.newKeySet() }.add(listener)
     }
 
-    fun removeListener(packetNo: String, listener: () -> Unit) {
+    fun removeListener(packetNo: String, listener: (Map<String, String>) -> Unit) {
         listeners[packetNo]?.let { packetListeners ->
             packetListeners.remove(listener)
             if (packetListeners.isEmpty()) listeners.remove(packetNo, packetListeners)
@@ -214,11 +225,24 @@ internal object XingDunRedpacketStatusLoader {
 
     fun notifyChanged(packetNo: String) {
         invalidate(packetNo)
-        mainHandler.post { listeners[packetNo]?.toList()?.forEach { it() } }
+        notifyListeners(packetNo, emptyMap())
+    }
+
+    fun publish(packetNo: String, values: Map<String, String>) {
+        if (values.isEmpty()) return notifyChanged(packetNo)
+        val session = XingDunSessionManager.currentSession() ?: return
+        val tenantKey = XingDunTenantBoundary.identity(session)?.key ?: return
+        cache["$tenantKey:$packetNo"] = CachedStatus(values, System.currentTimeMillis())
+        notifyListeners(packetNo, values)
     }
 
     fun clearTenantCache() {
         cache.clear()
+    }
+
+    private fun notifyListeners(packetNo: String, values: Map<String, String>) {
+        val notify: () -> Unit = { listeners[packetNo]?.toList()?.forEach { it(values) } }
+        if (Looper.myLooper() == Looper.getMainLooper()) notify() else mainHandler.post { notify() }
     }
 
     private const val CACHE_TTL_MILLIS = 30_000L
@@ -358,7 +382,14 @@ private class XingDunRedpacketMessageView(context: Context) : LinearLayout(conte
     private var observedPacketNo: String? = null
     private var statusLoadGeneration = 0
     private var statusRefreshEnabled = false
-    private val statusChangeListener: () -> Unit = { loadStatus(forceRefresh = true) }
+    private val statusChangeListener: (Map<String, String>) -> Unit = { values ->
+        if (values.isEmpty()) {
+            loadStatus(forceRefresh = true)
+        } else {
+            statusLoadGeneration += 1
+            applyStatusValues(boundPacketNo, values)
+        }
+    }
     private val refreshRunnable = Runnable {
         loadStatus(forceRefresh = true)
         scheduleStatusRefresh()
@@ -451,22 +482,28 @@ private class XingDunRedpacketMessageView(context: Context) : LinearLayout(conte
 
     private fun loadStatus(forceRefresh: Boolean = false) {
         val packetNo = boundPacketNo ?: return
-        val message = boundMessage ?: return
+        if (boundMessage == null) return
         if (!statusRefreshEnabled) return
         val generation = ++statusLoadGeneration
         XingDunRedpacketStatusLoader.load(packetNo, forceRefresh) { statusValues ->
             if (tag == packetNo && generation == statusLoadGeneration && statusValues.isNotEmpty()) {
-                val updated = message.copy(values = message.values + statusValues)
-                boundMessage = updated
-                render(updated)
-                val statusValue = updated.values["status"]?.toIntOrNull() ?: 0
-                val claimed = updated.values["has_claimed"].equals("true", true) || updated.values["has_claimed"] == "1"
-                if (XingDunRedpacketPresentationPolicy.isTerminal(statusValue, claimed)) {
-                    statusRefreshEnabled = false
-                    refreshHandler.removeCallbacks(refreshRunnable)
-                    stopObservingStatus()
-                }
+                applyStatusValues(packetNo, statusValues)
             }
+        }
+    }
+
+    private fun applyStatusValues(packetNo: String?, statusValues: Map<String, String>) {
+        if (packetNo.isNullOrBlank() || tag != packetNo || statusValues.isEmpty()) return
+        val message = boundMessage ?: return
+        val updated = message.copy(values = message.values + statusValues)
+        boundMessage = updated
+        render(updated)
+        val statusValue = updated.values["status"]?.toIntOrNull() ?: 0
+        val claimed = updated.values["has_claimed"].equals("true", true) || updated.values["has_claimed"] == "1"
+        if (XingDunRedpacketPresentationPolicy.isTerminal(statusValue, claimed)) {
+            statusRefreshEnabled = false
+            refreshHandler.removeCallbacks(refreshRunnable)
+            stopObservingStatus()
         }
     }
 
@@ -520,7 +557,7 @@ private class XingDunRedpacketMessageView(context: Context) : LinearLayout(conte
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
 
     private companion object {
-        const val STATUS_REFRESH_INTERVAL_MILLIS = 5_000L
+        const val STATUS_REFRESH_INTERVAL_MILLIS = 1_000L
     }
 }
 

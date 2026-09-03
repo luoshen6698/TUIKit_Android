@@ -20,6 +20,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
@@ -60,6 +61,16 @@ internal class XingDunRedpacketUiController(
         titleView.setText(if (isGroup) R.string.xingdun_redpacket_send_group_title else R.string.xingdun_redpacket_send_title)
         preparePage()
 
+        val validationHint = TextView(activity).apply {
+            visibility = View.GONE
+            textSize = 14f
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            setTextColor(DANGER)
+            setPadding(14.dp(), 10.dp(), 14.dp(), 10.dp())
+            background = rounded(0xFFFFECEC.toInt(), 10f)
+        }
+        content.addView(validationHint, matchWrap(bottom = 10))
+
         var members: List<MemberChoice> = emptyList()
         var selectedReceiver: MemberChoice? = null
         var selectedType = if (isGroup) XingDunRedpacketType.TEAM_RANDOM else XingDunRedpacketType.SINGLE
@@ -95,6 +106,7 @@ internal class XingDunRedpacketUiController(
             background = ColorDrawable(Color.TRANSPARENT)
             setPadding(8.dp(), 0, 4.dp(), 0)
         }
+        amountInput.doAfterTextChanged { validationHint.visibility = View.GONE }
         form.addView(labeledInputRow(
             if (isGroup) R.string.xingdun_redpacket_total_amount else R.string.xingdun_redpacket_amount_label,
             amountInput,
@@ -116,25 +128,6 @@ internal class XingDunRedpacketUiController(
         form.addView(greeting, matchWrap(horizontal = 16, vertical = 14))
         content.addView(form, matchWrap(top = 6))
 
-        val loadingHint = TextView(activity).apply {
-            setText(R.string.xingdun_redpacket_balance_loading)
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTextColor(TEXT_SECONDARY)
-        }
-        content.addView(loadingHint, matchWrap(top = 14))
-
-        fun renderBalanceHint(value: Int) {
-            loadingHint.visibility = View.VISIBLE
-            if (value <= 0) {
-                loadingHint.setText(R.string.xingdun_redpacket_error_insufficient_balance)
-                loadingHint.setTextColor(DANGER)
-            } else {
-                loadingHint.text = activity.getString(R.string.xingdun_redpacket_available_balance, money(value))
-                loadingHint.setTextColor(TEXT_SECONDARY)
-            }
-        }
-
         fun validatedDraft(availableBalance: Int?): XingDunValidatedRedpacketDraft =
             XingDunRedpacketSendPolicy.validate(
                 amountText = amountInput.text.toString(),
@@ -148,10 +141,12 @@ internal class XingDunRedpacketUiController(
                 defaultGreeting = activity.getString(R.string.xingdun_redpacket_default_greeting),
             )
 
-        fun showValidationError(error: XingDunRedpacketValidationError) {
+        fun showValidationError(error: XingDunRedpacketValidationError, showToast: Boolean = true) {
             val message = validationMessage(error)
-            statusView.setText(message)
-            Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+            validationHint.setText(message)
+            validationHint.visibility = View.VISIBLE
+            scrollView.smoothScrollTo(0, 0)
+            if (showToast) Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
         }
 
         val sendButton = destructiveButton(R.string.xingdun_redpacket_send_action) {
@@ -179,7 +174,6 @@ internal class XingDunRedpacketUiController(
                             emptyMap(),
                             XingDunRedpacketBalancePayload::class.java,
                         ).redpacketBalance
-                        renderBalanceHint(latestBalance)
                         validatedDraft(latestBalance)
                     }
                     sendRedpacket(activeSession, isGroup, finalDraft)
@@ -311,7 +305,9 @@ internal class XingDunRedpacketUiController(
             }.onSuccess { (loadedBalance, loadedMembers) ->
                 members = loadedMembers
                 countValue = countValue.coerceAtMost(loadedMembers.size.coerceAtLeast(1))
-                renderBalanceHint(loadedBalance)
+                if (loadedBalance <= 0) {
+                    showValidationError(XingDunRedpacketValidationError.INSUFFICIENT_BALANCE, showToast = false)
+                }
                 rebuildConditionalRows()
                 setSendEnabled(true)
                 setBusy(false)
@@ -738,7 +734,10 @@ internal class XingDunRedpacketUiController(
             }.onSuccess { result ->
                 dialog.dismiss()
                 setBusy(false)
-                XingDunRedpacketStatusLoader.notifyChanged(targetID)
+                XingDunRedpacketStatusLoader.publish(
+                    targetID,
+                    XingDunRedpacketClaimStatusPolicy.values(result),
+                )
                 Toast.makeText(activity, activity.getString(R.string.xingdun_redpacket_claim_success, money(result.claimAmount)), Toast.LENGTH_SHORT).show()
                 activity.lifecycleScope.launch {
                     val refreshed = runCatching { fetchDetailPage(session, targetID, 1) }
