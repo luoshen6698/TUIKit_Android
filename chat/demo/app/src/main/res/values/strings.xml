@@ -1239,6 +1239,9 @@
     <string name="xingdun_group_administrator_management">Administrator Management</string>
     <string name="xingdun_group_permission_settings">Permissions</string>
     <string name="xingdun_group_mute_all">Mute All Members</string>
+    <string name="xingdun_group_sending_disabled">All members are muted</string>
+    <string name="xingdun_group_sending_permission_loading">Checking group messaging permission…</string>
+    <string name="xingdun_group_sending_permission_unavailable">Unable to verify group messaging permission. Try again later.</string>
     <string name="xingdun_group_permission_update_info">Who Can Edit Group Info</string>
     <string name="xingdun_group_permission_invite">Who Can Invite Others</string>
     <string name="xingdun_group_permission_mention_all">Who Can Mention Everyone</string>

@@ -328,6 +328,9 @@ class ChatActivity : BaseActivity() {
                 }
             }
         )
+        if (isGroupConversation) {
+            chatPageView.setComposerRestriction(getString(R.string.xingdun_group_sending_permission_loading))
+        }
         if (!locateMessageID.isNullOrBlank()) {
             locatePinnedMessage(
                 messageID = locateMessageID,
@@ -349,7 +352,6 @@ class ChatActivity : BaseActivity() {
         if (messagePinEnabled) {
             XingDunPinnedMessageRepository.addListener(pinnedRepositoryListener)
             loadPinnedMessages()
-            loadPinnedMessagePermission()
         }
 
         activityScope?.launch {
@@ -686,7 +688,7 @@ class ChatActivity : BaseActivity() {
         }
     }
 
-    private fun loadPinnedMessagePermission() {
+    private fun loadGroupRuntimePermissions() {
         if (!conversationID.startsWith(GROUP_CONVERSATION_ID_PREFIX)) return
         activityScope?.launch {
             val result = runCatching {
@@ -698,11 +700,20 @@ class ChatActivity : BaseActivity() {
                     XingDunGroupDetail::class.java,
                 )
             }
-            result.onSuccess {
-                canManagePinnedMessages = XingDunPinnedMessagePolicy.canManage(
-                    it.currentUserRole,
-                    it.currentUserIsAssignedCs,
-                    it.pinMessageMode,
+            result.onSuccess { detail ->
+                if (messagePinEnabled) {
+                    canManagePinnedMessages = XingDunPinnedMessagePolicy.canManage(
+                        detail.currentUserRole,
+                        detail.currentUserIsAssignedCs,
+                        detail.pinMessageMode,
+                    )
+                }
+                chatPageView.setComposerRestriction(
+                    getString(R.string.xingdun_group_sending_disabled).takeUnless { detail.canSendMessages },
+                )
+            }.onFailure {
+                chatPageView.setComposerRestriction(
+                    getString(R.string.xingdun_group_sending_permission_unavailable),
                 )
             }
         }
@@ -987,6 +998,9 @@ class ChatActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         intent?.getStringExtra(EXTRA_CONVERSATION_ID)?.let(XingDunForegroundNotificationManager::enterConversation)
+        if (::conversationID.isInitialized && ::chatPageView.isInitialized) {
+            loadGroupRuntimePermissions()
+        }
     }
 
     override fun onPause() {
