@@ -64,6 +64,7 @@ class UserPickerView @JvmOverloads constructor(
     private var hasReachedEnd = false
     private var showCheckbox: Boolean = true
     private var showIdentifierSubtitle: Boolean = false
+    private var alphabeticalGroupingEnabled: Boolean = true
 
     private var onSelectedChangedListener: ((List<UserPickerData<Any?>>) -> Unit)? = null
     private var onMaxCountExceedListener: ((List<UserPickerData<Any?>>) -> Unit)? = null
@@ -134,15 +135,19 @@ class UserPickerView @JvmOverloads constructor(
         if (UserPickerDataSourcePolicy.shouldResetReachEnd(previousKeys, dataSourceRaw.map { it.key })) {
             hasReachedEnd = false
         }
-        groups = groupAndSort(dataSourceRaw)
-        rebuildFlatItems()
+        rebuildDataSourcePresentation()
 
         selectionState.onDataSourceChanged()
         rebuildAdapter()
+        scheduleReachEndCheck()
+    }
 
-        val letters = groups.map { it.letter }
-        indexBar.setLetters(letters)
-        indexBar.visibility = if (letters.isNotEmpty()) VISIBLE else GONE
+    fun setAlphabeticalGroupingEnabled(enabled: Boolean) {
+        if (alphabeticalGroupingEnabled == enabled) return
+        alphabeticalGroupingEnabled = enabled
+        rebuildDataSourcePresentation()
+        rebuildAdapter()
+        recyclerView.invalidateItemDecorations()
         scheduleReachEndCheck()
     }
 
@@ -354,6 +359,21 @@ class UserPickerView @JvmOverloads constructor(
         }
     }
 
+    private fun rebuildDataSourcePresentation() {
+        if (alphabeticalGroupingEnabled) {
+            groups = groupAndSort(dataSourceRaw)
+            rebuildFlatItems()
+        } else {
+            groups = listOf(PickerGroup(letter = "", items = dataSourceRaw))
+            flatItems = UserPickerDataSourcePolicy.preserveSourceOrder(dataSourceRaw)
+            groupRanges = emptyMap()
+        }
+
+        val letters = if (alphabeticalGroupingEnabled) groups.map { it.letter } else emptyList()
+        indexBar.setLetters(letters)
+        indexBar.visibility = if (letters.isNotEmpty()) VISIBLE else GONE
+    }
+
     private fun rebuildFlatItems() {
         val items = mutableListOf<FlatItem>()
         val ranges = mutableMapOf<String, Int>()
@@ -389,6 +409,7 @@ class UserPickerView @JvmOverloads constructor(
         }
 
         override fun onDrawOver(c: Canvas, parent: RecyclerView, state: RecyclerView.State) {
+            if (!alphabeticalGroupingEnabled) return
             val lm = parent.layoutManager as? LinearLayoutManager ?: return
             val firstVisiblePos = lm.findFirstVisibleItemPosition()
             if (firstVisiblePos == RecyclerView.NO_POSITION) return

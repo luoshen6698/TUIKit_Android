@@ -427,6 +427,9 @@ internal class AddNewChatDialog(
     private fun applyFilteredContactDataSource() {
         val picker = userPickerView ?: return
         picker.setDefaultSelectedItems(viewModel.uiState.value.selectedContacts.map { it.userID })
+        picker.setAlphabeticalGroupingEnabled(
+            chatType != ChatType.GROUP || !showsRecentContacts
+        )
         picker.setDataSource(getFilteredContactDataSource())
     }
 

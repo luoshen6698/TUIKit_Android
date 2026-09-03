@@ -12,6 +12,10 @@ internal object UserPickerDataSourcePolicy {
         return previousKeys != newKeys
     }
 
+    fun preserveSourceOrder(items: List<UserPickerData<Any?>>): List<FlatItem> {
+        return items.map { item -> FlatItem.UserItem(letter = "", data = item) }
+    }
+
     fun findUserItemPositions(items: List<FlatItem>, key: String): List<Int> {
         return items.mapIndexedNotNull { index, item ->
             if (item is FlatItem.UserItem && item.data.key == key) {
