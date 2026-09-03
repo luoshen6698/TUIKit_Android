@@ -59,4 +59,15 @@ class XingDunRedpacketSendPolicyTest {
 
         assertEquals(XingDunRedpacketValidationError.INSUFFICIENT_BALANCE, error.reason)
     }
+
+    @Test
+    fun `reports empty balance before validating draft fields`() {
+        val error = assertThrows(XingDunRedpacketValidationException::class.java) {
+            XingDunRedpacketSendPolicy.validate(
+                "", XingDunRedpacketType.SINGLE, 1, "Hi", false, 0, 0, null, "Best wishes",
+            )
+        }
+
+        assertEquals(XingDunRedpacketValidationError.INSUFFICIENT_BALANCE, error.reason)
+    }
 }

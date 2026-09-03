@@ -60,7 +60,6 @@ internal class XingDunRedpacketUiController(
         titleView.setText(if (isGroup) R.string.xingdun_redpacket_send_group_title else R.string.xingdun_redpacket_send_title)
         preparePage()
 
-        var balance: Int? = null
         var members: List<MemberChoice> = emptyList()
         var selectedReceiver: MemberChoice? = null
         var selectedType = if (isGroup) XingDunRedpacketType.TEAM_RANDOM else XingDunRedpacketType.SINGLE
@@ -125,6 +124,36 @@ internal class XingDunRedpacketUiController(
         }
         content.addView(loadingHint, matchWrap(top = 14))
 
+        fun renderBalanceHint(value: Int) {
+            loadingHint.visibility = View.VISIBLE
+            if (value <= 0) {
+                loadingHint.setText(R.string.xingdun_redpacket_error_insufficient_balance)
+                loadingHint.setTextColor(DANGER)
+            } else {
+                loadingHint.text = activity.getString(R.string.xingdun_redpacket_available_balance, money(value))
+                loadingHint.setTextColor(TEXT_SECONDARY)
+            }
+        }
+
+        fun validatedDraft(availableBalance: Int?): XingDunValidatedRedpacketDraft =
+            XingDunRedpacketSendPolicy.validate(
+                amountText = amountInput.text.toString(),
+                requestedType = selectedType,
+                requestedCount = countValue,
+                greeting = greeting.text.toString(),
+                isGroup = isGroup,
+                availableBalance = availableBalance,
+                groupMemberCount = members.size,
+                exclusiveReceiverTimUserId = selectedReceiver?.userID,
+                defaultGreeting = activity.getString(R.string.xingdun_redpacket_default_greeting),
+            )
+
+        fun showValidationError(error: XingDunRedpacketValidationError) {
+            val message = validationMessage(error)
+            statusView.setText(message)
+            Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+        }
+
         val sendButton = destructiveButton(R.string.xingdun_redpacket_send_action) {
             val activeSession = session
             if (activeSession?.features?.redpacket != true) {
@@ -132,33 +161,42 @@ internal class XingDunRedpacketUiController(
                 return@destructiveButton
             }
             val draft = try {
-                XingDunRedpacketSendPolicy.validate(
-                    amountText = amountInput.text.toString(),
-                    requestedType = selectedType,
-                    requestedCount = countValue,
-                    greeting = greeting.text.toString(),
-                    isGroup = isGroup,
-                    availableBalance = balance,
-                    groupMemberCount = members.size,
-                    exclusiveReceiverTimUserId = selectedReceiver?.userID,
-                    defaultGreeting = activity.getString(R.string.xingdun_redpacket_default_greeting),
-                )
+                validatedDraft(availableBalance = null)
             } catch (error: XingDunRedpacketValidationException) {
-                statusView.setText(validationMessage(error.reason))
+                showValidationError(error.reason)
                 return@destructiveButton
             }
             sendButtonState(false)
             setBusy(true)
             activity.lifecycleScope.launch {
-                runCatching { sendRedpacket(activeSession, isGroup, draft) }
+                runCatching {
+                    val finalDraft = if (fixtureEnabled) {
+                        draft
+                    } else {
+                        val latestBalance = XingDunSessionManager.apiClient().get<XingDunRedpacketBalancePayload>(
+                            activeSession,
+                            "redpacket/myBalance",
+                            emptyMap(),
+                            XingDunRedpacketBalancePayload::class.java,
+                        ).redpacketBalance
+                        renderBalanceHint(latestBalance)
+                        validatedDraft(latestBalance)
+                    }
+                    sendRedpacket(activeSession, isGroup, finalDraft)
+                }
                     .onSuccess {
                         setBusy(false)
                         Toast.makeText(activity, R.string.xingdun_redpacket_send_succeeded, Toast.LENGTH_SHORT).show()
                         activity.finish()
                     }
-                    .onFailure {
+                    .onFailure { error ->
                         sendButtonState(true)
-                        showFailure(it)
+                        if (error is XingDunRedpacketValidationException) {
+                            setBusy(false)
+                            showValidationError(error.reason)
+                        } else {
+                            showFailure(error)
+                        }
                     }
             }
         }.apply { isEnabled = false; alpha = DISABLED_ALPHA }
@@ -271,10 +309,9 @@ internal class XingDunRedpacketUiController(
                 }
                 loadedBalance to loadedMembers
             }.onSuccess { (loadedBalance, loadedMembers) ->
-                balance = loadedBalance
                 members = loadedMembers
                 countValue = countValue.coerceAtMost(loadedMembers.size.coerceAtLeast(1))
-                loadingHint.visibility = View.GONE
+                renderBalanceHint(loadedBalance)
                 rebuildConditionalRows()
                 setSendEnabled(true)
                 setBusy(false)
@@ -701,6 +738,7 @@ internal class XingDunRedpacketUiController(
             }.onSuccess { result ->
                 dialog.dismiss()
                 setBusy(false)
+                XingDunRedpacketStatusLoader.notifyChanged(targetID)
                 Toast.makeText(activity, activity.getString(R.string.xingdun_redpacket_claim_success, money(result.claimAmount)), Toast.LENGTH_SHORT).show()
                 activity.lifecycleScope.launch {
                     val refreshed = runCatching { fetchDetailPage(session, targetID, 1) }

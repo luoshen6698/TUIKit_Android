@@ -44,6 +44,9 @@ internal object XingDunRedpacketSendPolicy {
         exclusiveReceiverTimUserId: String?,
         defaultGreeting: String,
     ): XingDunValidatedRedpacketDraft {
+        if (availableBalance != null && availableBalance <= 0) {
+            throw XingDunRedpacketValidationException(XingDunRedpacketValidationError.INSUFFICIENT_BALANCE)
+        }
         val amount = cents(amountText)
             ?: throw XingDunRedpacketValidationException(XingDunRedpacketValidationError.INVALID_AMOUNT)
         if (amount > MAX_AMOUNT_CENTS) {
