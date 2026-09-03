@@ -128,11 +128,14 @@ class XingDunMinePageView @JvmOverloads constructor(
     private fun setupMenus() {
         populateGroup(
             menuGroups[0],
-            listOf(
-                menu(R.string.xingdun_reports, R.drawable.xingdun_ic_mine_report, XingDunFeatureActivity.MODE_REPORTS),
-                menu(R.string.xingdun_personal_qr, R.drawable.xingdun_ic_mine_qr, XingDunFeatureActivity.MODE_PERSONAL_QR),
-                menu(R.string.xingdun_share_poster, R.drawable.xingdun_ic_mine_poster, XingDunFeatureActivity.MODE_INVITE),
-            ),
+            buildList {
+                if (XingDunSessionManager.currentSession()?.features?.redpacket == true) {
+                    add(menu(R.string.xingdun_redpacket_account, R.drawable.xingdun_ic_gift_white, XingDunFeatureActivity.MODE_REDPACKET_ACCOUNT))
+                }
+                add(menu(R.string.xingdun_reports, R.drawable.xingdun_ic_mine_report, XingDunFeatureActivity.MODE_REPORTS))
+                add(menu(R.string.xingdun_personal_qr, R.drawable.xingdun_ic_mine_qr, XingDunFeatureActivity.MODE_PERSONAL_QR))
+                add(menu(R.string.xingdun_share_poster, R.drawable.xingdun_ic_mine_poster, XingDunFeatureActivity.MODE_INVITE))
+            },
         )
         populateGroup(
             menuGroups[1],
