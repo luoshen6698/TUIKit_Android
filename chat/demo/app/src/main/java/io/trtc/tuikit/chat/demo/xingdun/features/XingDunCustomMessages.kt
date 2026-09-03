@@ -157,13 +157,18 @@ internal object XingDunRedpacketStatusLoader {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val cache = ConcurrentHashMap<String, CachedStatus>()
+    private val listeners = ConcurrentHashMap<String, MutableSet<() -> Unit>>()
 
-    fun load(packetNo: String, completion: (Map<String, String>) -> Unit) {
+    fun load(
+        packetNo: String,
+        forceRefresh: Boolean = false,
+        completion: (Map<String, String>) -> Unit,
+    ) {
         val session = XingDunSessionManager.currentSession() ?: return
         val tenantKey = XingDunTenantBoundary.identity(session)?.key ?: return
         val cacheKey = "$tenantKey:$packetNo"
         val cached = cache[cacheKey]
-        if (cached != null && System.currentTimeMillis() - cached.loadedAtMillis < CACHE_TTL_MILLIS) {
+        if (!forceRefresh && cached != null && System.currentTimeMillis() - cached.loadedAtMillis < CACHE_TTL_MILLIS) {
             completion(cached.values)
             return
         }
@@ -188,6 +193,28 @@ internal object XingDunRedpacketStatusLoader {
             }
             if (stillCurrentTenant) mainHandler.post { completion(values) }
         }
+    }
+
+    fun invalidate(packetNo: String) {
+        val session = XingDunSessionManager.currentSession() ?: return
+        val tenantKey = XingDunTenantBoundary.identity(session)?.key ?: return
+        cache.remove("$tenantKey:$packetNo")
+    }
+
+    fun addListener(packetNo: String, listener: () -> Unit) {
+        listeners.computeIfAbsent(packetNo) { ConcurrentHashMap.newKeySet() }.add(listener)
+    }
+
+    fun removeListener(packetNo: String, listener: () -> Unit) {
+        listeners[packetNo]?.let { packetListeners ->
+            packetListeners.remove(listener)
+            if (packetListeners.isEmpty()) listeners.remove(packetNo, packetListeners)
+        }
+    }
+
+    fun notifyChanged(packetNo: String) {
+        invalidate(packetNo)
+        mainHandler.post { listeners[packetNo]?.toList()?.forEach { it() } }
     }
 
     fun clearTenantCache() {
@@ -328,9 +355,12 @@ private class XingDunRedpacketMessageView(context: Context) : LinearLayout(conte
     private val refreshHandler = Handler(Looper.getMainLooper())
     private var boundMessage: XingDunCustomMessage? = null
     private var boundPacketNo: String? = null
+    private var observedPacketNo: String? = null
+    private var statusLoadGeneration = 0
     private var statusRefreshEnabled = false
+    private val statusChangeListener: () -> Unit = { loadStatus(forceRefresh = true) }
     private val refreshRunnable = Runnable {
-        loadStatus()
+        loadStatus(forceRefresh = true)
         scheduleStatusRefresh()
     }
     private val gift = ImageView(context).apply {
@@ -389,6 +419,7 @@ private class XingDunRedpacketMessageView(context: Context) : LinearLayout(conte
 
     fun bind(message: XingDunCustomMessage) {
         val packetNo = message.values["packet_no"] ?: message.values["packetNo"]
+        stopObservingStatus()
         boundMessage = message
         boundPacketNo = packetNo
         tag = packetNo
@@ -400,31 +431,55 @@ private class XingDunRedpacketMessageView(context: Context) : LinearLayout(conte
                 XingDunFeatureActivity.start(it.context, XingDunFeatureActivity.MODE_REDPACKET_DETAIL, packetNo)
             }
         } else null)
+        observeStatus()
         loadStatus()
         scheduleStatusRefresh()
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        observeStatus()
+        loadStatus(forceRefresh = true)
         scheduleStatusRefresh()
     }
 
     override fun onDetachedFromWindow() {
         refreshHandler.removeCallbacks(refreshRunnable)
+        stopObservingStatus()
         super.onDetachedFromWindow()
     }
 
-    private fun loadStatus() {
+    private fun loadStatus(forceRefresh: Boolean = false) {
         val packetNo = boundPacketNo ?: return
         val message = boundMessage ?: return
         if (!statusRefreshEnabled) return
-        XingDunRedpacketStatusLoader.load(packetNo) { statusValues ->
-            if (tag == packetNo && statusValues.isNotEmpty()) {
+        val generation = ++statusLoadGeneration
+        XingDunRedpacketStatusLoader.load(packetNo, forceRefresh) { statusValues ->
+            if (tag == packetNo && generation == statusLoadGeneration && statusValues.isNotEmpty()) {
                 val updated = message.copy(values = message.values + statusValues)
                 boundMessage = updated
                 render(updated)
+                val statusValue = updated.values["status"]?.toIntOrNull() ?: 0
+                val claimed = updated.values["has_claimed"].equals("true", true) || updated.values["has_claimed"] == "1"
+                if (XingDunRedpacketPresentationPolicy.isTerminal(statusValue, claimed)) {
+                    statusRefreshEnabled = false
+                    refreshHandler.removeCallbacks(refreshRunnable)
+                    stopObservingStatus()
+                }
             }
         }
+    }
+
+    private fun observeStatus() {
+        val packetNo = boundPacketNo ?: return
+        if (!isAttachedToWindow || !statusRefreshEnabled || observedPacketNo == packetNo) return
+        observedPacketNo = packetNo
+        XingDunRedpacketStatusLoader.addListener(packetNo, statusChangeListener)
+    }
+
+    private fun stopObservingStatus() {
+        observedPacketNo?.let { XingDunRedpacketStatusLoader.removeListener(it, statusChangeListener) }
+        observedPacketNo = null
     }
 
     private fun scheduleStatusRefresh() {
@@ -465,7 +520,7 @@ private class XingDunRedpacketMessageView(context: Context) : LinearLayout(conte
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
 
     private companion object {
-        const val STATUS_REFRESH_INTERVAL_MILLIS = 30_000L
+        const val STATUS_REFRESH_INTERVAL_MILLIS = 5_000L
     }
 }
 
