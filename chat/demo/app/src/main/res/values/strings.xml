@@ -1163,6 +1163,8 @@
     <string name="xingdun_remove_favorite">Remove favorite</string>
     <string name="xingdun_remove_favorite_confirm">Remove this item from favorites?</string>
     <string name="xingdun_redpacket_detail">Red packet details</string>
+    <string name="xingdun_redpacket_view_in_chat">View in chat</string>
+    <string name="xingdun_redpacket_source_message_unavailable">The original red packet message could not be located.</string>
     <string name="xingdun_redpacket_balance">Available balance</string>
     <string name="xingdun_redpacket_sent">Sent</string>
     <string name="xingdun_redpacket_received">Received</string>

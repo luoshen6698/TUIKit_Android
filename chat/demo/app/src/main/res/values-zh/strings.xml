@@ -1155,6 +1155,8 @@
     <string name="xingdun_remove_favorite">取消收藏</string>
     <string name="xingdun_remove_favorite_confirm">确定取消收藏这条内容吗？</string>
     <string name="xingdun_redpacket_detail">红包详情</string>
+    <string name="xingdun_redpacket_view_in_chat">在聊天中查看</string>
+    <string name="xingdun_redpacket_source_message_unavailable">无法定位原红包消息。</string>
     <string name="xingdun_redpacket_balance">可用余额</string>
     <string name="xingdun_redpacket_sent">发出的红包</string>
     <string name="xingdun_redpacket_received">收到的红包</string>

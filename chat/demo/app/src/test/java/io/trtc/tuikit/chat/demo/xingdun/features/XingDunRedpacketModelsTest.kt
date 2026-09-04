@@ -4,6 +4,7 @@ import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -18,6 +19,7 @@ class XingDunRedpacketModelsTest {
             """{
                 "packet_no":"RP001","status":2,"status_name":"Active","packet_type":"team_exclusive",
                 "total_amount":888,"count":1,"claimed_count":0,"greeting":"Best wishes",
+                "conversation_id":"group_team-1","tim_msg_key":"key-1","tim_msg_seq":88,
                 "sender":{"user_id":7,"tim_user_id":"u7","nickname":"Alice"},
                 "is_sender":false,"has_claimed":false,"can_claim":true,
                 "expire_time":"2026-09-04 12:00:00"
@@ -28,8 +30,31 @@ class XingDunRedpacketModelsTest {
         assertEquals("RP001", detail.packetNo)
         assertEquals("Alice", detail.sender?.displayName)
         assertEquals(888, detail.totalAmount)
+        assertEquals("key-1", detail.timMsgKey)
+        assertEquals(88L, detail.timMsgSeq)
         assertTrue(XingDunRedpacketPresentationPolicy.canClaim(detail.status, detail.hasClaimed, detail.canClaim))
         assertTrue(XingDunRedpacketPresentationPolicy.shouldPresentEnvelope(detail.status, detail.hasClaimed))
+    }
+
+    @Test
+    fun `resolves c2c and group source message destinations`() {
+        assertEquals(
+            XingDunRedpacketMessageDestination("c2c_u8", "message-key", null),
+            XingDunRedpacketMessageDestinationPolicy.resolve(
+                XingDunRedpacketDetailPayload(conversationId = "c2c_u8", timMsgKey = "message-key"),
+            ),
+        )
+        assertEquals(
+            XingDunRedpacketMessageDestination("group_team-1", "", 88L),
+            XingDunRedpacketMessageDestinationPolicy.resolve(
+                XingDunRedpacketDetailPayload(conversationId = "group_team-1", timMsgSeq = 88L),
+            ),
+        )
+        assertNull(
+            XingDunRedpacketMessageDestinationPolicy.resolve(
+                XingDunRedpacketDetailPayload(conversationId = "c2c_u8"),
+            ),
+        )
     }
 
     @Test

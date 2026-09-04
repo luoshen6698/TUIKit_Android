@@ -28,6 +28,7 @@ import io.trtc.tuikit.atomicxcore.api.group.GroupMemberFilterRole
 import io.trtc.tuikit.atomicxcore.api.group.GroupMemberStore
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.uikit.components.common.displayName
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
@@ -593,6 +594,9 @@ internal class XingDunRedpacketUiController(
         }
         header.addView(statusBadge(detailStatus(detail)), matchWrap(top = 12))
         content.addView(header, matchWrap())
+        content.addView(secondaryButton(R.string.xingdun_redpacket_view_in_chat) {
+            openSourceMessage(detail)
+        }, matchWrap(top = 12))
 
         val sectionTitle = LinearLayout(activity).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -893,9 +897,46 @@ internal class XingDunRedpacketUiController(
         if (!packetNo.isNullOrBlank()) {
             isClickable = true
             isFocusable = true
-            setOnClickListener { XingDunFeatureActivity.start(activity, XingDunFeatureActivity.MODE_REDPACKET_DETAIL, packetNo) }
+            setOnClickListener { openSourceMessage(packetNo) }
         }
     }.also { it.layoutParams = matchWrap(bottom = 8) }
+
+    private fun openSourceMessage(packetNo: String) {
+        val activeSession = session
+        if (activeSession == null) {
+            Toast.makeText(activity, R.string.xingdun_session_expired, Toast.LENGTH_SHORT).show()
+            return
+        }
+        setBusy(true)
+        activity.lifecycleScope.launch {
+            runCatching {
+                if (fixtureEnabled) fixtureDetailPage(packetNo).packet else XingDunSessionManager.apiClient().get<XingDunRedpacketDetailPayload>(
+                    activeSession,
+                    "redpacket/detail",
+                    mapOf("packet_no" to packetNo),
+                    XingDunRedpacketDetailPayload::class.java,
+                )
+            }.onSuccess { detail ->
+                setBusy(false)
+                openSourceMessage(detail)
+            }.onFailure(::showFailure)
+        }
+    }
+
+    private fun openSourceMessage(detail: XingDunRedpacketDetailPayload) {
+        val destination = XingDunRedpacketMessageDestinationPolicy.resolve(detail)
+        if (destination == null) {
+            Toast.makeText(activity, R.string.xingdun_redpacket_source_message_unavailable, Toast.LENGTH_SHORT).show()
+            return
+        }
+        ChatActivity.startForMessageID(
+            activity,
+            destination.conversationId,
+            destination.messageId,
+            destination.messageSequence,
+        )
+        activity.finish()
+    }
 
     private fun claimRecord(claim: XingDunRedpacketClaimPayload): View = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL

@@ -22,6 +22,7 @@ import io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageType
 import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunRuntimeFeaturePolicy
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantBoundary
@@ -459,7 +460,12 @@ private class XingDunRedpacketMessageView(context: Context) : LinearLayout(conte
         statusRefreshEnabled = enabled && !packetNo.isNullOrBlank()
         setOnClickListener(if (XingDunRedpacketAccessPolicy.canOpen(enabled) && !packetNo.isNullOrBlank()) {
             OnClickListener {
-                XingDunFeatureActivity.start(it.context, XingDunFeatureActivity.MODE_REDPACKET_DETAIL, packetNo)
+                XingDunFeatureActivity.start(
+                    it.context,
+                    XingDunFeatureActivity.MODE_REDPACKET_DETAIL,
+                    packetNo,
+                    MainActivity.TAB_MESSAGES,
+                )
             }
         } else null)
         observeStatus()
@@ -706,7 +712,12 @@ private object XingDunCustomMessageRenderer : MessageContentRenderer {
         textView.setOnClickListener(
             if (message.type == "redpacket" && XingDunRedpacketAccessPolicy.canOpen(redpacketEnabled)) View.OnClickListener {
                 val destination = packetNo ?: return@OnClickListener
-                XingDunFeatureActivity.start(it.context, XingDunFeatureActivity.MODE_REDPACKET_DETAIL, destination)
+                XingDunFeatureActivity.start(
+                    it.context,
+                    XingDunFeatureActivity.MODE_REDPACKET_DETAIL,
+                    destination,
+                    MainActivity.TAB_MESSAGES,
+                )
             } else null
         )
         if (message.type == "redpacket" && redpacketEnabled && !packetNo.isNullOrBlank()) {

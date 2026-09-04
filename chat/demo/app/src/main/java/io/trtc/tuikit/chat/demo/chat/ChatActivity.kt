@@ -328,9 +328,9 @@ class ChatActivity : BaseActivity() {
                 }
             }
         )
-        if (!locateMessageID.isNullOrBlank()) {
+        if (!locateMessageID.isNullOrBlank() || locateMessageSequence > 0L) {
             locatePinnedMessage(
-                messageID = locateMessageID,
+                messageID = locateMessageID.orEmpty(),
                 messageSequence = locateMessageSequence.takeIf { it > 0L },
                 pinVersion = locatePinVersion,
             )
@@ -663,7 +663,7 @@ class ChatActivity : BaseActivity() {
     }
 
     private fun locatePinnedMessage(messageID: String, messageSequence: Long?, pinVersion: Int) {
-        if (!::chatPageView.isInitialized || messageID.isBlank()) return
+        if (!::chatPageView.isInitialized || (messageID.isBlank() && messageSequence == null)) return
         chatPageView.post {
             chatPageView.locateMessageByID(
                 messageID = messageID,

@@ -52,9 +52,28 @@ internal data class XingDunRedpacketDetailPayload(
     val hasClaimed: Boolean = false,
     val canClaim: Boolean = false,
     val myClaim: XingDunRedpacketClaimPayload? = null,
+    val timMsgKey: String = "",
+    val timMsgSeq: Long = 0L,
     val expireTime: String? = null,
     val createTime: String? = null,
 )
+
+internal data class XingDunRedpacketMessageDestination(
+    val conversationId: String,
+    val messageId: String,
+    val messageSequence: Long?,
+)
+
+internal object XingDunRedpacketMessageDestinationPolicy {
+    fun resolve(detail: XingDunRedpacketDetailPayload): XingDunRedpacketMessageDestination? {
+        val conversationId = detail.conversationId.trim()
+        if (!conversationId.startsWith("c2c_") && !conversationId.startsWith("group_")) return null
+        val messageId = detail.timMsgKey.trim()
+        val messageSequence = detail.timMsgSeq.takeIf { it > 0L }
+        if (messageId.isEmpty() && messageSequence == null) return null
+        return XingDunRedpacketMessageDestination(conversationId, messageId, messageSequence)
+    }
+}
 
 internal data class XingDunRedpacketClaimResultPayload(
     val packetNo: String = "",
