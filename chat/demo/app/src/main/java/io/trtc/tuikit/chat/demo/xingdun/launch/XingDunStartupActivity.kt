@@ -29,8 +29,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 /**
- * Keeps the system splash visible while the existing enterprise, version, session and IM startup
- * work runs. The enterprise and authentication screens remain the fallback for incomplete state.
+ * Hands off from the system splash to a lightweight status view while the existing enterprise,
+ * version, session and IM startup work runs. Enterprise and authentication remain fallbacks.
  */
 class XingDunStartupActivity : AppCompatActivity() {
 
