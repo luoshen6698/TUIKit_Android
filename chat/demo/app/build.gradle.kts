@@ -123,6 +123,7 @@ dependencies {
     implementation("com.tencent.timpush:honor:9.0.7652")
     implementation("com.tencent:mmkv:2.4.0")
     implementation("androidx.core:core-ktx:1.10.1")
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.browser:browser:1.8.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")

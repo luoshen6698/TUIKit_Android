@@ -1,6 +1,12 @@
 <resources>
     <style name="demo_Theme_ChatView" parent="Chat_UIKit_Theme" />
 
+    <style name="XingDunStartupTheme" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#EAF8F4</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/xingdun_brand_logo</item>
+        <item name="postSplashScreenTheme">@style/Chat_UIKit_Theme</item>
+    </style>
+
     <style name="XingDunEnterpriseTrustItem">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>

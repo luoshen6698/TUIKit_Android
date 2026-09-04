@@ -123,6 +123,7 @@
     <string name="xingdun_back_to_login">Back to sign in</string>
     <string name="xingdun_restoring_session">Restoring your session…</string>
     <string name="xingdun_session_expired">Your session has expired. Please sign in again.</string>
+    <string name="xingdun_startup_timed_out">Startup took too long. Please sign in again.</string>
     <string name="xingdun_registering">Creating your account…</string>
     <string name="xingdun_signing_in">Signing in…</string>
     <string name="xingdun_connecting_im">Connecting to messaging…</string>

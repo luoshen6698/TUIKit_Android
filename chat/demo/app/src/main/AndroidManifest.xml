@@ -18,10 +18,9 @@
         android:theme="@style/demo_Theme_ChatView">
 
         <activity
-            android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseAccessActivity"
+            android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunStartupActivity"
             android:exported="true"
-            android:theme="@style/Chat_UIKit_Theme"
-            android:windowSoftInputMode="adjustResize">
+            android:theme="@style/XingDunStartupTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -42,6 +41,12 @@
                 <data android:scheme="xingdun" android:host="invite" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseAccessActivity"
+            android:exported="false"
+            android:theme="@style/Chat_UIKit_Theme"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity"
