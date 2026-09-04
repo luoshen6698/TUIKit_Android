@@ -8,10 +8,8 @@ import com.tencent.qcloud.tim.push.TIMPushListener
 import com.tencent.qcloud.tim.push.TIMPushManager
 import com.tencent.qcloud.tuicore.TUIConstants
 import com.tencent.qcloud.tuicore.TUICore
-import com.tencent.qcloud.tuicore.TUILogin
-import io.trtc.tuikit.atomicxcore.api.CompletionHandler
-import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.app.BuildConfig
 import kotlinx.coroutines.CoroutineScope
@@ -39,41 +37,8 @@ object XingDunPushManager {
             if (key == TUIConstants.TIMPush.EVENT_IM_LOGIN_AFTER_APP_WAKEUP_KEY &&
                 subKey == TUIConstants.TIMPush.EVENT_IM_LOGIN_AFTER_APP_WAKEUP_SUB_KEY
             ) {
-                restoreIMLoginAfterWakeup()
+                XingDunCredentialRecoveryCoordinator.onIMLoginRequiredAfterWakeup()
             }
-        }
-    }
-
-    private fun restoreIMLoginAfterWakeup() {
-        scope.launch {
-            val session = runCatching { XingDunSessionManager.restore() }.getOrElse { error ->
-                Log.w(TAG, "Unable to restore session after push wakeup: ${error.javaClass.simpleName}")
-                return@launch
-            } ?: return@launch
-            LoginStore.shared.login(
-                appContext,
-                session.sdkAppId,
-                session.timUserId,
-                session.userSig,
-                object : CompletionHandler {
-                    override fun onSuccess() {
-                        if (!XingDunSessionManager.matchesCurrentIMIdentity(session.sdkAppId, session.timUserId) ||
-                            LoginStore.shared.sdkAppID != session.sdkAppId ||
-                            TUILogin.getLoginUser() != session.timUserId
-                        ) {
-                            LoginStore.shared.logout(null)
-                            XingDunRouter.clearPendingRoute()
-                            return
-                        }
-                        syncDeviceRegistration()
-                        XingDunRouter.consumePendingRoute()
-                    }
-
-                    override fun onFailure(code: Int, desc: String) {
-                        Log.w(TAG, "IM login after push wakeup failed: $code")
-                    }
-                }
-            )
         }
     }
 

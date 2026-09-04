@@ -66,6 +66,8 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunVerificationMessagesActi
 import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspacePageView
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMinePageView
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryState
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.AvatarBadgeView
 import io.trtc.tuikit.chat.uikit.pages.ContactsPageView
@@ -175,9 +177,7 @@ class MainActivity : BaseActivity() {
         }
 
         override fun onUserSigExpired() {
-            updateIMConnectionNotice(
-                IMConnectionNotice(R.string.xingdun_im_credential_refreshing_notice, warning = true),
-            )
+            XingDunCredentialRecoveryCoordinator.onUserSigExpired()
         }
     }
 
@@ -278,6 +278,21 @@ class MainActivity : BaseActivity() {
         mainScope?.launch {
             themeStore.themeState.collectLatest { state ->
                 applyColors(state.currentTheme.tokens.color)
+            }
+        }
+        mainScope?.launch {
+            XingDunCredentialRecoveryCoordinator.state.collectLatest { recoveryState ->
+                when (recoveryState) {
+                    XingDunCredentialRecoveryState.REFRESHING -> updateIMConnectionNotice(
+                        IMConnectionNotice(R.string.xingdun_im_credential_refreshing_notice, warning = true),
+                    )
+                    XingDunCredentialRecoveryState.NORMAL -> {
+                        if (imConnectionNotice?.messageResID == R.string.xingdun_im_credential_refreshing_notice) {
+                            updateIMConnectionNotice(null)
+                        }
+                    }
+                    XingDunCredentialRecoveryState.REDIRECTING -> Unit
+                }
             }
         }
         mainScope?.launch {

@@ -47,6 +47,9 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
     private var isLoading = false
     private var resolvedBootstrap: XingDunBootstrapConfiguration? = null
     private val initialNoticeResId: Int by lazy { intent.getIntExtra(EXTRA_NOTICE_RES_ID, 0) }
+    private val autoRestoreAllowed: Boolean by lazy {
+        !intent.getBooleanExtra(EXTRA_DISABLE_AUTO_RESTORE, false)
+    }
 
     private val passwordReset = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -73,7 +76,11 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         switchEnterprise.setOnClickListener { switchEnterprise() }
         updatePrimaryActionEnabled()
         refreshDeletionStatus()
-        checkVersionThenRestore()
+        if (autoRestoreAllowed) {
+            checkVersionThenRestore()
+        } else {
+            setLoading(false, initialNoticeResId.takeIf { it != 0 }?.let(::getString).orEmpty())
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -328,5 +335,6 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
 
     companion object {
         const val EXTRA_NOTICE_RES_ID = "xingdun_authentication_notice_res_id"
+        const val EXTRA_DISABLE_AUTO_RESTORE = "xingdun_disable_auto_restore"
     }
 }

@@ -1,6 +1,5 @@
 package io.trtc.tuikit.chat.demo.common
 
-import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
@@ -11,11 +10,10 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.tencent.qcloud.tuicore.TUILogin
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
-import io.trtc.tuikit.atomicxcore.api.login.LoginStatus
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
-import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
+import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
-import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -47,7 +45,6 @@ abstract class BaseActivity : AppCompatActivity() {
             return false
         }
         val session = XingDunSessionManager.currentSession()
-        val loginStatus = LoginStore.shared.loginState.loginStatus.value
         val loginUserID = TUILogin.getLoginUser().orEmpty().takeIf(String::isNotBlank)
             ?: LoginStore.shared.loginState.loginUserInfo.value?.userID
         val sdkMatches = session != null && LoginStore.shared.sdkAppID == session.sdkAppId
@@ -55,17 +52,8 @@ abstract class BaseActivity : AppCompatActivity() {
         if (!loginUserID.isNullOrBlank() && sdkMatches && userMatches) {
             return false
         }
-        val openLogin = {
-            startActivity(Intent(this, XingDunLaunchActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            })
-            finish()
-        }
-        if (loginStatus == LoginStatus.UNLOGIN && loginUserID.isNullOrBlank()) {
-            openLogin()
-        } else {
-            XingDunTenantSessionCoordinator.logout(openLogin)
-        }
+        if (session != null && XingDunCredentialRecoveryCoordinator.isRefreshing()) return false
+        XingDunCredentialRecoveryCoordinator.redirectToLogin(R.string.demo_login_expired)
         return true
     }
 

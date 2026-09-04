@@ -19,6 +19,7 @@ import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.main.XingDunMessageFirstFramePreloader
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -152,6 +153,7 @@ class XingDunStartupActivity : AppCompatActivity() {
         )
         XingDunPushManager.syncDeviceRegistration()
         MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, restoredSession.timUserId)
+        XingDunCredentialRecoveryCoordinator.onAuthenticated()
         updateStartupStatus(R.string.xingdun_startup_loading_messages)
         XingDunMessageFirstFramePreloader.preload(this)
         routeToMessages()

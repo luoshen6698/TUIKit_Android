@@ -4,7 +4,6 @@ import android.app.Activity
 import android.app.Application
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import com.tencent.mmkv.MMKV
@@ -16,9 +15,7 @@ import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.atomicxcore.api.login.LoginListener
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.common.AppConstants
-import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseAccessActivity
-import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessagePresentation
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
@@ -26,6 +23,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunLocalMessageMarkReposito
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBusinessActionHandler
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunReadReceiptFeatureSynchronizer
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
@@ -45,11 +43,11 @@ class Application : Application() {
 
     private val loginListener = object : LoginListener() {
         override fun onKickedOffline() {
-            redirectToLogin(R.string.demo_force_offline, clearSession = true)
+            XingDunCredentialRecoveryCoordinator.onKickedOffline()
         }
 
         override fun onLoginExpired() {
-            redirectToLogin(R.string.demo_login_expired, clearSession = false)
+            XingDunCredentialRecoveryCoordinator.onLoginExpired()
         }
     }
 
@@ -58,6 +56,7 @@ class Application : Application() {
         MMKV.initialize(this)
         XingDunSessionManager.initialize(this)
         XingDunTenantSessionCoordinator.initialize(this)
+        XingDunCredentialRecoveryCoordinator.initialize(this)
         XingDunRouter.initialize(this)
         XingDunPushManager.initialize(this)
         XingDunCustomMessagePresentation.registerGlobalSummaries()
@@ -94,19 +93,6 @@ class Application : Application() {
         registerEnterpriseForegroundRefresh()
     }
 
-    private fun redirectToLogin(messageResId: Int, clearSession: Boolean) {
-        XingDunCallSessionInitializer.reset()
-        if (clearSession) {
-            XingDunSessionManager.clear()
-        }
-        MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, "")
-        Toast.makeText(this, getString(messageResId), Toast.LENGTH_LONG).show()
-        startActivity(Intent(this, XingDunLaunchActivity::class.java).apply {
-            putExtra(XingDunLaunchActivity.EXTRA_NOTICE_RES_ID, messageResId)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        })
-    }
-
     private fun applyLanguageFromSettings() {
         val languageTag = MMKV.defaultMMKV().decodeString(AppConstants.KEY_APP_LANGUAGE, "").orEmpty()
         val targetLocales = if (languageTag.isBlank()) {
@@ -125,6 +111,7 @@ class Application : Application() {
                 val enteringForeground = startedActivityCount == 0
                 startedActivityCount += 1
                 if (!enteringForeground) return
+                XingDunCredentialRecoveryCoordinator.onAppForeground()
                 if (!hasObservedFirstForeground) {
                     hasObservedFirstForeground = true
                     return
@@ -134,6 +121,9 @@ class Application : Application() {
 
             override fun onActivityStopped(activity: Activity) {
                 startedActivityCount = (startedActivityCount - 1).coerceAtLeast(0)
+                if (startedActivityCount == 0) {
+                    XingDunCredentialRecoveryCoordinator.onAppBackground()
+                }
             }
 
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit

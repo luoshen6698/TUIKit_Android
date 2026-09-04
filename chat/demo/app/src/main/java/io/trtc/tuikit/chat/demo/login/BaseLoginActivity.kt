@@ -24,6 +24,7 @@ import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.ActionItem
 import io.trtc.tuikit.chat.uikit.components.widgets.ActionSheet
@@ -115,6 +116,7 @@ abstract class BaseLoginActivity : BaseActivity() {
                     XingDunCallSessionInitializer.initialize(this@BaseLoginActivity, sdkAppId, userId, userSig)
                     XingDunPushManager.syncDeviceRegistration()
                     MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, userId)
+                    XingDunCredentialRecoveryCoordinator.onAuthenticated()
                     onSuccess?.invoke()
                     startActivity(Intent(this@BaseLoginActivity, MainActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
