@@ -1,13 +1,19 @@
 <resources>
     <style name="demo_Theme_ChatView" parent="Chat_UIKit_Theme" />
 
-    <style name="XingDunStartupTheme" parent="Theme.SplashScreen.IconBackground">
-        <item name="android:windowBackground">@drawable/xingdun_starting_window</item>
+    <style name="XingDunStartupTheme" parent="Theme.SplashScreen">
+        <item name="android:windowBackground">@color/xingdun_splash_background</item>
         <item name="android:windowDisablePreview">false</item>
         <item name="windowSplashScreenBackground">@color/xingdun_splash_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/xingdun_launcher</item>
-        <item name="windowSplashScreenIconBackgroundColor">@color/xingdun_brand_navy</item>
-        <item name="postSplashScreenTheme">@style/Chat_UIKit_Theme</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/xingdun_splash_empty</item>
+        <item name="postSplashScreenTheme">@style/XingDunStartupContentTheme</item>
+    </style>
+
+    <style name="XingDunStartupContentTheme" parent="Chat_UIKit_Theme">
+        <item name="android:statusBarColor">@color/xingdun_splash_background</item>
+        <item name="android:navigationBarColor">@color/xingdun_splash_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 
     <style name="XingDunEnterpriseTrustItem">

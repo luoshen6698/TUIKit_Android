@@ -2,6 +2,8 @@ package io.trtc.tuikit.chat.demo.xingdun.launch
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.TextView
+import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
@@ -32,14 +34,16 @@ import kotlin.coroutines.resume
  */
 class XingDunStartupActivity : AppCompatActivity() {
 
-    private var keepSplashVisible = true
     private var hasRouted = false
     private var timeoutJob: Job? = null
+    private lateinit var startupStatusView: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
-        splashScreen.setKeepOnScreenCondition { keepSplashVisible }
+        setContentView(R.layout.xingdun_activity_startup_loading)
+        startupStatusView = findViewById(R.id.xingdun_startup_status)
+        splashScreen.setKeepOnScreenCondition { false }
 
         if (intent?.data != null) {
             routeToEnterpriseAccess()
@@ -56,8 +60,11 @@ class XingDunStartupActivity : AppCompatActivity() {
     }
 
     private suspend fun prepareAuthenticatedStartup() {
-        val enterprise = XingDunSessionManager.currentEnterprise()
-            ?: runCatching { XingDunSessionManager.attemptSimpleEnterprise() }.getOrNull()
+        var enterprise = XingDunSessionManager.currentEnterprise()
+        if (enterprise == null) {
+            updateStartupStatus(R.string.xingdun_startup_loading_enterprise)
+            enterprise = runCatching { XingDunSessionManager.attemptSimpleEnterprise() }.getOrNull()
+        }
         if (enterprise == null) {
             if (!isStartupActive()) return
             routeToEnterpriseAccess()
@@ -69,6 +76,7 @@ class XingDunStartupActivity : AppCompatActivity() {
             return
         }
 
+        updateStartupStatus(R.string.xingdun_startup_checking_account)
         val validationIsFresh = startupValidationIsFresh(enterprise.companyCode)
         val startupResults = coroutineScope {
             val enterpriseRefresh = async {
@@ -117,6 +125,7 @@ class XingDunStartupActivity : AppCompatActivity() {
             return
         }
 
+        updateStartupStatus(R.string.xingdun_connecting_im)
         val imLoginFailure = loginToIM(restoredSession)
         if (!isStartupActive()) {
             LoginStore.shared.logout(null)
@@ -143,6 +152,7 @@ class XingDunStartupActivity : AppCompatActivity() {
         )
         XingDunPushManager.syncDeviceRegistration()
         MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, restoredSession.timUserId)
+        updateStartupStatus(R.string.xingdun_startup_loading_messages)
         XingDunMessageFirstFramePreloader.preload(this)
         routeToMessages()
     }
@@ -201,10 +211,13 @@ class XingDunStartupActivity : AppCompatActivity() {
         timeoutJob?.cancel()
         timeoutJob = null
         startActivity(target)
-        keepSplashVisible = false
     }
 
     private fun isStartupActive(): Boolean = !hasRouted && !isFinishing && !isDestroyed
+
+    private fun updateStartupStatus(@StringRes messageResId: Int) {
+        if (::startupStatusView.isInitialized) startupStatusView.setText(messageResId)
+    }
 
     private fun startupValidationIsFresh(companyCode: String): Boolean {
         val preferences = MMKV.defaultMMKV()

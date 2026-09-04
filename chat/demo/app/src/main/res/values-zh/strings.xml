@@ -122,6 +122,9 @@
     <string name="xingdun_restoring_session">正在恢复登录状态…</string>
     <string name="xingdun_session_expired">登录状态已过期，请重新登录。</string>
     <string name="xingdun_startup_timed_out">启动时间过长，请重新登录。</string>
+    <string name="xingdun_startup_loading_enterprise">正在加载企业配置…</string>
+    <string name="xingdun_startup_checking_account">正在验证账号状态…</string>
+    <string name="xingdun_startup_loading_messages">正在加载消息…</string>
     <string name="xingdun_registering">正在创建账号…</string>
     <string name="xingdun_signing_in">正在登录…</string>
     <string name="xingdun_connecting_im">正在连接即时通信…</string>
