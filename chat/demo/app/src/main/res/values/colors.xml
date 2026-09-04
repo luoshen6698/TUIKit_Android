@@ -17,4 +17,6 @@
     <color name="demo_switch_active">#FF147AFF</color>
     <color name="demo_text_link">#FF147AFF</color>
     <color name="demo_icon_arrow">#FFCCCCCC</color>
+    <color name="xingdun_brand_navy">#FF03102B</color>
+    <color name="xingdun_splash_background">#FFEAF8F4</color>
 </resources>

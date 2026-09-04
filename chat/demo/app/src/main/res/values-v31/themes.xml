@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="XingDunStartupTheme" parent="Theme.SplashScreen.IconBackground">
+        <item name="android:windowSplashScreenBackground">@color/xingdun_splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/xingdun_splash_icon</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/xingdun_brand_navy</item>
+        <item name="postSplashScreenTheme">@style/Chat_UIKit_Theme</item>
+    </style>
+</resources>

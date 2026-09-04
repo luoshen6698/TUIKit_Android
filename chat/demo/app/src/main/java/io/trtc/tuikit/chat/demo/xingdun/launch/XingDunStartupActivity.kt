@@ -9,14 +9,18 @@ import com.tencent.mmkv.MMKV
 import com.tencent.qcloud.tuicore.TUILogin
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
+import io.trtc.tuikit.chat.app.BuildConfig
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
+import io.trtc.tuikit.chat.demo.xingdun.main.XingDunMessageFirstFramePreloader
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -53,27 +57,10 @@ class XingDunStartupActivity : AppCompatActivity() {
 
     private suspend fun prepareAuthenticatedStartup() {
         val enterprise = XingDunSessionManager.currentEnterprise()
+            ?: runCatching { XingDunSessionManager.attemptSimpleEnterprise() }.getOrNull()
         if (enterprise == null) {
-            val simpleEnterprise = runCatching { XingDunSessionManager.attemptSimpleEnterprise() }.getOrNull()
             if (!isStartupActive()) return
-            if (simpleEnterprise == null) {
-                routeToEnterpriseAccess()
-                return
-            }
-        } else {
-            val refreshError = runCatching { XingDunSessionManager.refreshSelectedEnterprise() }.exceptionOrNull()
-            if (!isStartupActive()) return
-            if (refreshError != null && !XingDunSessionManager.shouldRetainCachedEnterprise(refreshError)) {
-                XingDunSessionManager.clearEnterpriseSelection()
-                routeToEnterpriseAccess()
-                return
-            }
-        }
-
-        val versionResult = runCatching { XingDunSessionManager.checkVersion() }.getOrNull()
-        if (!isStartupActive()) return
-        if (versionResult?.hasUpdate == true) {
-            routeToAuthentication()
+            routeToEnterpriseAccess()
             return
         }
 
@@ -82,7 +69,43 @@ class XingDunStartupActivity : AppCompatActivity() {
             return
         }
 
-        val restoredSession = runCatching { XingDunSessionManager.restore() }
+        val validationIsFresh = startupValidationIsFresh(enterprise.companyCode)
+        val startupResults = coroutineScope {
+            val enterpriseRefresh = async {
+                if (validationIsFresh) Result.success(enterprise)
+                else runCatching { XingDunSessionManager.refreshSelectedEnterprise() }
+            }
+            val versionCheck = async {
+                if (validationIsFresh) null
+                else runCatching { XingDunSessionManager.checkVersion() }
+            }
+            val sessionRestore = async {
+                runCatching { XingDunSessionManager.restore(preferCachedCredentials = true) }
+            }
+            Triple(enterpriseRefresh.await(), versionCheck.await(), sessionRestore.await())
+        }
+        if (!isStartupActive()) return
+
+        val enterpriseRefreshError = startupResults.first.exceptionOrNull()
+        if (enterpriseRefreshError != null &&
+            !XingDunSessionManager.shouldRetainCachedEnterprise(enterpriseRefreshError)
+        ) {
+            XingDunSessionManager.clearEnterpriseSelection()
+            clearStartupValidation()
+            routeToEnterpriseAccess()
+            return
+        }
+        val versionResult = startupResults.second?.getOrNull()
+        if (versionResult?.hasUpdate == true) {
+            clearStartupValidation()
+            routeToAuthentication()
+            return
+        }
+        if (!validationIsFresh && startupResults.first.isSuccess && startupResults.second?.isSuccess == true) {
+            markStartupValidationFresh(enterprise.companyCode)
+        }
+
+        val restoredSession = startupResults.third
             .getOrElse { error ->
                 if (!isStartupActive()) return
                 routeToAuthentication(XingDunAuthenticationErrorPresenter.login(error))
@@ -120,6 +143,7 @@ class XingDunStartupActivity : AppCompatActivity() {
         )
         XingDunPushManager.syncDeviceRegistration()
         MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, restoredSession.timUserId)
+        XingDunMessageFirstFramePreloader.preload(this)
         routeToMessages()
     }
 
@@ -182,7 +206,44 @@ class XingDunStartupActivity : AppCompatActivity() {
 
     private fun isStartupActive(): Boolean = !hasRouted && !isFinishing && !isDestroyed
 
+    private fun startupValidationIsFresh(companyCode: String): Boolean {
+        val preferences = MMKV.defaultMMKV()
+        if (preferences.decodeString(KEY_STARTUP_VALIDATION_SCOPE).orEmpty() != validationScope(companyCode)) {
+            return false
+        }
+        val validatedAt = preferences.decodeLong(KEY_STARTUP_VALIDATED_AT, 0L)
+        val age = System.currentTimeMillis() - validatedAt
+        return age in 0..STARTUP_VALIDATION_TTL_MILLIS
+    }
+
+    private fun markStartupValidationFresh(companyCode: String) {
+        MMKV.defaultMMKV().apply {
+            encode(KEY_STARTUP_VALIDATION_SCOPE, validationScope(companyCode))
+            encode(KEY_STARTUP_VALIDATED_AT, System.currentTimeMillis())
+        }
+    }
+
+    private fun clearStartupValidation() {
+        MMKV.defaultMMKV().apply {
+            removeValueForKey(KEY_STARTUP_VALIDATION_SCOPE)
+            removeValueForKey(KEY_STARTUP_VALIDATED_AT)
+        }
+    }
+
+    private fun validationScope(companyCode: String): String = buildString {
+        append(companyCode.trim().lowercase())
+        append('|')
+        append(BuildConfig.XINGDUN_ENVIRONMENT)
+        append('|')
+        append(BuildConfig.VERSION_CODE)
+        append('|')
+        append(BuildConfig.VERSION_NAME)
+    }
+
     companion object {
         private const val STARTUP_TIMEOUT_MILLIS = 15_000L
+        private const val STARTUP_VALIDATION_TTL_MILLIS = 5 * 60 * 1000L
+        private const val KEY_STARTUP_VALIDATION_SCOPE = "xingdun.startup.validation.scope"
+        private const val KEY_STARTUP_VALIDATED_AT = "xingdun.startup.validation.validated_at"
     }
 }

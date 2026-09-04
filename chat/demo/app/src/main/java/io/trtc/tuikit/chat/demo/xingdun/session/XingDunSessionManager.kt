@@ -271,11 +271,12 @@ object XingDunSessionManager {
         )
     }
 
-    suspend fun restore(): XingDunStoredSession? = refreshMutex.withLock {
+    suspend fun restore(preferCachedCredentials: Boolean = false): XingDunStoredSession? = refreshMutex.withLock {
         val existing = store.loadBoundSession() ?: return null
         val now = System.currentTimeMillis()
         val accessAndIMAreUsable = existing.accessExpiresAtMillis > now + EXPIRY_SAFETY_MILLIS &&
             existing.userSigExpiresAtMillis > now + EXPIRY_SAFETY_MILLIS
+        if (preferCachedCredentials && accessAndIMAreUsable) return existing
         val canRefresh = !existing.refreshToken.isNullOrBlank() &&
             (existing.refreshExpiresAtMillis ?: 0L) > now
         if (!canRefresh) {
