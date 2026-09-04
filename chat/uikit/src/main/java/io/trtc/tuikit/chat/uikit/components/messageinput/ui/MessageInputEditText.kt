@@ -59,28 +59,39 @@ class AtomicEditText @JvmOverloads constructor(
     fun deleteAtCursor() {
         val helper = getAtomicHelper()
         val currentText = text?.toString().orEmpty()
-        val cursorPosition = selectionStart
-        if (cursorPosition <= 0 || currentText.isEmpty()) {
+        val selectedStart = minOf(selectionStart, selectionEnd).coerceIn(0, currentText.length)
+        val selectedEnd = maxOf(selectionStart, selectionEnd).coerceIn(0, currentText.length)
+        if (currentText.isEmpty() || (selectedStart == 0 && selectedEnd == 0)) {
             return
         }
 
-        var deletedLength = 1
-        for (emojiKey in EmojiManager.sortedLittleEmojiKeyList) {
-            if (cursorPosition >= emojiKey.length &&
-                currentText.substring(cursorPosition - emojiKey.length, cursorPosition) == emojiKey
-            ) {
-                deletedLength = emojiKey.length
-                break
+        val deleteStart: Int
+        val deleteEnd: Int
+        if (selectedStart != selectedEnd) {
+            deleteStart = selectedStart
+            deleteEnd = selectedEnd
+        } else {
+            deleteEnd = selectedStart
+            var customEmojiStart: Int? = null
+            for (emojiKey in EmojiManager.sortedLittleEmojiKeyList) {
+                if (deleteEnd >= emojiKey.length &&
+                    currentText.substring(deleteEnd - emojiKey.length, deleteEnd) == emojiKey
+                ) {
+                    customEmojiStart = deleteEnd - emojiKey.length
+                    break
+                }
             }
+            deleteStart = customEmojiStart
+                ?: EmojiTextDeletionPolicy.previousClusterStart(currentText, deleteEnd)
         }
 
-        val start = cursorPosition - deletedLength
-        val newText = currentText.substring(0, start) + currentText.substring(cursorPosition)
+        val deletedLength = deleteEnd - deleteStart
+        val newText = currentText.substring(0, deleteStart) + currentText.substring(deleteEnd)
         helper.isPaused = true
         setText(newText)
-        setSelection(start)
+        setSelection(deleteStart)
         helper.isPaused = false
-        helper.updateRangesOffset(start, -deletedLength)
+        helper.updateRangesOffset(deleteStart, -deletedLength)
     }
 
     fun deleteCharBeforeCursor() {

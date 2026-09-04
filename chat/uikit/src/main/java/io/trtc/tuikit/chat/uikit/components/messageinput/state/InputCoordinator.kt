@@ -105,7 +105,7 @@ class InputCoordinator(
         }
         val maxForPanel = when (panel) {
             PanelState.MORE_PANEL -> morePanelDefaultPx
-            else -> Int.MAX_VALUE
+            PanelState.EMOJI_PANEL -> emojiPanelDefaultPx
         }
         if (preferred > 0) {
             return preferred.coerceAtLeast(minPanelHeightPx).coerceAtMost(maxForPanel)
@@ -246,7 +246,7 @@ class InputCoordinator(
     companion object {
         private const val TAG = "MsgInput.Coord"
         const val MIN_PANEL_HEIGHT_DP = 180
-        const val EMOJI_PANEL_DEFAULT_HEIGHT_DP = 280
+        const val EMOJI_PANEL_DEFAULT_HEIGHT_DP = 216
         const val MORE_PANEL_DEFAULT_HEIGHT_DP = 220
     }
 }

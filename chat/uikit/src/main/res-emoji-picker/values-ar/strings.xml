@@ -3,7 +3,8 @@
     <string name="emoji_picker_recent">المستخدمة مؤخرا</string>
     <string name="emoji_picker_all">كل الرموز التعبيرية</string>
     <string name="emoji_picker_send">إرسال</string>
+    <string name="emoji_picker_delete">حذف</string>
+    <string name="emoji_picker_insert">إدراج الرمز التعبيري %1$s</string>
 
 </resources>
-
 

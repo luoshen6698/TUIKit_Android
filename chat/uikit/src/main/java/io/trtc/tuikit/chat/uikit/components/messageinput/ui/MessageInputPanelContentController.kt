@@ -4,6 +4,7 @@ import android.util.Log
 import android.view.View
 import android.widget.FrameLayout
 import io.trtc.tuikit.chat.uikit.components.emojipicker.EmojiSpanHelper
+import io.trtc.tuikit.chat.uikit.components.emojipicker.EmojiPickerUnicodeCatalog
 import io.trtc.tuikit.chat.uikit.components.emojipicker.model.Emoji
 import io.trtc.tuikit.chat.uikit.components.emojipicker.model.EmojiGroup
 import io.trtc.tuikit.chat.uikit.components.emojipicker.ui.EmojiPickerView
@@ -84,7 +85,9 @@ internal class MessageInputPanelContentController private constructor(
             val picker = EmojiPickerView(context)
             picker.setup(
                 onEmojiClick = { group, emoji ->
-                    if (group.isLittleEmoji) {
+                    if (group.id == EmojiPickerUnicodeCatalog.GROUP_ID) {
+                        editText.insertText(emoji.key)
+                    } else if (group.isLittleEmoji) {
                         editText.insertText(emoji.key)
                         EmojiSpanHelper.processEditTextEmoji(editText)
                     } else {
