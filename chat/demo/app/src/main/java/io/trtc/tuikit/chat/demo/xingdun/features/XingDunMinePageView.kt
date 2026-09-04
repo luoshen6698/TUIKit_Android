@@ -80,8 +80,8 @@ class XingDunMinePageView @JvmOverloads constructor(
         profileCard = findViewById(R.id.xingdun_mine_profile_card)
         avatarRing = findViewById(R.id.xingdun_mine_avatar_ring)
         avatar = findViewById<Avatar>(R.id.xingdun_mine_avatar).apply {
-            setSize(Avatar.AvatarSize.L)
-            setShape(Avatar.AvatarShape.Round)
+            setSize(Avatar.AvatarSize.XL)
+            setShape(Avatar.AvatarShape.RoundRectangle)
         }
         name = findViewById(R.id.xingdun_mine_name)
         account = findViewById(R.id.xingdun_mine_account)
@@ -316,7 +316,7 @@ class XingDunMinePageView @JvmOverloads constructor(
         content.setBackgroundColor(colors.bgColorTopBar)
         val cards = listOf(profileCard, statsCard) + menuGroups
         cards.forEach { it.background = roundedBackground(colors.bgColorOperate, 18f) }
-        avatarRing.background = roundedBackground(Color.TRANSPARENT, 35f, XINGDUN_GREEN, 2f)
+        avatarRing.background = roundedBackground(Color.TRANSPARENT, 16f, XINGDUN_GREEN, 2f)
         name.setTextColor(colors.textColorPrimary)
         account.setTextColor(colors.textColorTertiary)
         profileArrow.setColorFilter(colors.textColorTertiary)

@@ -24,6 +24,7 @@ internal class UserPickerAdapter(
     private val context: Context,
     var showCheckbox: Boolean,
     var showIdentifierSubtitle: Boolean,
+    var avatarShape: Avatar.AvatarShape,
     private val selectedKeys: Set<String>,
     var lockedKeys: Set<String>,
     private val onItemClick: (UserPickerData<Any?>) -> Unit
@@ -125,6 +126,7 @@ internal class UserPickerAdapter(
         holder.avatar.setContent(
             Avatar.AvatarContent.Image(data.avatarUrl, data.label)
         )
+        holder.avatar.setShape(avatarShape)
         bindSelectionState(holder, data, colors)
         val clickListener = View.OnClickListener {
             if (!isLocked) onItemClick(data)
@@ -231,14 +233,14 @@ internal class UserPickerAdapter(
 
         val avatar = Avatar(context).apply {
             tag = "avatar"
-            setSize(Avatar.AvatarSize.M)
+            setSize(Avatar.AvatarSize.L)
             setShape(Avatar.AvatarShape.Round)
         }
         rowLayout.addView(
             avatar,
             LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                dp2px(Avatar.AvatarSize.M.sizeDp, dm).toInt(),
+                dp2px(Avatar.AvatarSize.M.sizeDp, dm).toInt()
             )
         )
 

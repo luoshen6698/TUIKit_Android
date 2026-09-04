@@ -88,8 +88,8 @@ internal class SelectedContactsBottomBar(
             }
             val avatarView = Avatar(context).apply {
                 layoutParams = FrameLayout.LayoutParams(avatarSize, avatarSize, Gravity.START or Gravity.BOTTOM)
-                setSize(Avatar.AvatarSize.M)
-                setShape(Avatar.AvatarShape.Round)
+                setSize(Avatar.AvatarSize.L)
+                setShape(Avatar.AvatarShape.RoundRectangle)
                 val avatarUrl = contact.avatarURL
                 if (avatarUrl.isNullOrEmpty()) {
                     setContent(Avatar.AvatarContent.Text(contact.displayName))

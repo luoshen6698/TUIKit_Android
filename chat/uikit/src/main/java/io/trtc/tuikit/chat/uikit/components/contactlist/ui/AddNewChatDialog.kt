@@ -49,6 +49,7 @@ import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.chat.uikit.components.userpicker.model.UserPickerData
 import io.trtc.tuikit.chat.uikit.components.userpicker.ui.UserPickerView
+import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import io.trtc.tuikit.chat.uikit.components.widgets.DialogNavBar
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
@@ -360,6 +361,7 @@ internal class AddNewChatDialog(
             setShowCheckbox(chatType != ChatType.SINGLE)
             setLockedItems(initialSelectedUserIDs)
             setShowIdentifierSubtitle(chatType == ChatType.GROUP)
+            setAvatarShape(Avatar.AvatarShape.RoundRectangle)
         }
         userPickerView = picker
         pickerContainer.addView(picker)

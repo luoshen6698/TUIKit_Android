@@ -341,8 +341,8 @@ class C2CChatSettingView @JvmOverloads constructor(
             layoutParams = LinearLayout.LayoutParams(dp2px(72f, dm).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT)
         }
         avatarView = Avatar(context).apply {
-            setSize(Avatar.AvatarSize.M)
-            setShape(Avatar.AvatarShape.Round)
+            setSize(Avatar.AvatarSize.L)
+            setShape(Avatar.AvatarShape.RoundRectangle)
         }
         memberColumn.addView(
             avatarView,

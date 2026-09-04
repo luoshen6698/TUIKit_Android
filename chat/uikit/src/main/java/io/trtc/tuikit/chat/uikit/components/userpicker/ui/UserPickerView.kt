@@ -18,6 +18,7 @@ import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.chat.uikit.components.userpicker.adapter.FlatItem
 import io.trtc.tuikit.chat.uikit.components.userpicker.adapter.UserPickerAdapter
 import io.trtc.tuikit.chat.uikit.components.userpicker.model.UserPickerData
+import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import io.trtc.tuikit.chat.uikit.components.widgets.azorderedlist.AtomicIndexBar
 import io.trtc.tuikit.chat.uikit.components.widgets.azorderedlist.pinyinhelper.Pinyin
 import kotlinx.coroutines.CoroutineScope
@@ -64,6 +65,7 @@ class UserPickerView @JvmOverloads constructor(
     private var hasReachedEnd = false
     private var showCheckbox: Boolean = true
     private var showIdentifierSubtitle: Boolean = false
+    private var avatarShape: Avatar.AvatarShape = Avatar.AvatarShape.Round
 
     private var onSelectedChangedListener: ((List<UserPickerData<Any?>>) -> Unit)? = null
     private var onMaxCountExceedListener: ((List<UserPickerData<Any?>>) -> Unit)? = null
@@ -76,6 +78,7 @@ class UserPickerView @JvmOverloads constructor(
             context = context,
             showCheckbox = showCheckbox,
             showIdentifierSubtitle = showIdentifierSubtitle,
+            avatarShape = avatarShape,
             selectedKeys = selectionState.keys,
             lockedKeys = lockedKeys,
             onItemClick = ::handleItemClick
@@ -176,6 +179,12 @@ class UserPickerView @JvmOverloads constructor(
     fun setShowIdentifierSubtitle(show: Boolean) {
         if (showIdentifierSubtitle == show) return
         showIdentifierSubtitle = show
+        rebuildAdapter()
+    }
+
+    fun setAvatarShape(shape: Avatar.AvatarShape) {
+        if (avatarShape == shape) return
+        avatarShape = shape
         rebuildAdapter()
     }
 
@@ -373,6 +382,7 @@ class UserPickerView @JvmOverloads constructor(
     private fun rebuildAdapter() {
         listAdapter.showCheckbox = showCheckbox
         listAdapter.showIdentifierSubtitle = showIdentifierSubtitle
+        listAdapter.avatarShape = avatarShape
         listAdapter.lockedKeys = lockedKeys
         listAdapter.items = flatItems
         listAdapter.notifyDataSetChanged()
