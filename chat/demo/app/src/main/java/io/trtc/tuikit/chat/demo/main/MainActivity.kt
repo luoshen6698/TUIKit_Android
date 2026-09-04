@@ -12,7 +12,6 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
 import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
@@ -125,6 +124,7 @@ class MainActivity : BaseActivity() {
     private lateinit var viewPager: ViewPager2
     private lateinit var bottomNav: LinearLayout
     private lateinit var bottomNavContainer: FrameLayout
+    private lateinit var bottomNavDivider: View
     private lateinit var messageUnreadBadge: AvatarBadgeView
     private lateinit var contactsUnreadBadge: AvatarBadgeView
     private lateinit var mainContainer: LinearLayout
@@ -202,6 +202,7 @@ class MainActivity : BaseActivity() {
         viewPager = findViewById(R.id.demo_viewPager)
         bottomNavContainer = findViewById(R.id.demo_bottomNavContainer)
         bottomNav = findViewById(R.id.demo_bottomNav)
+        bottomNavDivider = findViewById(R.id.demo_bottomNavDivider)
         messageUnreadBadge = findViewById(R.id.demo_messageUnreadBadge)
         contactsUnreadBadge = findViewById(R.id.demo_contactsUnreadBadge)
         allBottomTabs = listOf(
@@ -320,8 +321,9 @@ class MainActivity : BaseActivity() {
 
     private fun applyColors(colors: ColorTokens) {
         updateStatusBarAreaColor(colors)
-        bottomNavContainer.setBackgroundColor(colors.bgColorTopBar)
-        bottomNav.background = roundedBackground(colors.bgColorBottomBar, 32f)
+        bottomNavContainer.setBackgroundColor(colors.bgColorBottomBar)
+        bottomNav.setBackgroundColor(colors.bgColorBottomBar)
+        bottomNavDivider.setBackgroundColor(colors.strokeColorModule)
 
         conversationsSearchButton?.setColorFilter(colors.textColorPrimary)
         conversationsAddButton?.setColorFilter(colors.textColorPrimary)
@@ -411,11 +413,7 @@ class MainActivity : BaseActivity() {
         }
         bottomTabs.forEachIndexed { index, tab ->
             val selected = index == selectedTabIndex
-            tab.root.background = if (selected) {
-                roundedBackground(colors.bgColorInput, 28f)
-            } else {
-                null
-            }
+            tab.root.background = null
             tab.icon.setImageDrawable(renderTabIcon(tab, colors, selected))
             tab.text.setTextColor(
                 if (selected) {
@@ -456,7 +454,7 @@ class MainActivity : BaseActivity() {
             ContextCompat.getDrawable(this, tab.iconCutoutResId)?.let { cutout ->
                 val tinted = DrawableCompat.wrap(cutout)
                 tinted.setBounds(0, 0, sizePx, sizePx)
-                DrawableCompat.setTint(tinted, if (selected) colors.bgColorInput else colors.bgColorBottomBar)
+                DrawableCompat.setTint(tinted, colors.bgColorBottomBar)
                 DrawableCompat.setTintMode(tinted, PorterDuff.Mode.SRC_IN)
                 tinted.draw(canvas)
             }
@@ -1242,12 +1240,6 @@ class MainActivity : BaseActivity() {
 
     private fun createMePage(): View {
         return XingDunMinePageView(this)
-    }
-
-    private fun roundedBackground(color: Int, radiusDp: Float) = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        setColor(color)
-        cornerRadius = radiusDp * resources.displayMetrics.density
     }
 
     private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()
