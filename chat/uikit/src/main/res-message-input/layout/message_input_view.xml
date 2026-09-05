@@ -153,6 +153,17 @@
                 android:textSize="16sp"
                 android:visibility="gone" />
 
+            <TextView
+                android:id="@+id/message_input_restriction_text"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="1"
+                android:paddingHorizontal="12dp"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
         </FrameLayout>
 
         <android.widget.Space

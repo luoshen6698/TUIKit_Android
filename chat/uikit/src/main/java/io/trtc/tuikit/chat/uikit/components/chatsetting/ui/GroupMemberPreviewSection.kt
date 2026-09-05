@@ -215,8 +215,6 @@ internal class GroupMemberPreviewSection @JvmOverloads constructor(
         val itemWidth = dp2px(40f, dm).toInt()
         val iconSize = dp2px(40f, dm).toInt()
         val iconCornerRadius = dp2px(4f, dm)
-        val symbol = "+"
-
         return LinearLayout(context).apply {
             orientation = VERTICAL
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -236,11 +234,10 @@ internal class GroupMemberPreviewSection @JvmOverloads constructor(
                         cornerRadius = iconCornerRadius
                     }
                     addView(
-                        TextView(context).apply {
-                            text = symbol
-                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
-                            setTextColor(colors.textColorSecondary)
-                            gravity = Gravity.CENTER
+                        android.widget.ImageView(context).apply {
+                            setImageResource(R.drawable.chat_setting_invite_member_icon)
+                            imageTintList = android.content.res.ColorStateList.valueOf(colors.textColorSecondary)
+                            scaleType = android.widget.ImageView.ScaleType.CENTER
                             layoutParams = FrameLayout.LayoutParams(
                                 FrameLayout.LayoutParams.MATCH_PARENT,
                                 FrameLayout.LayoutParams.MATCH_PARENT

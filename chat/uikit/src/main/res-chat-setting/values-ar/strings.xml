@@ -2,6 +2,8 @@
 <resources>
     <string name="chat_setting_contact_info">تفاصيل جهة الاتصال</string>
     <string name="chat_setting_group_info">تفاصيل المجموعة</string>
+    <string name="chat_setting_group_function_section">ميزات المجموعة</string>
+    <string name="chat_setting_chat_settings_section">إعدادات الدردشة</string>
     <string name="chat_setting_back">رجوع</string>
     <string name="chat_setting_remark">ملاحظة</string>
     <string name="chat_setting_modify_contact_remark">تعديل ملاحظة جهة الاتصال</string>

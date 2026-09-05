@@ -8,6 +8,31 @@ import org.junit.Test
 
 class XingDunCustomMessageParserTest {
     @Test
+    fun refreshesPermissionsForBothMuteTransitionsAndNestedEnvelopes() {
+        for (event in listOf("mute_all_enabled", "mute_all_disabled", "group_fields_updated")) {
+            val message = requireNotNull(XingDunCustomMessageParser.parse(
+                """{"type":"config_refresh","data":{"scope":"group","event":"$event"}}"""
+            ))
+            assertTrue(message.requiresGroupPermissionRefresh())
+        }
+        assertTrue(requireNotNull(XingDunCustomMessageParser.parse(
+            """{"scope":"GROUP"}""", "XingDun:config_refresh"
+        )).requiresGroupPermissionRefresh())
+    }
+
+    @Test
+    fun ignoresUnrelatedAndMissingRefreshScopes() {
+        for (data in listOf(
+            """{"type":"config_refresh","scope":"user"}""",
+            """{"type":"config_refresh"}""",
+            """{"type":"redpacket","scope":"group"}"""
+        )) {
+            assertFalse(requireNotNull(XingDunCustomMessageParser.parse(data)).requiresGroupPermissionRefresh())
+        }
+        assertNull(XingDunCustomMessageParser.parse("invalid"))
+    }
+
+    @Test
     fun parsesNestedRedpacketAsDisplayOnlyBusinessMessage() {
         val message = XingDunCustomMessageParser.parse(
             """{"type":"redpacket","data":{"packet_no":"P001","greeting":"恭喜发财","scene":"c2c"}}"""
@@ -31,6 +56,46 @@ class XingDunCustomMessageParserTest {
         assertFalse(
             requireNotNull(XingDunCustomMessageParser.parse("""{"type":"config_refresh","scope":"group"}""")).isControl
         )
+    }
+
+    @Test
+    fun resolvesBackendGroupInvitationNoticeForSystemPresentation() {
+        val message = requireNotNull(
+            XingDunCustomMessageParser.parse(
+                """{"type":"config_refresh","scope":"group","event":"members_invited","actor_user_id":"xd_owner","actor_name":"c001","member_user_ids_json":["xd_b001","xd_cs"],"member_names_json":["b001","星盾客服"]}"""
+            )
+        )
+
+        val notice = XingDunGroupConfigurationNoticeFormatter.resolve(message.values)
+
+        assertEquals(XingDunGroupConfigurationNotice.Kind.MEMBERS_INVITED, notice.kind)
+        assertEquals("c001", notice.actorName)
+        assertEquals(listOf("b001", "星盾客服"), notice.memberNames)
+    }
+
+    @Test
+    fun rejectsIncompleteInvitationDetailsInsteadOfShowingBrokenNames() {
+        val notice = XingDunGroupConfigurationNoticeFormatter.resolve(
+            mapOf(
+                "event" to "members_invited",
+                "actor_user_id" to "xd_owner",
+                "actor_name" to "c001",
+                "member_user_ids_json" to "[\"xd_b001\",\"xd_cs\"]",
+                "member_names_json" to "[\"b001\"]",
+            )
+        )
+
+        assertEquals(XingDunGroupConfigurationNotice.Kind.GENERIC, notice.kind)
+    }
+
+    @Test
+    fun normalizesSupportedChangedGroupFields() {
+        val notice = XingDunGroupConfigurationNoticeFormatter.resolve(
+            mapOf("event" to "group_fields_updated", "changed_fields" to "name, mute_all, unknown, name")
+        )
+
+        assertEquals(XingDunGroupConfigurationNotice.Kind.GROUP_FIELDS_UPDATED, notice.kind)
+        assertEquals(listOf("name", "mute_all"), notice.changedFields)
     }
 
     @Test

@@ -23,6 +23,7 @@ import io.trtc.tuikit.atomicxcore.api.contact.GetContactInfoCompletionHandler
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupInfoActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMemberPolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupAnnouncementActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupQRCodeActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupManagementActivity
@@ -246,6 +247,7 @@ open class ChatSettingActivity : BaseActivity() {
                     )
                 }.onSuccess { detail ->
                     groupSettingView?.setDisplayGroupID(detail.publicGroupId)
+                    groupSettingView?.setCanInviteMembersOverride(XingDunGroupMemberPolicy.canInvite(detail))
                     if (autoDeleteEnabled) {
                         groupSettingView?.setAssignedCustomerService(detail.currentUserIsAssignedCs)
                     }

@@ -3,10 +3,12 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.lifecycle.ViewModelProvider
 import io.trtc.tuikit.chat.uikit.R
@@ -66,6 +68,7 @@ class GroupChatSettingView @JvmOverloads constructor(
     private var onGroupDeleted: (() -> Unit)? = null
     private var displayGroupID: String? = null
     private var showInternalGroupID = true
+    private var canInviteMembersOverride: Boolean? = null
 
     private var viewModel: GroupChatSettingViewModel? = null
     private var viewScope: CoroutineScope? = null
@@ -199,9 +202,13 @@ class GroupChatSettingView @JvmOverloads constructor(
             onShowChatBackgroundPicker = ::showChatBackgroundPicker
         )
         val rowSections = rowsController.buildSections()
-        rowSections.forEachIndexed { index, section ->
+        contentLayout.addView(createSectionTitle(R.string.chat_setting_group_function_section))
+        contentLayout.addView(rowSections.first(), cardLayoutParams())
+        contentLayout.addView(createSpacer(12f))
+        contentLayout.addView(createSectionTitle(R.string.chat_setting_chat_settings_section))
+        rowSections.drop(1).forEachIndexed { index, section ->
             contentLayout.addView(section, cardLayoutParams())
-            if (index != rowSections.lastIndex) {
+            if (index != rowSections.lastIndex - 1) {
                 contentLayout.addView(createSpacer(12f))
             }
         }
@@ -248,6 +255,12 @@ class GroupChatSettingView @JvmOverloads constructor(
     fun setAssignedCustomerService(value: Boolean) {
         if (isAssignedCustomerService == value) return
         isAssignedCustomerService = value
+        refreshViewState()
+    }
+
+    fun setCanInviteMembersOverride(value: Boolean?) {
+        if (canInviteMembersOverride == value) return
+        canInviteMembersOverride = value
         refreshViewState()
     }
 
@@ -300,6 +313,19 @@ class GroupChatSettingView @JvmOverloads constructor(
         }
         themeTaggedViews.add(spacer)
         return spacer
+    }
+
+    private fun createSectionTitle(textResID: Int): TextView {
+        return TextView(context).apply {
+            setText(textResID)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(getColors().textColorSecondary)
+            val horizontal = dp2px(16f, resources.displayMetrics).toInt()
+            val bottom = dp2px(8f, resources.displayMetrics).toInt()
+            setPadding(horizontal, 0, horizontal, bottom)
+            tag = TAG_SECTION_TITLE
+            themeTaggedViews.add(this)
+        }
     }
 
     private fun createDivider(): View {
@@ -417,7 +443,7 @@ class GroupChatSettingView @JvmOverloads constructor(
         memberPreviewSection.updateContent(
             members = state.groupMembers,
             memberCount = state.memberCount,
-            showAddButton = permissions.canAddMember
+            showAddButton = canInviteMembersOverride ?: permissions.canAddMember
         )
 
         rowsController.refresh(state, vm)
@@ -591,6 +617,7 @@ class GroupChatSettingView @JvmOverloads constructor(
             when (view.tag) {
                 TAG_SPACER -> view.setBackgroundColor(colors.bgColorTopBar)
                 TAG_DIVIDER -> view.setBackgroundColor(colors.strokeColorPrimary)
+                TAG_SECTION_TITLE -> (view as? TextView)?.setTextColor(colors.textColorSecondary)
             }
         }
     }
@@ -609,5 +636,6 @@ class GroupChatSettingView @JvmOverloads constructor(
     private companion object {
         const val TAG_SPACER = "chat_setting_spacer"
         const val TAG_DIVIDER = "chat_setting_divider"
+        const val TAG_SECTION_TITLE = "chat_setting_section_title"
     }
 }

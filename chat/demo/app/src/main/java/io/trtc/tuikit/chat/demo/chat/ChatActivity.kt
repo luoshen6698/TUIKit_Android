@@ -5,6 +5,9 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import com.tencent.imsdk.v2.V2TIMAdvancedMsgListener
+import com.tencent.imsdk.v2.V2TIMManager
+import com.tencent.imsdk.v2.V2TIMMessage
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.TextPaint
@@ -84,6 +87,8 @@ import com.google.gson.JsonObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.SharingStarted
@@ -97,12 +102,27 @@ import kotlinx.coroutines.launch
 class ChatActivity : BaseActivity() {
 
     private var activityScope: CoroutineScope? = null
+    private var groupPermissionJob: Job? = null
+    private var groupPermissionRevision = 0L
+    private val groupPermissionListener = object : V2TIMAdvancedMsgListener() {
+        override fun onRecvNewMessage(message: V2TIMMessage?) {
+            message ?: return
+            if (!::conversationID.isInitialized || "group_${message.groupID}" != conversationID) return
+            val custom = message.customElem?.data?.toString(Charsets.UTF_8)
+                ?.let { XingDunCustomMessageParser.parse(it, message.customElem?.description) }
+            if (message.elemType == V2TIMMessage.V2TIM_ELEM_TYPE_GROUP_TIPS ||
+                custom?.requiresGroupPermissionRefresh() == true) {
+                runOnUiThread { if (!isDestroyed && !isFinishing) loadGroupRuntimePermissions() }
+            }
+        }
+    }
     private val themeStore by lazy { ThemeStore.shared(this) }
     private val contactStore by lazy { ContactStore.shared }
     private val groupStore by lazy { GroupStore.shared }
 
     private lateinit var rootContainer: LinearLayout
     private lateinit var headerContainer: LinearLayout
+    private lateinit var chatTitleIcon: ImageView
     private lateinit var tvChatTitle: TextView
     private lateinit var btnBack: ImageView
     private lateinit var btnMore: ImageView
@@ -242,6 +262,7 @@ class ChatActivity : BaseActivity() {
 
         rootContainer = findViewById(R.id.demo_chatRootContainer)
         headerContainer = findViewById(R.id.demo_chatHeaderContainer)
+        chatTitleIcon = findViewById(R.id.demo_chatTitleIcon)
         tvChatTitle = findViewById(R.id.demo_tvChatTitle)
         btnBack = findViewById(R.id.demo_btnBack)
         btnMore = findViewById(R.id.demo_btnMore)
@@ -285,6 +306,7 @@ class ChatActivity : BaseActivity() {
 
         val isC2CConversation = conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)
         val isGroupConversation = conversationID.startsWith(GROUP_CONVERSATION_ID_PREFIX)
+        chatTitleIcon.visibility = if (isGroupConversation) View.VISIBLE else View.GONE
         val featureAvailability = XingDunRuntimeFeaturePolicy.chatAvailability(
             features = XingDunSessionManager.currentSession()?.features,
             isDirectConversation = isC2CConversation,
@@ -344,6 +366,7 @@ class ChatActivity : BaseActivity() {
         applyColors(themeStore.themeState.value.currentTheme.tokens.color)
 
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        V2TIMManager.getMessageManager().addAdvancedMsgListener(groupPermissionListener)
 
         if (messageFavoriteEnabled) {
             activityScope?.launch { runCatching { XingDunMessageFavoriteRepository.loadRecent() } }
@@ -690,7 +713,9 @@ class ChatActivity : BaseActivity() {
 
     private fun loadGroupRuntimePermissions() {
         if (!conversationID.startsWith(GROUP_CONVERSATION_ID_PREFIX)) return
-        activityScope?.launch {
+        val revision = ++groupPermissionRevision
+        groupPermissionJob?.cancel()
+        groupPermissionJob = activityScope?.launch {
             val result = runCatching {
                 val session = XingDunSessionManager.currentSession() ?: error("Missing session")
                 XingDunSessionManager.apiClient().get<XingDunGroupDetail>(
@@ -700,6 +725,7 @@ class ChatActivity : BaseActivity() {
                     XingDunGroupDetail::class.java,
                 )
             }
+            if (revision != groupPermissionRevision) return@launch
             result.onSuccess { detail ->
                 if (messagePinEnabled) {
                     canManagePinnedMessages = XingDunPinnedMessagePolicy.canManage(
@@ -712,6 +738,7 @@ class ChatActivity : BaseActivity() {
                     getString(R.string.xingdun_group_sending_disabled).takeUnless { detail.canSendMessages },
                 )
             }.onFailure {
+                if (it is CancellationException) throw it
                 chatPageView.setComposerRestriction(
                     getString(R.string.xingdun_group_sending_permission_unavailable),
                 )
@@ -1011,6 +1038,7 @@ class ChatActivity : BaseActivity() {
     private fun applyColors(colors: ColorTokens) {
         rootContainer.setBackgroundColor(colors.bgColorOperate)
         headerContainer.setBackgroundColor(colors.bgColorOperate)
+        chatTitleIcon.imageTintList = ColorStateList.valueOf(0xFF23B39C.toInt())
         tvChatTitle.setTextColor(colors.textColorPrimary)
         btnBack.imageTintList = ColorStateList.valueOf(colors.textColorSecondary)
         btnMore.imageTintList = ColorStateList.valueOf(colors.textColorSecondary)
@@ -1032,6 +1060,7 @@ class ChatActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
+        V2TIMManager.getMessageManager().removeAdvancedMsgListener(groupPermissionListener)
         if (messagePinEnabled) XingDunPinnedMessageRepository.removeListener(pinnedRepositoryListener)
         activityScope?.cancel()
         activityScope = null

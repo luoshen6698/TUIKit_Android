@@ -87,6 +87,7 @@ class MessageInputView @JvmOverloads constructor(
     private lateinit var btnMoreIcon: ImageView
     private lateinit var inputContainer: LinearLayout
     private lateinit var inputSwitchContainer: FrameLayout
+    private lateinit var restrictionText: TextView
     private lateinit var btnEmoji: FrameLayout
     private lateinit var btnEmojiIcon: ImageView
     private lateinit var btnAudioRecord: FrameLayout
@@ -100,6 +101,7 @@ class MessageInputView @JvmOverloads constructor(
     private var voiceTranscriptionAudioPath: String? = null
     private var voiceTranscriptionAudioDurationSecond: Int = 0
     private var voiceTranscriptionOverlay: MessageInputVoiceTranscriptionOverlay? = null
+    private var composerRestriction: CharSequence? = null
 
     private val density: Float
         get() = resources.displayMetrics.density
@@ -144,6 +146,14 @@ class MessageInputView @JvmOverloads constructor(
             }
         }
         applyConfig()
+    }
+
+    fun setComposerRestriction(reason: CharSequence?) {
+        composerRestriction = reason?.takeIf(CharSequence::isNotEmpty)
+        if (composerRestriction != null && ::coordinator.isInitialized) {
+            coordinator.dispatch(PanelEvent.RequestCollapse)
+        }
+        applyComposerRestriction()
     }
 
     private fun createBusinessViewModel(conversationID: String): MessageInputViewModel {
@@ -317,6 +327,7 @@ class MessageInputView @JvmOverloads constructor(
         if (prev?.overlay?.quoteMessage != state.overlay.quoteMessage) {
             renderQuotePreview(state.overlay.quoteMessage)
         }
+        if (composerRestriction != null) applyComposerRestriction()
     }
 
     private fun renderQuotePreview(quoteInfo: QuoteInfo?) {
@@ -454,6 +465,11 @@ class MessageInputView @JvmOverloads constructor(
     }
 
     private fun updateSendButtonVisibility(state: InputUiState) {
+        if (composerRestriction != null) {
+            btnSend.visibility = View.GONE
+            btnMore.visibility = if (config.isShowMore) View.VISIBLE else View.GONE
+            return
+        }
         val hasText = ::textController.isInitialized && textController.inputText.isNotEmpty()
         val isTextMode = state.inputMode == InputMode.TEXT
 
@@ -511,6 +527,7 @@ class MessageInputView @JvmOverloads constructor(
         btnMoreIcon = findViewById(R.id.message_input_btn_more_icon)
         inputContainer = findViewById(R.id.message_input_container)
         inputSwitchContainer = findViewById(R.id.message_input_switch_container)
+        restrictionText = findViewById(R.id.message_input_restriction_text)
         btnEmoji = findViewById(R.id.message_input_btn_emoji)
         btnEmojiIcon = findViewById(R.id.message_input_btn_emoji_icon)
         btnAudioRecord = findViewById(R.id.message_input_btn_audio_record)
@@ -748,6 +765,40 @@ class MessageInputView @JvmOverloads constructor(
             maxDurationMs = config.audioMaxRecordDurationMs.coerceAtLeast(AUDIO_MIN_RECORD_TIME)
         )
         lastRenderedState?.let { updateInputHintVisibility(it) }
+        applyComposerRestriction()
+    }
+
+    private fun applyComposerRestriction() {
+        if (!hasBoundViews) return
+        val restricted = composerRestriction != null
+        restrictionText.text = composerRestriction
+        restrictionText.visibility = if (restricted) View.VISIBLE else View.GONE
+        inputContainer.visibility = if (restricted) View.GONE else View.VISIBLE
+        if (restricted) btnPressToTalk.visibility = View.GONE
+
+        editText.isEnabled = !restricted
+        btnAudioRecord.isEnabled = !restricted
+        btnEmoji.isEnabled = !restricted
+        btnMore.isEnabled = !restricted
+        btnSend.isEnabled = !restricted
+        val controlAlpha = if (restricted) 0.38f else 1f
+        btnAudioRecord.alpha = controlAlpha
+        btnEmoji.alpha = controlAlpha
+        btnMore.alpha = controlAlpha
+        btnSend.alpha = controlAlpha
+
+        if (restricted) {
+            clearFocus()
+            btnSend.visibility = View.GONE
+            btnMore.visibility = if (config.isShowMore) View.VISIBLE else View.GONE
+            quoteContainer.visibility = View.GONE
+            voiceTranscriptionContainer.visibility = View.GONE
+        } else {
+            lastRenderedState?.let {
+                renderInputMode(it.inputMode)
+                updateSendButtonVisibility(it)
+            }
+        }
     }
 
     private fun updateColors(colors: ColorTokens) {
@@ -759,12 +810,13 @@ class MessageInputView @JvmOverloads constructor(
 
         val inputBg = GradientDrawable().apply {
             setColor(colors.bgColorInput)
-            cornerRadius = 4f * density
+            cornerRadius = 17f * density
         }
         inputSwitchContainer.background = inputBg
 
         editText.setTextColor(colors.textColorPrimary)
         editText.setHintTextColor(colors.textColorTertiary)
+        restrictionText.setTextColor(colors.textColorTertiary)
         btnPressToTalk.setTextColor(colors.textColorPrimary)
         voiceTranscriptionEditText.setTextColor(colors.textColorButton)
         voiceTranscriptionEditText.setHintTextColor(colors.textColorButton)

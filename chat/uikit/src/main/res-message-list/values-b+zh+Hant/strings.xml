@@ -24,6 +24,17 @@
     <string name="message_list_message_tips_you_recall_message">您撤回了一則訊息</string>
     <string name="message_list_message_tips_recall_message_format">"%1$s" 撤回了一則訊息</string>
     <string name="message_list_message_tips_others_recall_message">對方撤回了一則訊息</string>
+    <string name="message_list_group_event_member_joined">成員加入群聊</string>
+    <string name="message_list_group_event_members_invited">邀請成員加入群聊</string>
+    <string name="message_list_group_event_member_left">成員退出群聊</string>
+    <string name="message_list_group_event_member_removed">成員被移出群聊</string>
+    <string name="message_list_group_event_admin_set">設定群管理員</string>
+    <string name="message_list_group_event_admin_cancelled">取消群管理員</string>
+    <string name="message_list_group_event_profile_updated">群資料已更新</string>
+    <string name="message_list_group_event_member_profile_updated">群成員資料已更新</string>
+    <string name="message_list_group_event_message_pinned">群訊息已置頂</string>
+    <string name="message_list_group_event_message_unpinned">群訊息已取消置頂</string>
+    <string name="message_list_group_event_notice">群通知</string>
     <string name="message_list_message_tips_join_group_format">"%1$s" 加入群組</string>
     <string name="message_list_message_tips_invite_join_group_format">"%1$s" 邀請 "%2$s" 加入群組</string>
     <string name="message_list_message_tips_leave_group_format">"%1$s" 退出群組</string>

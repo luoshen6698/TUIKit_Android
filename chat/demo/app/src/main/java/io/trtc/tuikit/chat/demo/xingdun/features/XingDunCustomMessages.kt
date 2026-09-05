@@ -55,6 +55,9 @@ internal data class XingDunCustomMessage(
     val isControl: Boolean,
     val isXingDunEnvelope: Boolean
 ) {
+    fun requiresGroupPermissionRefresh(): Boolean =
+        type == "config_refresh" && values["scope"].equals("group", ignoreCase = true)
+
     fun contactCard(): XingDunContactCardPayload? {
         if (type !in CONTACT_CARD_TYPES) return null
         fun first(vararg names: String): String? = names.firstNotNullOfOrNull { name ->
@@ -101,7 +104,7 @@ internal data class XingDunCustomMessage(
                 first("fallback_text", "text", "message", "content", "title")
                     ?: context.getString(R.string.xingdun_updated)
             )
-            "config_refresh" -> first("fallback_text", "text") ?: context.getString(R.string.xingdun_custom_group_notice)
+            "config_refresh" -> XingDunGroupConfigurationNoticeFormatter.text(context, values)
             else -> first("fallback_text", "text", "title") ?: context.getString(R.string.xingdun_custom_unsupported)
         }
     }
@@ -129,6 +132,122 @@ internal data class XingDunCustomMessage(
 
     private companion object {
         val CONTACT_CARD_TYPES = setOf("contact_card", "xingdun_contact_card", "card")
+    }
+}
+
+internal data class XingDunGroupConfigurationNotice(
+    val kind: Kind,
+    val actorName: String? = null,
+    val memberNames: List<String> = emptyList(),
+    val targetName: String? = null,
+    val changedFields: List<String> = emptyList(),
+) {
+    enum class Kind {
+        MEMBERS_INVITED,
+        OWNER_TRANSFERRED,
+        MUTE_ALL_ENABLED,
+        MUTE_ALL_DISABLED,
+        GROUP_FIELDS_UPDATED,
+        GENERIC,
+    }
+}
+
+internal object XingDunGroupConfigurationNoticeFormatter {
+    private val fieldLabelResources = mapOf(
+        "name" to R.string.xingdun_group_notice_field_name,
+        "intro" to R.string.xingdun_group_notice_field_intro,
+        "announcement" to R.string.xingdun_group_notice_field_announcement,
+        "avatar" to R.string.xingdun_group_notice_field_avatar,
+        "join_mode" to R.string.xingdun_group_notice_field_join_mode,
+        "invite_mode" to R.string.xingdun_group_notice_field_invite_mode,
+        "update_team_mode" to R.string.xingdun_group_notice_field_update_team_mode,
+        "at_all_mode" to R.string.xingdun_group_notice_field_at_all_mode,
+        "be_invite_mode" to R.string.xingdun_group_notice_field_be_invite_mode,
+        "view_member_card_mode" to R.string.xingdun_group_notice_field_view_member_card_mode,
+        "pin_message_mode" to R.string.xingdun_group_notice_field_pin_message_mode,
+        "mute_all" to R.string.xingdun_group_notice_field_mute_all,
+    )
+
+    fun resolve(values: Map<String, String>): XingDunGroupConfigurationNotice {
+        return when (values["event"]?.trim()?.lowercase(Locale.ROOT)) {
+            "members_invited" -> {
+                val actorName = values["actor_name"]?.trim()?.takeIf(String::isNotEmpty)
+                val actorID = values["actor_user_id"]?.trim()?.takeIf(String::isNotEmpty)
+                val memberIDs = parseStringArray(values["member_user_ids_json"])
+                val memberNames = parseStringArray(values["member_names_json"])
+                if (actorName != null && actorID != null && memberNames.isNotEmpty() && memberIDs.size == memberNames.size) {
+                    XingDunGroupConfigurationNotice(
+                        kind = XingDunGroupConfigurationNotice.Kind.MEMBERS_INVITED,
+                        actorName = actorName,
+                        memberNames = memberNames,
+                    )
+                } else {
+                    XingDunGroupConfigurationNotice(XingDunGroupConfigurationNotice.Kind.GENERIC)
+                }
+            }
+            "owner_transferred" -> XingDunGroupConfigurationNotice(
+                kind = XingDunGroupConfigurationNotice.Kind.OWNER_TRANSFERRED,
+                targetName = values["target_name"]?.trim()?.takeIf(String::isNotEmpty),
+            )
+            "mute_all_enabled" -> XingDunGroupConfigurationNotice(XingDunGroupConfigurationNotice.Kind.MUTE_ALL_ENABLED)
+            "mute_all_disabled" -> XingDunGroupConfigurationNotice(XingDunGroupConfigurationNotice.Kind.MUTE_ALL_DISABLED)
+            "group_fields_updated" -> XingDunGroupConfigurationNotice(
+                kind = XingDunGroupConfigurationNotice.Kind.GROUP_FIELDS_UPDATED,
+                changedFields = values["changed_fields"]
+                    .orEmpty()
+                    .split(',')
+                    .map(String::trim)
+                    .map { it.lowercase(Locale.ROOT) }
+                    .filter(fieldLabelResources::containsKey)
+                    .distinct(),
+            )
+            else -> XingDunGroupConfigurationNotice(XingDunGroupConfigurationNotice.Kind.GENERIC)
+        }
+    }
+
+    fun text(context: Context, values: Map<String, String>): String {
+        val notice = resolve(values)
+        return when (notice.kind) {
+            XingDunGroupConfigurationNotice.Kind.MEMBERS_INVITED -> context.getString(
+                R.string.xingdun_group_notice_members_invited,
+                notice.actorName,
+                formatList(context, notice.memberNames),
+            )
+            XingDunGroupConfigurationNotice.Kind.OWNER_TRANSFERRED -> notice.targetName?.let {
+                context.getString(R.string.xingdun_group_notice_owner_transferred_to, it)
+            } ?: context.getString(R.string.xingdun_group_notice_owner_transferred)
+            XingDunGroupConfigurationNotice.Kind.MUTE_ALL_ENABLED -> context.getString(R.string.xingdun_group_mute_all_enabled)
+            XingDunGroupConfigurationNotice.Kind.MUTE_ALL_DISABLED -> context.getString(R.string.xingdun_group_mute_all_disabled)
+            XingDunGroupConfigurationNotice.Kind.GROUP_FIELDS_UPDATED -> {
+                val labels = notice.changedFields.mapNotNull(fieldLabelResources::get).map(context::getString)
+                if (labels.isEmpty()) {
+                    context.getString(R.string.xingdun_custom_group_notice)
+                } else {
+                    context.getString(R.string.xingdun_group_notice_fields_updated, formatList(context, labels))
+                }
+            }
+            XingDunGroupConfigurationNotice.Kind.GENERIC -> context.getString(R.string.xingdun_custom_group_notice)
+        }
+    }
+
+    private fun parseStringArray(value: String?): List<String> {
+        val array = runCatching { JsonParser.parseString(value.orEmpty()).asJsonArray }.getOrNull() ?: return emptyList()
+        return array.mapNotNull { element ->
+            element.takeIf(JsonElement::isJsonPrimitive)?.asString?.trim()?.takeIf(String::isNotEmpty)
+        }.takeIf { it.size == array.size() } ?: emptyList()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun formatList(context: Context, values: List<String>): String {
+        if (values.size < 2) return values.firstOrNull().orEmpty()
+        val isChinese = context.resources.configuration.locale.language.startsWith("zh", ignoreCase = true)
+        val conjunction = if (isChinese) "和" else " and "
+        val separator = if (isChinese) "、" else ", "
+        return if (values.size == 2) {
+            values.joinToString(conjunction)
+        } else {
+            values.dropLast(1).joinToString(separator) + conjunction + values.last()
+        }
     }
 }
 
@@ -310,6 +429,11 @@ internal object XingDunCustomMessagePresentation {
     private val redpacketMatcher = MessageMatcher { message ->
         XingDunCustomMessageParser.parse(message)?.let { it.type == "redpacket" && !it.isControl } == true
     }
+    private val groupConfigurationNoticeMatcher = MessageMatcher { message ->
+        XingDunCustomMessageParser.parse(message)?.let {
+            it.type == "config_refresh" && !it.isControl
+        } == true
+    }
     private val summaryProvider = MessageSummaryProvider { context ->
         XingDunCustomMessageParser.parse(context.message)?.takeUnless(XingDunCustomMessage::isControl)?.summary(context.context)
     }
@@ -320,6 +444,12 @@ internal object XingDunCustomMessagePresentation {
 
     fun configure(config: ChatMessageListConfig) {
         config.addMessageExclusion(controlMatcher)
+        config.addCustomMessageRenderer(
+            matcher = groupConfigurationNoticeMatcher,
+            renderer = XingDunGroupConfigurationNoticeRenderer,
+            priority = 210,
+            summaryProvider = summaryProvider,
+        )
         config.addCustomMessageRenderer(
             matcher = contactCardMatcher,
             renderer = XingDunContactCardMessageRenderer,
@@ -358,6 +488,28 @@ internal object XingDunCustomMessagePresentation {
                 ),
             )
         }
+}
+
+private object XingDunGroupConfigurationNoticeRenderer : MessageContentRenderer {
+    override val renderConfig = MessageRenderConfig(showMessageMeta = false, useDefaultBubble = false)
+
+    override fun createView(context: Context, parent: ViewGroup): View = TextView(context).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+        gravity = Gravity.CENTER
+        val padding = (10 * resources.displayMetrics.density).toInt()
+        setPadding(padding, padding, padding, padding)
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
+    }
+
+    override fun bindView(view: View, context: MessageRenderContext) {
+        val textView = view as TextView
+        val message = XingDunCustomMessageParser.parse(context.message) ?: return
+        textView.text = message.summary(textView.context)
+        textView.setTextColor(context.colors.textColorSecondary)
+    }
 }
 
 private object XingDunRedpacketMessageRenderer : MessageContentRenderer {

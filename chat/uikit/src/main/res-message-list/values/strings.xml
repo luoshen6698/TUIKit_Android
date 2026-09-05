@@ -24,6 +24,17 @@
     <string name="message_list_message_tips_you_recall_message">You recalled a message</string>
     <string name="message_list_message_tips_recall_message_format">"%1$s" recalled a message</string>
     <string name="message_list_message_tips_others_recall_message">The other user recalled a message</string>
+    <string name="message_list_group_event_member_joined">A member joined the group</string>
+    <string name="message_list_group_event_members_invited">Members were invited to the group</string>
+    <string name="message_list_group_event_member_left">A member left the group</string>
+    <string name="message_list_group_event_member_removed">A member was removed from the group</string>
+    <string name="message_list_group_event_admin_set">Group admin set</string>
+    <string name="message_list_group_event_admin_cancelled">Group admin cancelled</string>
+    <string name="message_list_group_event_profile_updated">Group profile updated</string>
+    <string name="message_list_group_event_member_profile_updated">Group member profile updated</string>
+    <string name="message_list_group_event_message_pinned">Group message pinned</string>
+    <string name="message_list_group_event_message_unpinned">Group message unpinned</string>
+    <string name="message_list_group_event_notice">Group notice</string>
     <string name="message_list_message_tips_join_group_format">"%1$s" joined the group</string>
     <string name="message_list_message_tips_invite_join_group_format">"%1$s" invited "%2$s" to join the group</string>
     <string name="message_list_message_tips_leave_group_format">"%1$s" left the group chat</string>

@@ -2,6 +2,8 @@
 <resources>
     <string name="chat_setting_contact_info">聯絡人詳情</string>
     <string name="chat_setting_group_info">群組詳情</string>
+    <string name="chat_setting_group_function_section">群功能</string>
+    <string name="chat_setting_chat_settings_section">聊天設定</string>
     <string name="chat_setting_back">返回</string>
     <string name="chat_setting_remark">備註</string>
     <string name="chat_setting_modify_contact_remark">修改聯絡人備註</string>

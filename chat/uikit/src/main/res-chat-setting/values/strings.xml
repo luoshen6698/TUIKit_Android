@@ -10,6 +10,8 @@
     <string name="chat_setting_pin_conversation">Pin Conversation</string>
     <string name="chat_setting_conversation_section">Conversation</string>
     <string name="chat_setting_history_section">Chat History</string>
+    <string name="chat_setting_group_function_section">Group Features</string>
+    <string name="chat_setting_chat_settings_section">Chat Settings</string>
     <string name="chat_setting_create_group">Create Group Chat</string>
     <string name="chat_setting_add_blacklist">Add to Blacklist</string>
     <string name="chat_setting_send_messages">Message</string>

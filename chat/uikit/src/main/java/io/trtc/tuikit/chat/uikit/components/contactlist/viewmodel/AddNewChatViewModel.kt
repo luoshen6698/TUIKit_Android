@@ -299,7 +299,7 @@ class AddNewChatViewModel(
             groupName = ensuredGroupName
         )
 
-        fun complete(groupID: String) {
+        fun complete(groupID: String, shouldSendClientCreateMessage: Boolean) {
             lastCreatedGroupID = groupID
             val conversationId = ConversationIDUtil.fromGroup(groupID)
             val createdGroupType = currentSelectedGroupType.value.type
@@ -310,7 +310,9 @@ class AddNewChatViewModel(
             )
             groupStore.loadJoinedGroups()
             onSuccess()
-            groupCreateMessageSender.schedule(conversationId, createdGroupType)
+            if (shouldSendClientCreateMessage) {
+                groupCreateMessageSender.schedule(conversationId, createdGroupType)
+            }
         }
 
         fun fail(code: Int, desc: String) {
@@ -332,7 +334,11 @@ class AddNewChatViewModel(
                 object : BusinessActionCompletion {
                     override fun onSuccess(result: BusinessActionResult) {
                         val createdGroupID = result.identifier.orEmpty()
-                        if (createdGroupID.isBlank()) fail(-1, "Group ID is missing") else complete(createdGroupID)
+                        if (createdGroupID.isBlank()) {
+                            fail(-1, "Group ID is missing")
+                        } else {
+                            complete(createdGroupID, shouldSendClientCreateMessage = false)
+                        }
                     }
 
                     override fun onFailure(code: Int, description: String) = fail(code, description)
@@ -350,7 +356,7 @@ class AddNewChatViewModel(
             ),
             completion = object : CreateGroupCompletionHandler {
                 override fun onSuccess(groupID: String) {
-                    complete(groupID)
+                    complete(groupID, shouldSendClientCreateMessage = true)
                 }
 
                 override fun onFailure(code: Int, desc: String) {
