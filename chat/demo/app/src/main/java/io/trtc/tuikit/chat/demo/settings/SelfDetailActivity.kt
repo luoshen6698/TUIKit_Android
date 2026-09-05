@@ -104,9 +104,17 @@ open class SelfDetailActivity : BaseActivity() {
     private val isDebugPreview: Boolean
         get() = !requiresLogin && intent.getBooleanExtra(EXTRA_DEBUG_PREVIEW, false)
 
-    private val avatarPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri ?: return@registerForActivityResult
-        showAvatarPreview(uri)
+    private val avatarPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+        result.data?.data?.let(::showAvatarPreview)
+    }
+
+    private fun openAvatarPicker() {
+        avatarPicker.launch(
+            Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
+                type = "image/*"
+            }
+        )
     }
 
     private val profileEditor = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -354,7 +362,7 @@ open class SelfDetailActivity : BaseActivity() {
             minimumHeight = 76.dp()
             isClickable = true
             isFocusable = true
-            setOnClickListener { avatarPicker.launch("image/*") }
+            setOnClickListener { openAvatarPicker() }
             setOnTouchListener(avatarGesture)
         }
         avatarRow.addView(TextView(this).apply {
@@ -363,7 +371,7 @@ open class SelfDetailActivity : BaseActivity() {
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         avatar = Avatar(this).apply {
             setSize(Avatar.AvatarSize.L)
-            setOnAvatarClickListener { avatarPicker.launch("image/*") }
+            setOnAvatarClickListener { openAvatarPicker() }
             setOnTouchListener(avatarGesture)
         }
         avatarRow.addView(avatar)
