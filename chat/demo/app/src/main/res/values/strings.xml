@@ -1182,6 +1182,11 @@
     <string name="xingdun_message">Message</string>
     <string name="xingdun_remove_favorite">Remove favorite</string>
     <string name="xingdun_remove_favorite_confirm">Remove this item from favorites?</string>
+    <string name="xingdun_favorite_copy">Copy</string>
+    <string name="xingdun_favorite_forward">Forward</string>
+    <string name="xingdun_favorite_copied">Copied</string>
+    <string name="xingdun_favorite_forwarded">Forwarded</string>
+    <string name="xingdun_favorite_forward_failed">Couldn’t forward. Try again later.</string>
     <string name="xingdun_redpacket_detail">Red packet details</string>
     <string name="xingdun_redpacket_balance">Available balance</string>
     <string name="xingdun_redpacket_sent">Sent</string>

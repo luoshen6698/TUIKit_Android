@@ -1174,6 +1174,11 @@
     <string name="xingdun_message">消息</string>
     <string name="xingdun_remove_favorite">取消收藏</string>
     <string name="xingdun_remove_favorite_confirm">确定取消收藏这条内容吗？</string>
+    <string name="xingdun_favorite_copy">复制</string>
+    <string name="xingdun_favorite_forward">转发</string>
+    <string name="xingdun_favorite_copied">已复制</string>
+    <string name="xingdun_favorite_forwarded">已转发</string>
+    <string name="xingdun_favorite_forward_failed">转发失败，请稍后重试。</string>
     <string name="xingdun_redpacket_detail">红包详情</string>
     <string name="xingdun_redpacket_balance">可用余额</string>
     <string name="xingdun_redpacket_sent">发出的红包</string>

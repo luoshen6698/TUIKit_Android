@@ -68,6 +68,10 @@ import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
 import com.tencent.mmkv.MMKV
+import com.tencent.imsdk.v2.V2TIMImageElem
+import com.tencent.imsdk.v2.V2TIMManager
+import com.tencent.imsdk.v2.V2TIMMessage
+import com.tencent.imsdk.v2.V2TIMValueCallback
 import com.google.zxing.BarcodeFormat
 import com.journeyapps.barcodescanner.BarcodeEncoder
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
@@ -78,6 +82,10 @@ import io.trtc.tuikit.atomicxcore.api.group.GetGroupInfoCompletionHandler
 import io.trtc.tuikit.atomicxcore.api.group.GroupInfo
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
+import io.trtc.tuikit.atomicxcore.api.CompletionHandler
+import io.trtc.tuikit.atomicxcore.api.message.MessageInputStore
+import io.trtc.tuikit.atomicxcore.api.message.SendMessageOption
+import io.trtc.tuikit.atomicxcore.api.message.SendMessagePayload
 import io.trtc.tuikit.chat.app.BuildConfig
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
@@ -178,6 +186,8 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var favoriteTotal = 0
     private var favoriteLoading = false
     private var favoriteTouchStartY = 0f
+    private val favoriteMediaOverrides = mutableMapOf<String, FavoriteMediaOverride>()
+    private var pendingFavoriteForwardText: String? = null
     private var accountSecurityTouchStartY = 0f
     private var accountSecurityLoading = false
     private var storageTouchStartY = 0f
@@ -225,6 +235,12 @@ open class XingDunFeatureActivity : BaseActivity() {
         val icon: TextView,
         val duration: TextView,
         val seconds: Int,
+    )
+
+    private data class FavoriteMediaOverride(
+        val previewURL: String? = null,
+        val playbackURL: String? = null,
+        val audioDuration: Int? = null,
     )
 
     private val attachmentPicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -290,6 +306,17 @@ open class XingDunFeatureActivity : BaseActivity() {
             content.removeAllViews()
             showAccountSecurity()
         }
+    }
+
+    private val favoriteForwardPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val text = pendingFavoriteForwardText
+        pendingFavoriteForwardText = null
+        if (result.resultCode != RESULT_OK || text.isNullOrBlank()) return@registerForActivityResult
+        val conversationID = result.data
+            ?.getStringExtra(XingDunContactForwardPickerActivity.EXTRA_RESULT_CONVERSATION_ID)
+            ?.trim()
+            .orEmpty()
+        if (conversationID.isNotEmpty()) forwardFavoriteText(conversationID, text)
     }
 
     private val invitePosterStoragePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -6279,6 +6306,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 favoritePage = requestedPage
                 favoriteTotal = page.int("total") ?: favoriteRecords.size
                 renderFavorites()
+                hydrateFavoriteMedia()
             }.onFailure { error ->
                 favoriteLoading = false
                 setBusy(false)
@@ -6402,19 +6430,21 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun favoriteCard(favorite: JsonObject): View {
         val snapshot = favorite.getAsJsonObject("message") ?: favorite
         val favoriteID = favorite.int("favorite_id") ?: favorite.int("id")
+        val messageID = snapshot.string("message_id").orEmpty()
         val senderID = snapshot.string("sender").orEmpty()
         val senderName = snapshot.string("sender_nickname") ?: senderID.ifBlank { getString(R.string.xingdun_message) }
         val conversationName = snapshot.string("conversation_name")
             ?: favorite.string("conversation_id")
             ?: getString(R.string.xingdun_favorite_unknown_conversation)
         val messageType = snapshot.string("message_type").orEmpty().uppercase(Locale.ROOT)
-        val previewURL = favoriteMediaURL(snapshot, messageType, preview = true)
-        val playbackURL = favoriteMediaURL(snapshot, messageType, preview = false)
-        val audioDuration = if (messageType == "AUDIO") favoriteAudioDuration(snapshot) else null
+        val mediaOverride = favoriteMediaOverrides[messageID]
+        val previewURL = favoriteMediaURL(snapshot, messageType, preview = true) ?: mediaOverride?.previewURL
+        val playbackURL = favoriteMediaURL(snapshot, messageType, preview = false) ?: mediaOverride?.playbackURL
+        val audioDuration = if (messageType == "AUDIO") favoriteAudioDuration(snapshot) ?: mediaOverride?.audioDuration else null
 
         return FrameLayout(this).apply {
-            background = roundedDrawable(Color.WHITE, 14f)
-            setPadding(14.dp(), 14.dp(), 10.dp(), 14.dp())
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(14.dp(), 12.dp(), 10.dp(), 12.dp())
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.TOP
@@ -6442,7 +6472,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                     maxLines = 1
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 addView(TextView(context).apply {
-                    text = localizedDisplayDate(favorite.string("favorited_at") ?: snapshot.string("sent_at"))
+                    text = favoriteDisplayDate(favorite.string("favorited_at") ?: snapshot.string("sent_at"))
                     textSize = 11f
                     setTextColor(0xFF9A9EA5.toInt())
                     maxLines = 1
@@ -6548,12 +6578,18 @@ open class XingDunFeatureActivity : BaseActivity() {
                 isClickable = favoriteID != null
                 isFocusable = favoriteID != null
                 setTextColor(0xFF69716F.toInt())
-                setOnClickListener { anchor -> favoriteID?.let { showFavoriteActions(anchor, it, snapshot.string("message_id")) } }
+                setOnClickListener { anchor -> favoriteID?.let { showFavoriteActions(anchor, it, snapshot) } }
             }, FrameLayout.LayoutParams(38.dp(), 38.dp(), Gravity.TOP or Gravity.END))
+            val detailText = snapshot.string("text")?.trim().orEmpty()
+            if (messageType == "TEXT" && detailText.isNotEmpty()) {
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { showFavoriteTextDetail(senderName, detailText) }
+            }
             if (senderID.isNotBlank()) loadFavoriteAvatar(senderID, avatar)
         }.also { card ->
             card.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = 12.dp()
+                bottomMargin = 2.dp()
             }
         }
     }
@@ -6597,6 +6633,11 @@ open class XingDunFeatureActivity : BaseActivity() {
         } ?: value
     }
 
+    private fun favoriteDisplayDate(raw: String?): String {
+        val date = raw?.trim()?.takeIf(String::isNotEmpty)?.let(::parseDisplayDate) ?: return raw.orEmpty()
+        return SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.US).format(date)
+    }
+
     private fun workspaceDisplayDate(raw: String?): String {
         val value = raw?.trim().orEmpty()
         if (value.isEmpty()) return ""
@@ -6634,8 +6675,8 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun favoriteMediaURL(snapshot: JsonObject, messageType: String, preview: Boolean): String? {
         val attachment = snapshot.get("attachment") ?: return null
+        if (messageType == "PICTURE") return favoriteImageURL(attachment)
         val keys = when (messageType) {
-            "PICTURE" -> listOf("ThumbUrl", "ThumbURL", "thumbUrl", "URL", "Url", "url")
             "VIDEO" -> if (preview) {
                 listOf("ThumbUrl", "ThumbURL", "thumbUrl", "CoverUrl", "coverUrl", "VideoUrl", "VideoURL")
             } else {
@@ -6645,8 +6686,43 @@ open class XingDunFeatureActivity : BaseActivity() {
             else -> emptyList()
         }
         return keys.firstNotNullOfOrNull { key -> attachment.firstString(key) }
-            ?.trim()
-            ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+            ?.let(::normalizedFavoriteMediaURL)
+    }
+
+    private fun favoriteImageURL(attachment: JsonElement): String? {
+        val images = attachment.firstArray("ImageInfoArray")
+        val typed = images?.mapNotNull { item ->
+            val value = item.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
+            val url = sequenceOf("URL", "Url", "url")
+                .mapNotNull { key -> value.firstString(key) }
+                .firstNotNullOfOrNull(::normalizedFavoriteMediaURL) ?: return@mapNotNull null
+            (value.int("Type") ?: value.int("type")) to url
+        }.orEmpty()
+        return typed.firstOrNull { it.first == V2TIMImageElem.V2TIM_IMAGE_TYPE_THUMB }?.second
+            ?: typed.firstOrNull { it.first == V2TIMImageElem.V2TIM_IMAGE_TYPE_LARGE }?.second
+            ?: typed.firstOrNull { it.first == V2TIMImageElem.V2TIM_IMAGE_TYPE_ORIGIN }?.second
+            ?: typed.firstOrNull()?.second
+            ?: sequenceOf("ThumbUrl", "ThumbURL", "thumbUrl", "URL", "Url", "url")
+                .mapNotNull { key -> attachment.firstString(key) }
+                .firstNotNullOfOrNull(::normalizedFavoriteMediaURL)
+    }
+
+    private fun normalizedFavoriteMediaURL(raw: String): String? {
+        val value = raw.trim()
+        return when {
+            value.startsWith("//") -> "https:$value"
+            value.startsWith("https://") || value.startsWith("http://") -> value
+            else -> null
+        }
+    }
+
+    private fun JsonElement.firstArray(key: String): JsonArray? = when {
+        isJsonObject -> {
+            asJsonObject.get(key)?.takeIf(JsonElement::isJsonArray)?.asJsonArray
+                ?: asJsonObject.entrySet().firstNotNullOfOrNull { (_, nested) -> nested.firstArray(key) }
+        }
+        isJsonArray -> asJsonArray.firstNotNullOfOrNull { it.firstArray(key) }
+        else -> null
     }
 
     private fun JsonElement.firstString(key: String): String? = when {
@@ -6671,15 +6747,153 @@ open class XingDunFeatureActivity : BaseActivity() {
         else -> null
     }
 
-    private fun showFavoriteActions(anchor: View, favoriteID: Int, messageID: String?) {
+    private fun hydrateFavoriteMedia() {
+        val messageTypes = favoriteRecords.mapNotNull { favorite ->
+            val snapshot = favorite.getAsJsonObject("message") ?: favorite
+            val messageID = snapshot.string("message_id")?.trim().orEmpty()
+            val messageType = snapshot.string("message_type")?.uppercase(Locale.ROOT).orEmpty()
+            val needsFallback = when (messageType) {
+                "PICTURE" -> favoriteMediaURL(snapshot, messageType, preview = true) == null
+                "VIDEO" -> favoriteMediaURL(snapshot, messageType, preview = true) == null ||
+                    favoriteMediaURL(snapshot, messageType, preview = false) == null
+                "AUDIO" -> favoriteMediaURL(snapshot, messageType, preview = false) == null
+                else -> false
+            }
+            if (messageID.isNotEmpty() && needsFallback) messageID to messageType else null
+        }.toMap()
+        messageTypes.keys.chunked(10).forEach { messageIDs ->
+            V2TIMManager.getMessageManager().findMessages(
+                messageIDs,
+                object : V2TIMValueCallback<List<V2TIMMessage>> {
+                    override fun onSuccess(messages: List<V2TIMMessage>?) {
+                        messages.orEmpty().forEach { message ->
+                            when (messageTypes[message.msgID]) {
+                                "PICTURE" -> {
+                                    val url = message.imageElem?.imageList
+                                        ?.sortedBy { image ->
+                                            when (image.type) {
+                                                V2TIMImageElem.V2TIM_IMAGE_TYPE_THUMB -> 0
+                                                V2TIMImageElem.V2TIM_IMAGE_TYPE_LARGE -> 1
+                                                else -> 2
+                                            }
+                                        }
+                                        ?.firstNotNullOfOrNull { normalizedFavoriteMediaURL(it.url.orEmpty()) }
+                                    updateFavoriteMediaOverride(message.msgID, previewURL = url)
+                                }
+                                "VIDEO" -> message.videoElem?.let { video ->
+                                    video.getSnapshotUrl(object : V2TIMValueCallback<String> {
+                                        override fun onSuccess(url: String?) =
+                                            updateFavoriteMediaOverride(message.msgID, previewURL = url)
+                                        override fun onError(code: Int, desc: String?) = Unit
+                                    })
+                                    video.getVideoUrl(object : V2TIMValueCallback<String> {
+                                        override fun onSuccess(url: String?) =
+                                            updateFavoriteMediaOverride(message.msgID, playbackURL = url)
+                                        override fun onError(code: Int, desc: String?) = Unit
+                                    })
+                                }
+                                "AUDIO" -> message.soundElem?.let { sound ->
+                                    updateFavoriteMediaOverride(message.msgID, audioDuration = sound.duration.coerceAtLeast(1))
+                                    sound.getUrl(object : V2TIMValueCallback<String> {
+                                        override fun onSuccess(url: String?) =
+                                            updateFavoriteMediaOverride(message.msgID, playbackURL = url)
+                                        override fun onError(code: Int, desc: String?) = Unit
+                                    })
+                                }
+                            }
+                        }
+                    }
+
+                    override fun onError(code: Int, desc: String?) = Unit
+                },
+            )
+        }
+    }
+
+    private fun updateFavoriteMediaOverride(
+        messageID: String,
+        previewURL: String? = null,
+        playbackURL: String? = null,
+        audioDuration: Int? = null,
+    ) {
+        val normalizedPreview = previewURL?.let(::normalizedFavoriteMediaURL)
+        val normalizedPlayback = playbackURL?.let(::normalizedFavoriteMediaURL)
+        if (normalizedPreview == null && normalizedPlayback == null && audioDuration == null) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            val current = favoriteMediaOverrides[messageID] ?: FavoriteMediaOverride()
+            val updated = FavoriteMediaOverride(
+                previewURL = normalizedPreview ?: current.previewURL,
+                playbackURL = normalizedPlayback ?: current.playbackURL,
+                audioDuration = audioDuration ?: current.audioDuration,
+            )
+            if (updated != current) {
+                favoriteMediaOverrides[messageID] = updated
+                renderFavorites()
+            }
+        }
+    }
+
+    private fun showFavoriteActions(anchor: View, favoriteID: Int, snapshot: JsonObject) {
+        val messageID = snapshot.string("message_id")
+        val text = snapshot.string("text")?.trim().orEmpty()
+        val messageType = snapshot.string("message_type")?.uppercase(Locale.ROOT).orEmpty()
         PopupMenu(this, anchor).apply {
-            menu.add(R.string.xingdun_remove_favorite)
-            setOnMenuItemClickListener {
-                removeFavorite(favoriteID, messageID)
+            if (messageType == "TEXT" && text.isNotEmpty()) {
+                menu.add(0, FAVORITE_ACTION_COPY, 0, R.string.xingdun_favorite_copy)
+                menu.add(0, FAVORITE_ACTION_FORWARD, 1, R.string.xingdun_favorite_forward)
+            }
+            menu.add(0, FAVORITE_ACTION_REMOVE, 2, R.string.xingdun_remove_favorite)
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    FAVORITE_ACTION_COPY -> copyFavoriteText(text)
+                    FAVORITE_ACTION_FORWARD -> {
+                        pendingFavoriteForwardText = text
+                        favoriteForwardPicker.launch(XingDunContactForwardPickerActivity.intent(this@XingDunFeatureActivity, ""))
+                    }
+                    FAVORITE_ACTION_REMOVE -> removeFavorite(favoriteID, messageID)
+                }
                 true
             }
             show()
         }
+    }
+
+    private fun showFavoriteTextDetail(senderName: String, text: String) {
+        AlertDialog.Builder(this)
+            .setTitle(senderName)
+            .setView(TextView(this).apply {
+                this.text = text
+                textSize = 16f
+                setTextColor(Color.BLACK)
+                setTextIsSelectable(true)
+                setPadding(24.dp(), 12.dp(), 24.dp(), 8.dp())
+            })
+            .setNeutralButton(R.string.xingdun_favorite_copy) { _, _ -> copyFavoriteText(text) }
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun copyFavoriteText(text: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.xingdun_message_favorites), text))
+        Toast.makeText(this, R.string.xingdun_favorite_copied, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun forwardFavoriteText(conversationID: String, text: String) {
+        MessageInputStore.create(conversationID).sendMessage(
+            SendMessagePayload.TextSendMessagePayload(text),
+            SendMessageOption(),
+            object : CompletionHandler {
+                override fun onSuccess() = runOnUiThread {
+                    Toast.makeText(this@XingDunFeatureActivity, R.string.xingdun_favorite_forwarded, Toast.LENGTH_SHORT).show()
+                }
+
+                override fun onFailure(code: Int, desc: String) = runOnUiThread {
+                    Toast.makeText(this@XingDunFeatureActivity, R.string.xingdun_favorite_forward_failed, Toast.LENGTH_SHORT).show()
+                }
+            },
+        )
     }
 
     private fun openFavoriteMedia(messageType: String, url: String) {
@@ -7351,6 +7565,9 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val PERMISSION_PREFERENCES = "xingdun_permission_ui"
         private const val REPORT_PAGE_SIZE = 20
         private const val FAVORITE_PAGE_SIZE = 20
+        private const val FAVORITE_ACTION_COPY = 1
+        private const val FAVORITE_ACTION_FORWARD = 2
+        private const val FAVORITE_ACTION_REMOVE = 3
         private const val FRIEND_APPLICATION_TAG = "xingdun_friend_application"
 
         fun start(context: Context, mode: String, itemId: Int = 0, selectedTab: String? = null) {
