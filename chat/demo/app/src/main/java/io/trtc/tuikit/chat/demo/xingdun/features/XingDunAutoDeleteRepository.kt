@@ -1,5 +1,7 @@
 package io.trtc.tuikit.chat.demo.xingdun.features
 
+import android.content.Context
+
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunAutoDeleteConfiguration
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantBoundary
@@ -8,6 +10,32 @@ import java.util.concurrent.CopyOnWriteArraySet
 
 /** Small tenant-bound cache around the existing shared auto-delete contract. */
 internal object XingDunAutoDeleteRepository {
+    private fun deletionKey(conversationID: String): String? {
+        val session = XingDunSessionManager.currentSession() ?: return null
+        return cacheKey(conversationID)?.let { "$it:${session.timUserId}" }
+    }
+
+    fun deletedIDs(context: Context, conversationID: String): Set<String> {
+        val key = deletionKey(conversationID) ?: return emptySet()
+        return context.getSharedPreferences("xingdun_deleted_messages", Context.MODE_PRIVATE)
+            .getStringSet(key, emptySet()).orEmpty().toSet()
+    }
+
+    @Synchronized
+    fun rememberDeleted(context: Context, conversationID: String, ids: Set<String>) {
+        val key = deletionKey(conversationID) ?: return
+        val current = deletedIDs(context, conversationID)
+        val merged = current + ids.filter(String::isNotBlank)
+        if (merged == current) return
+        context.getSharedPreferences("xingdun_deleted_messages", Context.MODE_PRIVATE)
+            .edit().putStringSet(key, merged).apply()
+    }
+
+    fun applyRemoteDeletion(context: Context, conversationID: String, values: Map<String, String>) {
+        val ids = XingDunAutoDeletePolicy.remoteDeletedIDs(values["message_ids"])
+        rememberDeleted(context, conversationID, ids)
+    }
+
     private const val CACHE_MILLIS = 5 * 60 * 1000L
 
     private data class CacheEntry(
@@ -27,24 +55,28 @@ internal object XingDunAutoDeleteRepository {
     suspend fun load(conversationID: String, force: Boolean = false): XingDunAutoDeleteConfiguration {
         if (!force) cached(conversationID)?.let { return it }
         val session = XingDunSessionManager.currentSession() ?: error("Missing session")
+        val requestedKey = cacheKey(conversationID) ?: error("Missing tenant")
         val configuration = XingDunSessionManager.apiClient().get<XingDunAutoDeleteConfiguration>(
             session = session,
             path = "message/auto-delete",
             query = mapOf("conversation_id" to conversationID),
             responseType = XingDunAutoDeleteConfiguration::class.java
         )
+        check(cacheKey(conversationID) == requestedKey) { "Session changed" }
         return store(conversationID, configuration)
     }
 
     suspend fun update(conversationID: String, ttlSeconds: Int): XingDunAutoDeleteConfiguration {
         require(ttlSeconds in XingDunAutoDeletePolicy.DEFAULT_TTL_SECONDS)
         val session = XingDunSessionManager.currentSession() ?: error("Missing session")
+        val requestedKey = cacheKey(conversationID) ?: error("Missing tenant")
         val configuration = XingDunSessionManager.apiClient().post<XingDunAutoDeleteConfiguration>(
             session = session,
             path = "message/auto-delete",
             body = mapOf("conversation_id" to conversationID, "ttl_seconds" to ttlSeconds),
             responseType = XingDunAutoDeleteConfiguration::class.java
         )
+        check(cacheKey(conversationID) == requestedKey) { "Session changed" }
         return store(conversationID, configuration)
     }
 
@@ -101,6 +133,6 @@ internal object XingDunAutoDeleteRepository {
     private fun cacheKey(conversationID: String): String? {
         val session = XingDunSessionManager.currentSession() ?: return null
         val tenantKey = XingDunTenantBoundary.identity(session)?.key ?: return null
-        return "$tenantKey:$conversationID"
+        return "$tenantKey:${session.timUserId}:$conversationID"
     }
 }

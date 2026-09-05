@@ -90,7 +90,7 @@ private const val MESSAGE_LIST_EVENT_SOURCE = "MessageList"
 private const val QUOTE_MESSAGE_EVENT = "onQuoteMessage"
 
 class MessageListViewModel(
-    private val messageListStore: MessageListStore,
+    internal val messageListStore: MessageListStore,
     val conversationID: String,
     var locateMessage: MessageInfo? = null,
     val messageListConfig: MessageListConfigProtocol = ChatMessageListConfig(),

@@ -473,6 +473,8 @@ class MessageListView @JvmOverloads constructor(
         })
     }
 
+    fun messageStore(): MessageListStore? = viewModel?.messageListStore
+
     fun setup(
         conversationID: String,
         config: MessageListConfigProtocol = ChatMessageListConfig(),

@@ -102,6 +102,7 @@ import kotlinx.coroutines.launch
 class ChatActivity : BaseActivity() {
 
     private var activityScope: CoroutineScope? = null
+    private var autoDeleteController: io.trtc.tuikit.chat.demo.xingdun.features.XingDunAutoDeleteController? = null
     private var groupPermissionJob: Job? = null
     private var groupPermissionRevision = 0L
     private val groupPermissionListener = object : V2TIMAdvancedMsgListener() {
@@ -366,6 +367,11 @@ class ChatActivity : BaseActivity() {
         applyColors(themeStore.themeState.value.currentTheme.tokens.color)
 
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        if (XingDunSessionManager.currentSession()?.features?.autoDelete == true) {
+            autoDeleteController = io.trtc.tuikit.chat.demo.xingdun.features.XingDunAutoDeleteController(
+                this, conversationID, requireNotNull(activityScope), requireNotNull(chatPageView.messageStore()),
+            )
+        }
         V2TIMManager.getMessageManager().addAdvancedMsgListener(groupPermissionListener)
 
         if (messageFavoriteEnabled) {
@@ -1024,6 +1030,7 @@ class ChatActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        autoDeleteController?.start()
         intent?.getStringExtra(EXTRA_CONVERSATION_ID)?.let(XingDunForegroundNotificationManager::enterConversation)
         if (::conversationID.isInitialized && ::chatPageView.isInitialized) {
             loadGroupRuntimePermissions()
@@ -1031,6 +1038,7 @@ class ChatActivity : BaseActivity() {
     }
 
     override fun onPause() {
+        autoDeleteController?.stop()
         intent?.getStringExtra(EXTRA_CONVERSATION_ID)?.let(XingDunForegroundNotificationManager::leaveConversation)
         super.onPause()
     }

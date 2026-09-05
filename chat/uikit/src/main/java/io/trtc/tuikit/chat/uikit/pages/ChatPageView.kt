@@ -101,6 +101,8 @@ class ChatPageView @JvmOverloads constructor(
         }
     }
 
+    fun messageStore(): io.trtc.tuikit.atomicxcore.api.message.MessageListStore? = messageListView.messageStore()
+
     fun setup(
         conversationID: String,
         locateMessage: MessageInfo? = null,

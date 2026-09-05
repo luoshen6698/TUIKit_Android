@@ -54,18 +54,19 @@ internal object XingDunForegroundNotificationManager {
     private val messageListener = object : V2TIMAdvancedMsgListener() {
         override fun onRecvNewMessage(message: V2TIMMessage?) {
             message ?: return
-            if (message.isSelf) return
             val conversationID = conversationID(message) ?: return
             if (message.elemType == V2TIMMessage.V2TIM_ELEM_TYPE_CUSTOM) {
                 val data = message.customElem?.data?.toString(Charsets.UTF_8)
                 XingDunCustomMessageParser.parse(data)?.let {
                     when (it.type) {
                         "auto_delete_config" -> XingDunAutoDeleteRepository.applyRemote(conversationID, it.values)
+                        "remote_delete" -> XingDunAutoDeleteRepository.applyRemoteDeletion(appContext, conversationID, it.values)
                         "pin_message" -> XingDunPinnedMessageRepository.applyRemote(conversationID, it.values)
                     }
                 }
             }
             val supported = isSupportedMessage(message)
+            if (message.isSelf) return
             val active = activeConversationID == conversationID
             val foreground = synchronized(this@XingDunForegroundNotificationManager) { startedActivityCount > 0 }
             if (!foreground || active || !supported) return

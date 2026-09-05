@@ -105,6 +105,10 @@ internal data class XingDunCustomMessage(
                     ?: context.getString(R.string.xingdun_updated)
             )
             "config_refresh" -> XingDunGroupConfigurationNoticeFormatter.text(context, values)
+            "auto_delete_config" -> context.getString(
+                if (values["ttl_seconds"]?.toIntOrNull() == 0) R.string.xingdun_auto_delete_disabled
+                else R.string.xingdun_auto_delete_updated
+            )
             else -> first("fallback_text", "text", "title") ?: context.getString(R.string.xingdun_custom_unsupported)
         }
     }
@@ -373,7 +377,7 @@ internal object XingDunCustomMessageParser {
         "video_call", "config_refresh", "auto_delete_config", "remote_delete", "pin_message",
         "read_receipt_summary", "report_notice", "workspace_application", "cs_control"
     )
-    private val hiddenTypes = setOf("auto_delete_config", "remote_delete", "pin_message", "read_receipt_summary")
+    private val hiddenTypes = setOf("remote_delete", "pin_message", "read_receipt_summary")
 
     fun parse(message: MessageInfo): XingDunCustomMessage? {
         if (message.messageType != MessageType.CUSTOM) return null
@@ -431,7 +435,7 @@ internal object XingDunCustomMessagePresentation {
     }
     private val groupConfigurationNoticeMatcher = MessageMatcher { message ->
         XingDunCustomMessageParser.parse(message)?.let {
-            it.type == "config_refresh" && !it.isControl
+            it.type in setOf("config_refresh", "auto_delete_config") && !it.isControl
         } == true
     }
     private val summaryProvider = MessageSummaryProvider { context ->

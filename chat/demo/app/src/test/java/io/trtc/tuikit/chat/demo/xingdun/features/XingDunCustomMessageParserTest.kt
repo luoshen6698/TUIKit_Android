@@ -105,7 +105,7 @@ class XingDunCustomMessageParserTest {
                 """{"type":"auto_delete_config","payload":{"ttl_seconds":604800,"version":5,"updated_at":"2026-08-27T10:00:00+08:00"}}"""
             )
         )
-        assertTrue(message.isControl)
+        assertFalse(message.isControl)
         assertEquals("604800", message.values["ttl_seconds"])
         assertEquals("5", message.values["version"])
     }
