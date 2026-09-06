@@ -26,6 +26,8 @@ import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.settings.SelfDetailActivity
 import io.trtc.tuikit.chat.demo.settings.XingDunSystemSettingsActivity
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.main.XingDunJoinedGroupLoadStatus
+import io.trtc.tuikit.chat.demo.xingdun.main.XingDunMessageFirstFramePreloader
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import io.trtc.tuikit.chat.uikit.pages.PageHeaderView
 import kotlinx.coroutines.CoroutineScope
@@ -221,7 +223,8 @@ class XingDunMinePageView @JvmOverloads constructor(
             combine(
                 ContactStore.shared.state.friendList,
                 GroupStore.shared.state.joinedGroupList,
-            ) { friends, groups -> friends.size to groups.size }
+                XingDunMessageFirstFramePreloader.joinedGroupLoadState,
+            ) { friends, groups, groupLoadState -> Triple(friends.size, groups.size, groupLoadState) }
                 .collectLatest { renderStats(favoriteCount) }
         }
         scope?.launch { refreshStats() }
@@ -335,7 +338,14 @@ class XingDunMinePageView @JvmOverloads constructor(
         val friendCount = runCatching { ContactStore.shared.state.friendList.value.size }.getOrDefault(0)
         val groupCount = runCatching { GroupStore.shared.state.joinedGroupList.value.size }.getOrDefault(0)
         friends.text = context.getString(R.string.xingdun_metric_friends, friendCount)
-        groups.text = context.getString(R.string.xingdun_metric_groups, groupCount)
+        groups.text = if (
+            XingDunMessageFirstFramePreloader.joinedGroupLoadStatus(XingDunSessionManager.currentSession()) ==
+            XingDunJoinedGroupLoadStatus.SUCCEEDED
+        ) {
+            context.getString(R.string.xingdun_metric_groups, groupCount)
+        } else {
+            context.getString(R.string.xingdun_metric_groups_pending)
+        }
         favorites.text = context.getString(R.string.xingdun_metric_favorites, favoriteCount ?: 0)
         favorites.alpha = if (XingDunSessionManager.currentSession()?.features?.messageFavorite == true) 1f else 0.55f
     }

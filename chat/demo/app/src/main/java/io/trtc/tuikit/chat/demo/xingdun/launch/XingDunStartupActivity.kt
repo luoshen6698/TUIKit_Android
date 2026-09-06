@@ -155,7 +155,7 @@ class XingDunStartupActivity : AppCompatActivity() {
         MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, restoredSession.timUserId)
         XingDunCredentialRecoveryCoordinator.onAuthenticated()
         updateStartupStatus(R.string.xingdun_startup_loading_messages)
-        XingDunMessageFirstFramePreloader.preload(this)
+        XingDunMessageFirstFramePreloader.preload(this, restoredSession)
         routeToMessages()
     }
 

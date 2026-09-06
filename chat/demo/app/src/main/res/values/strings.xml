@@ -1057,6 +1057,7 @@
     <string name="xingdun_share_link_copied">Share link copied.</string>
     <string name="xingdun_metric_friends">%1$d\nFriends</string>
     <string name="xingdun_metric_groups">%1$d\nGroups</string>
+    <string name="xingdun_metric_groups_pending">—\nGroups</string>
     <string name="xingdun_metric_favorites">%1$d\nFavorites</string>
     <string name="xingdun_login_username_format">Login username: %1$s</string>
     <string name="xingdun_share_poster">Share poster</string>

@@ -11,6 +11,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
+import androidx.lifecycle.lifecycleScope
 import com.tencent.mmkv.MMKV
 import com.tencent.qcloud.tuicore.TUILogin
 import io.trtc.tuikit.atomicx.theme.Theme
@@ -23,6 +24,7 @@ import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
+import io.trtc.tuikit.chat.demo.xingdun.main.XingDunMessageFirstFramePreloader
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
@@ -117,10 +119,16 @@ abstract class BaseLoginActivity : BaseActivity() {
                     XingDunPushManager.syncDeviceRegistration()
                     MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, userId)
                     XingDunCredentialRecoveryCoordinator.onAuthenticated()
-                    onSuccess?.invoke()
-                    startActivity(Intent(this@BaseLoginActivity, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    })
+                    val session = XingDunSessionManager.currentSession()
+                    lifecycleScope.launch {
+                        if (session != null) {
+                            XingDunMessageFirstFramePreloader.preload(this@BaseLoginActivity, session)
+                        }
+                        onSuccess?.invoke()
+                        startActivity(Intent(this@BaseLoginActivity, MainActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                        })
+                    }
                 }
 
                 override fun onFailure(code: Int, desc: String) {

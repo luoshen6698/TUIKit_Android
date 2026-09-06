@@ -1049,6 +1049,7 @@
     <string name="xingdun_share_link_copied">分享链接已复制。</string>
     <string name="xingdun_metric_friends">%1$d\n好友</string>
     <string name="xingdun_metric_groups">%1$d\n群聊</string>
+    <string name="xingdun_metric_groups_pending">—\n群聊</string>
     <string name="xingdun_metric_favorites">%1$d\n收藏</string>
     <string name="xingdun_login_username_format">登录用户名：%1$s</string>
     <string name="xingdun_share_poster">分享海报</string>

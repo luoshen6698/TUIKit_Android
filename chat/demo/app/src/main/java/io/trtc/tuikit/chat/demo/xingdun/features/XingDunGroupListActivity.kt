@@ -34,6 +34,8 @@ import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMetadata
+import io.trtc.tuikit.chat.demo.xingdun.main.XingDunJoinedGroupLoadStatus
+import io.trtc.tuikit.chat.demo.xingdun.main.XingDunMessageFirstFramePreloader
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import kotlinx.coroutines.flow.collectLatest
@@ -65,15 +67,26 @@ class XingDunGroupListActivity : BaseActivity() {
     private var isLoading = true
     private var loadFailed = false
     private var metadataFailed = false
+    private var refreshRequestInFlight = false
     private var observedGroupSignature: String? = null
     private var pullDownStartY = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (isFinishing) return
+        groups = groupStore.state.joinedGroupList.value
+        val preloadStatus = XingDunMessageFirstFramePreloader.joinedGroupLoadStatus(
+            XingDunSessionManager.currentSession(),
+        )
+        isLoading = groups.isEmpty() && preloadStatus != XingDunJoinedGroupLoadStatus.SUCCEEDED
         buildPage()
         observeStores()
-        refresh()
+        render()
+        when (preloadStatus) {
+            XingDunJoinedGroupLoadStatus.LOADING -> Unit
+            XingDunJoinedGroupLoadStatus.SUCCEEDED -> refresh(showLoading = false)
+            else -> refresh(showLoading = true)
+        }
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -258,23 +271,53 @@ class XingDunGroupListActivity : BaseActivity() {
                 render()
             }
         }
+        lifecycleScope.launch {
+            XingDunMessageFirstFramePreloader.joinedGroupLoadState.collectLatest {
+                when (XingDunMessageFirstFramePreloader.joinedGroupLoadStatus(XingDunSessionManager.currentSession())) {
+                    XingDunJoinedGroupLoadStatus.SUCCEEDED -> {
+                        isLoading = false
+                        loadFailed = false
+                        swipeRefresh.isRefreshing = false
+                    }
+                    XingDunJoinedGroupLoadStatus.FAILED -> {
+                        isLoading = false
+                        loadFailed = groups.isEmpty()
+                        swipeRefresh.isRefreshing = false
+                    }
+                    else -> Unit
+                }
+                render()
+            }
+        }
     }
 
-    private fun refresh() {
-        if (swipeRefresh.isRefreshing && isLoading) return
-        isLoading = true
+    private fun refresh(showLoading: Boolean = true) {
+        if (refreshRequestInFlight) return
+        refreshRequestInFlight = true
+        isLoading = showLoading
         loadFailed = false
         metadataFailed = false
-        swipeRefresh.isRefreshing = true
+        swipeRefresh.isRefreshing = showLoading
         render()
+        val session = XingDunSessionManager.currentSession()
+        if (session != null) {
+            XingDunMessageFirstFramePreloader.beginJoinedGroupRefresh(
+                session,
+                preserveLoaded = !showLoading,
+            )
+        }
         groupStore.loadJoinedGroups(object : CompletionHandler {
             override fun onSuccess() = runOnUiThread {
+                session?.let { XingDunMessageFirstFramePreloader.finishJoinedGroupRefresh(it, true) }
+                refreshRequestInFlight = false
                 isLoading = false
                 swipeRefresh.isRefreshing = false
                 render()
             }
 
             override fun onFailure(code: Int, desc: String) = runOnUiThread {
+                session?.let { XingDunMessageFirstFramePreloader.finishJoinedGroupRefresh(it, false) }
+                refreshRequestInFlight = false
                 isLoading = false
                 loadFailed = true
                 swipeRefresh.isRefreshing = false
