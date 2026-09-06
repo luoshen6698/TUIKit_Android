@@ -66,6 +66,7 @@ class UserPickerView @JvmOverloads constructor(
     private var showCheckbox: Boolean = true
     private var showIdentifierSubtitle: Boolean = false
     private var avatarShape: Avatar.AvatarShape = Avatar.AvatarShape.Round
+    private var alphabeticalGroupingEnabled: Boolean = true
 
     private var onSelectedChangedListener: ((List<UserPickerData<Any?>>) -> Unit)? = null
     private var onMaxCountExceedListener: ((List<UserPickerData<Any?>>) -> Unit)? = null
@@ -137,16 +138,22 @@ class UserPickerView @JvmOverloads constructor(
         if (UserPickerDataSourcePolicy.shouldResetReachEnd(previousKeys, dataSourceRaw.map { it.key })) {
             hasReachedEnd = false
         }
-        groups = groupAndSort(dataSourceRaw)
+        groups = buildGroups()
         rebuildFlatItems()
 
         selectionState.onDataSourceChanged()
         rebuildAdapter()
-
-        val letters = groups.map { it.letter }
-        indexBar.setLetters(letters)
-        indexBar.visibility = if (letters.isNotEmpty()) VISIBLE else GONE
+        updateIndexBar()
         scheduleReachEndCheck()
+    }
+
+    fun setAlphabeticalGroupingEnabled(enabled: Boolean) {
+        if (alphabeticalGroupingEnabled == enabled) return
+        alphabeticalGroupingEnabled = enabled
+        groups = buildGroups()
+        rebuildFlatItems()
+        rebuildAdapter()
+        updateIndexBar()
     }
 
     fun setDefaultSelectedItems(keys: List<String>) {
@@ -363,7 +370,19 @@ class UserPickerView @JvmOverloads constructor(
         }
     }
 
+    private fun buildGroups(): List<PickerGroup> {
+        if (alphabeticalGroupingEnabled) return groupAndSort(dataSourceRaw)
+        return if (dataSourceRaw.isEmpty()) emptyList() else listOf(PickerGroup("", dataSourceRaw))
+    }
+
     private fun rebuildFlatItems() {
+        if (!alphabeticalGroupingEnabled) {
+            flatItems = groups.flatMap { group ->
+                group.items.map { item -> FlatItem.UserItem("", item) }
+            }
+            groupRanges = emptyMap()
+            return
+        }
         val items = mutableListOf<FlatItem>()
         val ranges = mutableMapOf<String, Int>()
 
@@ -377,6 +396,12 @@ class UserPickerView @JvmOverloads constructor(
 
         flatItems = items
         groupRanges = ranges
+    }
+
+    private fun updateIndexBar() {
+        val letters = if (alphabeticalGroupingEnabled) groups.map { it.letter } else emptyList()
+        indexBar.setLetters(letters)
+        indexBar.visibility = if (letters.isNotEmpty()) VISIBLE else GONE
     }
 
     private fun rebuildAdapter() {
@@ -399,6 +424,7 @@ class UserPickerView @JvmOverloads constructor(
         }
 
         override fun onDrawOver(c: Canvas, parent: RecyclerView, state: RecyclerView.State) {
+            if (!alphabeticalGroupingEnabled) return
             val lm = parent.layoutManager as? LinearLayoutManager ?: return
             val firstVisiblePos = lm.findFirstVisibleItemPosition()
             if (firstVisiblePos == RecyclerView.NO_POSITION) return
