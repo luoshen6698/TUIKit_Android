@@ -75,9 +75,17 @@ class XingDunGroupAvatarActivity : BaseActivity() {
     private val avatarURL by lazy { intent.getStringExtra(EXTRA_AVATAR_URL) }
     private val isDebugPreview by lazy { intent.getBooleanExtra(EXTRA_DEBUG_PREVIEW, false) }
 
-    private val avatarPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri ?: return@registerForActivityResult
-        prepareSelectedAvatar(uri)
+    private val avatarPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+        result.data?.data?.let(::prepareSelectedAvatar)
+    }
+
+    private fun openAvatarPicker() {
+        avatarPicker.launch(
+            Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
+                type = "image/*"
+            },
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -164,7 +172,7 @@ class XingDunGroupAvatarActivity : BaseActivity() {
         previewCard.addView(preview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 112.dp()))
         previewCard.addView(Button(this).apply {
             setText(R.string.xingdun_group_info_choose_photo)
-            setOnClickListener { if (!isSaving) avatarPicker.launch("image/*") }
+            setOnClickListener { if (!isSaving) openAvatarPicker() }
         })
         content.addView(previewCard, matchWrap())
 
