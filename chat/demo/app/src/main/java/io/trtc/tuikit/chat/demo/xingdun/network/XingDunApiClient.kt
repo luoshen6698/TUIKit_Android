@@ -38,6 +38,14 @@ class XingDunApiClient(
         .callTimeout(45, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
+    private val authenticatedRequestExecutor = XingDunAuthenticatedRequestExecutor()
+
+    fun configureAuthenticatedSessionRecovery(
+        recoverSession: suspend (XingDunStoredSession) -> XingDunStoredSession?,
+        rejectSession: (XingDunStoredSession) -> Unit,
+    ) {
+        authenticatedRequestExecutor.configure(recoverSession, rejectSession)
+    }
 
     suspend fun resolveEnterprise(
         companyCode: String?,
@@ -124,7 +132,8 @@ class XingDunApiClient(
             "auth/imCredential",
             emptyMap<String, String>(),
             session,
-            responseType
+            responseType,
+            allowAuthenticatedRecovery = false,
         )
         return response.resolved()
     }
@@ -138,7 +147,7 @@ class XingDunApiClient(
         val urlBuilder = endpointUrl(session.apiBaseUrl, path).toHttpUrl().newBuilder()
         query.forEach { (key, value) -> if (value != null) urlBuilder.addQueryParameter(key, value) }
         val request = requestBuilder(urlBuilder.build().toString(), session).get().build()
-        return execute(request, responseType)
+        return execute(request, responseType, session)
     }
 
     suspend fun <T> getNullable(
@@ -150,7 +159,7 @@ class XingDunApiClient(
         val urlBuilder = endpointUrl(session.apiBaseUrl, path).toHttpUrl().newBuilder()
         query.forEach { (key, value) -> if (value != null) urlBuilder.addQueryParameter(key, value) }
         val request = requestBuilder(urlBuilder.build().toString(), session).get().build()
-        return executeNullable(request, responseType)
+        return executeNullable(request, responseType, session)
     }
 
     suspend fun <T> publicGet(path: String, query: Map<String, String?>, responseType: Type): T {
@@ -170,7 +179,7 @@ class XingDunApiClient(
     suspend fun postEmpty(session: XingDunStoredSession, path: String, body: Any) {
         val requestBody = gson.toJson(body).toRequestBody(JSON_MEDIA_TYPE)
         val request = requestBuilder(endpointUrl(session.apiBaseUrl, path), session).post(requestBody).build()
-        executeAllowEmpty(request)
+        executeAllowEmpty(request, session)
     }
 
     suspend fun postMultipartEmpty(
@@ -179,7 +188,7 @@ class XingDunApiClient(
         fields: Map<String, Any?>,
         files: List<XingDunUploadFile>
     ) {
-        executeAllowEmpty(multipartRequest(session, path, fields, files))
+        executeAllowEmpty(multipartRequest(session, path, fields, files), session)
     }
 
     suspend fun <T> postMultipart(
@@ -188,7 +197,7 @@ class XingDunApiClient(
         fields: Map<String, Any?>,
         files: List<XingDunUploadFile>,
         responseType: Type
-    ): T = execute(multipartRequest(session, path, fields, files), responseType)
+    ): T = execute(multipartRequest(session, path, fields, files), responseType, session)
 
     private fun multipartRequest(
         session: XingDunStoredSession,
@@ -220,7 +229,7 @@ class XingDunApiClient(
     suspend fun deleteEmpty(session: XingDunStoredSession, path: String, body: Any) {
         val requestBody = gson.toJson(body).toRequestBody(JSON_MEDIA_TYPE)
         val request = requestBuilder(endpointUrl(session.apiBaseUrl, path), session).delete(requestBody).build()
-        executeAllowEmpty(request)
+        executeAllowEmpty(request, session)
     }
 
     private suspend fun <T> post(
@@ -228,11 +237,16 @@ class XingDunApiClient(
         path: String,
         body: Any,
         session: XingDunStoredSession?,
-        responseType: Type
+        responseType: Type,
+        allowAuthenticatedRecovery: Boolean = true,
     ): T {
         val requestBody = gson.toJson(body).toRequestBody(JSON_MEDIA_TYPE)
         val request = requestBuilder(endpointUrl(baseUrl, path), session).post(requestBody).build()
-        return execute(request, responseType)
+        return execute(
+            request,
+            responseType,
+            session.takeIf { allowAuthenticatedRecovery },
+        )
     }
 
     private fun requestBuilder(url: String, session: XingDunStoredSession?): Request.Builder {
@@ -251,7 +265,17 @@ class XingDunApiClient(
         return builder
     }
 
-    private suspend fun <T> execute(request: Request, responseType: Type): T = withContext(Dispatchers.IO) {
+    private suspend fun <T> execute(
+        request: Request,
+        responseType: Type,
+        session: XingDunStoredSession? = null,
+    ): T = authenticatedRequestExecutor.execute(
+        session = session,
+        initialRequest = { executeOnce(request, responseType) },
+        replayRequest = { refreshed -> executeOnce(replayRequest(request, refreshed), responseType) },
+    )
+
+    private suspend fun <T> executeOnce(request: Request, responseType: Type): T = withContext(Dispatchers.IO) {
         httpClient.newCall(request).execute().use { response ->
             val payload = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
@@ -275,7 +299,17 @@ class XingDunApiClient(
         }
     }
 
-    private suspend fun <T> executeNullable(request: Request, responseType: Type): T? = withContext(Dispatchers.IO) {
+    private suspend fun <T> executeNullable(
+        request: Request,
+        responseType: Type,
+        session: XingDunStoredSession? = null,
+    ): T? = authenticatedRequestExecutor.execute(
+        session = session,
+        initialRequest = { executeNullableOnce(request, responseType) },
+        replayRequest = { refreshed -> executeNullableOnce(replayRequest(request, refreshed), responseType) },
+    )
+
+    private suspend fun <T> executeNullableOnce(request: Request, responseType: Type): T? = withContext(Dispatchers.IO) {
         httpClient.newCall(request).execute().use { response ->
             val payload = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw apiException(payload, response.code)
@@ -292,7 +326,16 @@ class XingDunApiClient(
         }
     }
 
-    private suspend fun executeAllowEmpty(request: Request): Unit = withContext(Dispatchers.IO) {
+    private suspend fun executeAllowEmpty(
+        request: Request,
+        session: XingDunStoredSession? = null,
+    ): Unit = authenticatedRequestExecutor.execute(
+        session = session,
+        initialRequest = { executeAllowEmptyOnce(request) },
+        replayRequest = { refreshed -> executeAllowEmptyOnce(replayRequest(request, refreshed)) },
+    )
+
+    private suspend fun executeAllowEmptyOnce(request: Request): Unit = withContext(Dispatchers.IO) {
         httpClient.newCall(request).execute().use { response ->
             val payload = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw apiException(payload, response.code)
@@ -308,6 +351,15 @@ class XingDunApiClient(
                 )
             }
         }
+    }
+
+    private fun replayRequest(request: Request, session: XingDunStoredSession): Request {
+        if (!sessionStore.isBoundToCurrentEnterprise(session)) {
+            throw IllegalStateException(appContext.getString(R.string.xingdun_error_company_mismatch))
+        }
+        return request.newBuilder()
+            .header("Authorization", "${session.tokenType} ${session.accessToken}")
+            .build()
     }
 
     private fun apiException(payload: String, status: Int): XingDunApiException {

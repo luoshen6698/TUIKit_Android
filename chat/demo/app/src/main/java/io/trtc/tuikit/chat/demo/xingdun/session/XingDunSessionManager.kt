@@ -2,6 +2,8 @@ package io.trtc.tuikit.chat.demo.xingdun.session
 
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.StringRes
 import io.trtc.tuikit.chat.app.BuildConfig
 import io.trtc.tuikit.chat.app.R
@@ -33,12 +35,22 @@ object XingDunSessionManager {
     private lateinit var client: XingDunApiClient
     private lateinit var appContext: Context
     private val refreshMutex = Mutex()
+    private lateinit var accessTokenRecoveryCoordinator: XingDunAccessTokenRecoveryCoordinator
 
     fun initialize(context: Context) {
         if (::store.isInitialized) return
         appContext = context.applicationContext
         store = XingDunSessionStore(context.applicationContext)
         client = XingDunApiClient(context.applicationContext, store)
+        accessTokenRecoveryCoordinator = XingDunAccessTokenRecoveryCoordinator(
+            loadCurrentSession = store::loadBoundSession,
+            refreshCurrentSession = ::refreshSessionAfterUnauthorized,
+            mutex = refreshMutex,
+        )
+        client.configureAuthenticatedSessionRecovery(
+            recoverSession = accessTokenRecoveryCoordinator::recover,
+            rejectSession = ::rejectSessionIfCurrent,
+        )
     }
 
     fun currentSession(): XingDunStoredSession? = if (::store.isInitialized) store.loadBoundSession() else null
@@ -277,27 +289,36 @@ object XingDunSessionManager {
     ): XingDunStoredSession? = refreshMutex.withLock {
         val existing = store.loadBoundSession() ?: return null
         val now = System.currentTimeMillis()
-        val accessAndIMAreUsable = existing.accessExpiresAtMillis > now + EXPIRY_SAFETY_MILLIS &&
-            existing.userSigExpiresAtMillis > now + EXPIRY_SAFETY_MILLIS
-        if (preferCachedCredentials && accessAndIMAreUsable) return existing
-        val canRefresh = !existing.refreshToken.isNullOrBlank() &&
-            (existing.refreshExpiresAtMillis ?: 0L) > now
-        if (!canRefresh) {
-            if (accessAndIMAreUsable) return existing
-            store.clearSession()
-            return null
-        }
-        return try {
-            val response = client.refresh(existing)
-            persist(existing, response)
-        } catch (error: XingDunApiException) {
-            if (error.isUnauthorized) {
-                store.clear()
+        val accessAndIMAreUsable =
+            existing.accessExpiresAtMillis > now + XingDunSessionRestorePolicy.EXPIRY_SAFETY_MILLIS &&
+                existing.userSigExpiresAtMillis > now + XingDunSessionRestorePolicy.EXPIRY_SAFETY_MILLIS
+        when (XingDunSessionRestorePolicy.plan(existing, now, preferCachedCredentials)) {
+            XingDunSessionRestorePlan.USE_CACHED -> existing
+            XingDunSessionRestorePlan.EXPIRED -> {
+                store.clearSession()
                 null
-            } else if (retainCachedCredentialsOnFailure && accessAndIMAreUsable) {
-                existing
-            } else {
-                throw error
+            }
+            XingDunSessionRestorePlan.REFRESH_IM_CREDENTIAL -> try {
+                refreshIMCredentialLocked(existing)
+            } catch (error: XingDunApiException) {
+                if (error.isUnauthorized) {
+                    store.clearSession()
+                    null
+                } else {
+                    throw error
+                }
+            }
+            XingDunSessionRestorePlan.REFRESH_SESSION -> try {
+                persist(existing, client.refresh(existing))
+            } catch (error: XingDunApiException) {
+                if (error.isUnauthorized) {
+                    store.clearSession()
+                    null
+                } else if (retainCachedCredentialsOnFailure && accessAndIMAreUsable) {
+                    existing
+                } else {
+                    throw error
+                }
             }
         }
     }
@@ -305,14 +326,43 @@ object XingDunSessionManager {
     suspend fun refreshIMCredential(): XingDunStoredSession = refreshMutex.withLock {
         val existing = store.loadBoundSession()
             ?: throw XingDunApiException(401, 401, message(R.string.xingdun_session_expired))
+        refreshIMCredentialLocked(existing)
+    }
+
+    private suspend fun refreshIMCredentialLocked(existing: XingDunStoredSession): XingDunStoredSession {
         val credential = client.refreshIMCredential(existing)
         validateIMCredential(credential, existing.sdkAppId)
         require(credential.userId == existing.timUserId) { message(R.string.xingdun_error_company_mismatch) }
-        existing.copy(
+        return existing.copy(
             timUserId = credential.userId,
             userSig = credential.userSig,
             userSigExpiresAtMillis = credentialExpiryMillis(credential)
         ).also(store::save)
+    }
+
+    private suspend fun refreshSessionAfterUnauthorized(existing: XingDunStoredSession): XingDunStoredSession? {
+        val now = System.currentTimeMillis()
+        val canRefresh = !existing.refreshToken.isNullOrBlank() &&
+            (existing.refreshExpiresAtMillis ?: 0L) > now
+        if (!canRefresh) return null
+        return try {
+            persist(existing, client.refresh(existing))
+        } catch (error: XingDunApiException) {
+            if (error.isUnauthorized) null else throw error
+        }
+    }
+
+    private fun rejectSessionIfCurrent(rejected: XingDunStoredSession) {
+        val current = store.loadBoundSession() ?: return
+        if (!XingDunAccessTokenRecoveryCoordinator.sameIdentity(current, rejected) ||
+            current.accessToken != rejected.accessToken
+        ) {
+            return
+        }
+        store.clearSession()
+        Handler(Looper.getMainLooper()).post {
+            XingDunCredentialRecoveryCoordinator.redirectToLogin()
+        }
     }
 
     suspend fun checkVersion(): XingDunVersionCheckResult = client.publicGet(
@@ -464,5 +514,4 @@ object XingDunSessionManager {
 
     private fun message(@StringRes id: Int): String = appContext.getString(id)
 
-    private const val EXPIRY_SAFETY_MILLIS = 60_000L
 }

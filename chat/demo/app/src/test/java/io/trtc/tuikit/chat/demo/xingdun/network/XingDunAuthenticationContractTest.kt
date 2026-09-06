@@ -61,14 +61,21 @@ class XingDunAuthenticationContractTest {
     }
 
     @Test
-    fun registrationAuthenticationResponseMayOmitRefreshTokenLikeIosContract() {
+    fun registrationAuthenticationResponseParses180DayRefreshCredential() {
         val response = gson.fromJson(
-            """{"access_token":"access","expires_in":7200,"company_code":"xc2026"}""",
+            """{
+                "access_token":"access",
+                "expires_in":604800,
+                "refresh_token":"refresh",
+                "refresh_expires_in":15552000,
+                "company_code":"xc2026"
+            }""".trimIndent(),
             XingDunAuthResponse::class.java
         )
 
         assertEquals("access", response.accessToken)
-        assertEquals(null, response.refreshToken)
+        assertEquals("refresh", response.refreshToken)
+        assertEquals(15_552_000L, response.refreshExpiresIn)
     }
 
     @Test
