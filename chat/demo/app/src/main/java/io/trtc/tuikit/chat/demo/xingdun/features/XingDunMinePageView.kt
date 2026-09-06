@@ -21,6 +21,7 @@ import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.login.UserProfile
 import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.settings.SelfDetailActivity
 import io.trtc.tuikit.chat.demo.settings.XingDunSystemSettingsActivity
@@ -35,6 +36,11 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+
+internal fun shouldOpenCustomerServiceChat(
+    isKnownFriend: Boolean,
+    relationship: String?,
+): Boolean = isKnownFriend || relationship?.trim() in setOf("friend", "blocked")
 
 /** iOS-aligned root for the My tab. Detailed settings remain in child screens. */
 class XingDunMinePageView @JvmOverloads constructor(
@@ -295,7 +301,27 @@ class XingDunMinePageView @JvmOverloads constructor(
                         ?.let { runCatching { it.asBoolean }.getOrNull() }
                     ?: (official != null)
                 if (enabled && ordinaryEntryEnabled && official != null) {
-                    XingDunFeatureActivity.start(context, XingDunFeatureActivity.MODE_FRIEND_SEARCH, official)
+                    val isKnownFriend = ContactStore.shared.state.friendList.value.any { it.userID == official }
+                    val relationship = if (isKnownFriend) {
+                        "friend"
+                    } else {
+                        runCatching {
+                            XingDunSessionManager.apiClient().getNullable<JsonObject>(
+                                session,
+                                "user/searchForFriend",
+                                mapOf("keyword" to official),
+                                JsonObject::class.java,
+                            )
+                        }.getOrNull()
+                            ?.get("relationship_status")
+                            ?.takeUnless { it.isJsonNull }
+                            ?.let { runCatching { it.asString }.getOrNull() }
+                    }
+                    if (shouldOpenCustomerServiceChat(isKnownFriend, relationship)) {
+                        ChatActivity.start(context, "c2c_$official")
+                    } else {
+                        XingDunFeatureActivity.start(context, XingDunFeatureActivity.MODE_FRIEND_SEARCH, official)
+                    }
                 } else {
                     Toast.makeText(context, R.string.xingdun_customer_service_not_configured, Toast.LENGTH_SHORT).show()
                 }
