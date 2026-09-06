@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Typeface
+import android.graphics.Outline
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.format.DateFormat
@@ -11,6 +12,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.widget.Button
 import android.widget.DatePicker
 import android.widget.FrameLayout
@@ -22,6 +24,8 @@ import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import io.trtc.tuikit.atomicx.common.imageloader.ImageLoader
+import io.trtc.tuikit.atomicx.common.imageloader.ImageOptions
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
@@ -41,6 +45,8 @@ import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageElement
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageViewer
 import io.trtc.tuikit.chat.uikit.components.search.utils.getMessageAbstract
 import io.trtc.tuikit.chat.uikit.components.search.utils.messageSender
+import java.io.File
+import java.net.URI
 import java.util.Calendar
 import java.util.Date
 import kotlinx.coroutines.CoroutineScope
@@ -279,8 +285,8 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     private fun messageRow(message: MessageInfo): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        minimumHeight = 72.dp()
-        setPadding(14.dp(), 10.dp(), 14.dp(), 10.dp())
+        minimumHeight = if (message.isMediaMessage()) 76.dp() else 72.dp()
+        setPadding(14.dp(), 8.dp(), 14.dp(), 8.dp())
         background = rounded(colors().bgColorOperate, 0f)
         setOnClickListener {
             if (message.messageType == MessageType.IMAGE || message.messageType == MessageType.VIDEO) {
@@ -290,20 +296,19 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
                 finish()
             }
         }
-        addView(ImageView(this@XingDunChatHistoryCategoryActivity).apply {
-            setImageResource(iconFor(message.messageType))
-            imageTintList = ColorStateList.valueOf(BRAND)
-            setPadding(10.dp(), 10.dp(), 10.dp(), 10.dp())
-            background = rounded(BRAND_SOFT, 22f)
-        }, LinearLayout.LayoutParams(44.dp(), 44.dp()))
+        addView(messageThumbnail(message), LinearLayout.LayoutParams(60.dp(), 60.dp()))
         addView(LinearLayout(this@XingDunChatHistoryCategoryActivity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(12.dp(), 0, 0, 0)
             addView(TextView(this@XingDunChatHistoryCategoryActivity).apply {
-                text = rowTitle(message)
+                text = if (message.isMediaMessage()) {
+                    message.messageSender.takeIf { it.isNotBlank() } ?: rowTitle(message)
+                } else {
+                    rowTitle(message)
+                }
                 maxLines = 2
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-                setTypeface(typeface, Typeface.BOLD)
+                if (!message.isMediaMessage()) setTypeface(typeface, Typeface.BOLD)
                 tag = TAG_PRIMARY
             }, matchWrap())
             addView(TextView(this@XingDunChatHistoryCategoryActivity).apply {
@@ -315,6 +320,70 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
     }
 
+    private fun messageThumbnail(message: MessageInfo): View {
+        if (!message.isMediaMessage()) {
+            return ImageView(this).apply {
+                setImageResource(iconFor(message.messageType))
+                imageTintList = ColorStateList.valueOf(BRAND)
+                setPadding(14.dp(), 14.dp(), 14.dp(), 14.dp())
+                background = rounded(BRAND_SOFT, 30f)
+            }
+        }
+
+        val container = FrameLayout(this)
+        val image = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setImageResource(io.trtc.tuikit.chat.uikit.R.drawable.message_list_image_error_image)
+            outlineProvider = object : ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: Outline) {
+                    outline.setRoundRect(0, 0, view.width, view.height, 8.dp().toFloat())
+                }
+            }
+            clipToOutline = true
+        }
+        container.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+
+        val source = thumbnailSource(message)
+        ImageLoader.load(
+            this,
+            image,
+            source,
+            ImageOptions.Builder()
+                .setPlaceImage(io.trtc.tuikit.chat.uikit.R.drawable.message_list_image_error_image)
+                .setErrorImage(io.trtc.tuikit.chat.uikit.R.drawable.message_list_image_error_image)
+                .setRoundRadius(8)
+                .build(),
+        )
+
+        if (message.messageType == MessageType.VIDEO) {
+            container.addView(ImageView(this).apply {
+                setImageResource(io.trtc.tuikit.chat.uikit.R.drawable.image_viewer_video_play_circle)
+                contentDescription = getString(R.string.xingdun_chat_history_video)
+            }, FrameLayout.LayoutParams(28.dp(), 28.dp(), Gravity.CENTER))
+        }
+        return container
+    }
+
+    private fun thumbnailSource(message: MessageInfo): String? = when (val payload = message.messagePayload) {
+        is ImageMessagePayload -> XingDunChatHistoryMediaPolicy.firstUsableSource(
+            payload.thumbImagePath,
+            payload.largeImagePath,
+            payload.originalImagePath,
+            payload.thumbImageURL,
+            payload.largeImageURL,
+            payload.originalImageURL,
+        )
+
+        is VideoMessagePayload -> XingDunChatHistoryMediaPolicy.firstUsableSource(
+            payload.videoSnapshotPath,
+            payload.videoSnapshotURL,
+            payload.videoPath,
+            payload.videoURL,
+        )
+
+        else -> null
+    }
+
     private fun rowTitle(message: MessageInfo): String = when (val payload = message.messagePayload) {
         is FileMessagePayload -> payload.fileName?.takeIf { it.isNotBlank() }
             ?: getString(R.string.xingdun_chat_history_file)
@@ -324,23 +393,32 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     }
 
     private fun showMedia(selected: MessageInfo) {
-        val mediaMessages = messages.filter { it.messageType == MessageType.IMAGE || it.messageType == MessageType.VIDEO }
-        val entries = mediaMessages.mapNotNull(::imageElement)
-        val index = mediaMessages.indexOfFirst { it.msgID == selected.msgID }.coerceAtLeast(0)
-        if (entries.isNotEmpty()) ImageViewer.view(entries, index.coerceAtMost(entries.lastIndex), null)
+        val entries = messages.mapNotNull { message -> imageElement(message)?.let { message to it } }
+        val index = entries.indexOfFirst { (message) -> message.msgID == selected.msgID }.coerceAtLeast(0)
+        if (entries.isNotEmpty()) ImageViewer.view(entries.map { it.second }, index.coerceAtMost(entries.lastIndex), null)
     }
 
     private fun imageElement(message: MessageInfo): ImageElement? {
         return when (val payload = message.messagePayload) {
             is ImageMessagePayload -> {
-                val source = listOf(payload.originalImagePath, payload.originalImageURL, payload.largeImagePath, payload.largeImageURL)
-                    .firstOrNull { !it.isNullOrBlank() } ?: return null
+                val source = XingDunChatHistoryMediaPolicy.firstUsableSource(
+                    payload.originalImagePath,
+                    payload.largeImagePath,
+                    payload.thumbImagePath,
+                    payload.originalImageURL,
+                    payload.largeImageURL,
+                    payload.thumbImageURL,
+                ) ?: return null
                 ImageElement(source, 0, payload.originalImageWidth, payload.originalImageHeight, null, message.msgID)
             }
             is VideoMessagePayload -> {
-                val cover = listOf(payload.videoSnapshotPath, payload.videoSnapshotURL).firstOrNull { !it.isNullOrBlank() }
-                    ?: return null
-                val video = listOf(payload.videoPath, payload.videoURL).firstOrNull { !it.isNullOrBlank() }
+                val cover = XingDunChatHistoryMediaPolicy.firstUsableSource(
+                    payload.videoSnapshotPath,
+                    payload.videoSnapshotURL,
+                    payload.videoPath,
+                    payload.videoURL,
+                ) ?: return null
+                val video = XingDunChatHistoryMediaPolicy.firstUsableSource(payload.videoPath, payload.videoURL)
                 ImageElement(cover, 1, payload.videoSnapshotWidth, payload.videoSnapshotHeight, video, message.msgID)
             }
             else -> null
@@ -428,8 +506,15 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     private fun messageTime(message: MessageInfo): String {
         val raw = message.timestamp ?: return ""
         val millis = if (raw < 10_000_000_000L) raw * 1000L else raw
-        return DateFormat.getMediumDateFormat(this).format(Date(millis))
+        return if (message.isMediaMessage()) {
+            DateFormat.format("MM/dd HH:mm", Date(millis)).toString()
+        } else {
+            DateFormat.getMediumDateFormat(this).format(Date(millis))
+        }
     }
+
+    private fun MessageInfo.isMediaMessage(): Boolean =
+        messageType == MessageType.IMAGE || messageType == MessageType.VIDEO
 
     private fun iconFor(type: MessageType): Int = when (type) {
         MessageType.IMAGE -> android.R.drawable.ic_menu_gallery
@@ -506,4 +591,27 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
             })
         }
     }
+}
+
+internal object XingDunChatHistoryMediaPolicy {
+    fun firstUsableSource(
+        vararg candidates: String?,
+        localFileExists: (String) -> Boolean = ::defaultLocalFileExists,
+    ): String? = candidates.firstOrNull { candidate ->
+        val source = candidate?.trim().orEmpty()
+        when {
+            source.isEmpty() -> false
+            source.startsWith("http://", ignoreCase = true) -> true
+            source.startsWith("https://", ignoreCase = true) -> true
+            source.startsWith("content://", ignoreCase = true) -> true
+            source.startsWith("android.resource://", ignoreCase = true) -> true
+            source.startsWith("file://", ignoreCase = true) -> localFileExists(source)
+            else -> localFileExists(source)
+        }
+    }?.trim()
+
+    private fun defaultLocalFileExists(path: String): Boolean = runCatching {
+        val file = if (path.startsWith("file://", ignoreCase = true)) File(URI(path)) else File(path)
+        file.isFile
+    }.getOrDefault(false)
 }
