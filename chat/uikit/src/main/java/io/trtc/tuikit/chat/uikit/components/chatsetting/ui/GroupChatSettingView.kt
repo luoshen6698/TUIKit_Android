@@ -25,6 +25,9 @@ import io.trtc.tuikit.chat.uikit.components.chatsetting.viewmodel.getGroupAvatar
 import io.trtc.tuikit.atomicx.common.util.ScreenUtil.dp2px
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
+import io.trtc.tuikit.atomicx.widget.basicwidget.alertdialog.AtomicAlertDialog
+import io.trtc.tuikit.atomicx.widget.basicwidget.alertdialog.cancelButton
+import io.trtc.tuikit.atomicx.widget.basicwidget.alertdialog.confirmButton
 import io.trtc.tuikit.chat.uikit.components.widgets.ActionItem
 import io.trtc.tuikit.chat.uikit.components.widgets.ActionSheet
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
@@ -78,8 +81,11 @@ class GroupChatSettingView @JvmOverloads constructor(
     private lateinit var headerSection: GroupChatSettingHeaderSection
     private lateinit var rowsController: GroupChatSettingRowsController
     private lateinit var actionSectionController: GroupChatSettingActionSection
-    private lateinit var actionSection: LinearLayout
-    private lateinit var actionSpacer: View
+    private lateinit var safetySection: LinearLayout
+    private lateinit var safetyTitle: View
+    private lateinit var safetySpacer: View
+    private lateinit var dangerSection: LinearLayout
+    private lateinit var dangerSpacer: View
     private val themeTaggedViews = mutableSetOf<View>()
 
     private lateinit var memberPreviewSection: GroupMemberPreviewSection
@@ -185,6 +191,7 @@ class GroupChatSettingView @JvmOverloads constructor(
             onOpenGroupManagement = { viewModel ->
                 onGroupManagementClick?.invoke() ?: showGroupManagement(viewModel)
             },
+            onOpenTransferOwner = ::showTransferOwner,
             onOpenGroupAnnouncement = onGroupAnnouncementClick,
             onOpenGroupQRCode = onGroupQRCodeClick,
             onOpenGroupNickname = onGroupNicknameClick,
@@ -213,28 +220,25 @@ class GroupChatSettingView @JvmOverloads constructor(
             }
         }
 
-        actionSpacer = createSpacer(10f)
-        contentLayout.addView(actionSpacer)
+        safetySpacer = createSpacer(12f)
+        contentLayout.addView(safetySpacer)
+        safetyTitle = createSectionTitle(R.string.chat_setting_safety_data_section)
+        contentLayout.addView(safetyTitle)
+        safetySection = createSectionContainer()
+        contentLayout.addView(safetySection, cardLayoutParams())
 
-        actionSection = createSectionContainer()
+        dangerSpacer = createSpacer(12f)
+        contentLayout.addView(dangerSpacer)
+        dangerSection = createSectionContainer()
         actionSectionController = GroupChatSettingActionSection(
             context = context,
             createDivider = ::createDivider,
-            createSpacer = { createSpacer(10f) },
             canPerformAction = ::canPerformAction,
             onGroupDeletedProvider = { onGroupDeleted },
-            onOpenTransferOwner = {
-                val callback = onTransferOwnerClick
-                if (callback == null) {
-                    false
-                } else {
-                    callback()
-                    true
-                }
-            },
             displayGroupIDProvider = { displayGroupID },
         )
-        contentLayout.addView(actionSection, cardLayoutParams())
+        contentLayout.addView(dangerSection, cardLayoutParams())
+        contentLayout.addView(createSpacer(20f))
 
         scrollView.addView(contentLayout)
         addView(scrollView)
@@ -448,8 +452,11 @@ class GroupChatSettingView @JvmOverloads constructor(
 
         rowsController.refresh(state, vm)
         actionSectionController.rebuild(
-            actionSection = actionSection,
-            actionSpacer = actionSpacer,
+            safetySection = safetySection,
+            safetyTitle = safetyTitle,
+            safetySpacer = safetySpacer,
+            dangerSection = dangerSection,
+            dangerSpacer = dangerSpacer,
             viewModel = vm,
             groupType = state.groupType,
             selfRole = state.selfRole
@@ -476,6 +483,39 @@ class GroupChatSettingView @JvmOverloads constructor(
             groupID = viewModel.groupID,
             viewModel = viewModel
         ).show()
+    }
+
+    private fun showTransferOwner(viewModel: GroupChatSettingViewModel) {
+        val callback = onTransferOwnerClick
+        if (callback != null) {
+            callback()
+            return
+        }
+        viewModel.loadAllGroupMembers {
+            val candidates = viewModel.memberList.value.filter { it.role != GroupMemberRole.OWNER }
+            GroupMemberPickerDialog(
+                context = context,
+                title = context.getString(R.string.chat_setting_transfer_group_owner),
+                candidates = candidates,
+                maxSelection = 1,
+                onConfirm = { selected ->
+                    val member = selected.firstOrNull() ?: return@GroupMemberPickerDialog
+                    AtomicAlertDialog(context).apply {
+                        init {
+                            content = context.getString(R.string.chat_setting_tansfer_owner_tips)
+                            confirmButton(
+                                context.getString(R.string.uikit_confirm),
+                                type = AtomicAlertDialog.TextColorPreset.RED
+                            ) { _ ->
+                                viewModel.changeOwner(member.userID)
+                            }
+                            cancelButton(context.getString(R.string.uikit_cancel))
+                        }
+                        show()
+                    }
+                }
+            ).show()
+        }
     }
 
     private fun showMemberList() {
@@ -610,8 +650,11 @@ class GroupChatSettingView @JvmOverloads constructor(
             rowsController.switchSection.applyCardBackground(colors)
             rowsController.backgroundSection.applyCardBackground(colors)
         }
-        if (::actionSection.isInitialized) {
-            actionSection.applyCardBackground(colors)
+        if (::safetySection.isInitialized) {
+            safetySection.applyCardBackground(colors)
+        }
+        if (::dangerSection.isInitialized) {
+            dangerSection.applyCardBackground(colors)
         }
         themeTaggedViews.forEach { view ->
             when (view.tag) {

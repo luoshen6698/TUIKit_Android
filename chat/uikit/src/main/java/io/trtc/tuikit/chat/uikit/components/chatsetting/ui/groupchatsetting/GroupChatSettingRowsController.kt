@@ -16,6 +16,7 @@ internal class GroupChatSettingRowsController(
     private val createSectionContainer: () -> LinearLayout,
     private val rebuildSection: (LinearLayout, List<View>) -> Unit,
     private val onOpenGroupManagement: (GroupChatSettingViewModel) -> Unit,
+    private val onOpenTransferOwner: (GroupChatSettingViewModel) -> Unit,
     private val onOpenGroupAnnouncement: (() -> Unit)?,
     private val onOpenGroupQRCode: (() -> Unit)?,
     private val onOpenGroupNickname: (() -> Unit)?,
@@ -48,6 +49,7 @@ internal class GroupChatSettingRowsController(
     private lateinit var inviteMethodRow: SettingRowNavigate
     private lateinit var myAliasRow: SettingRowNavigate
     private lateinit var groupManageRow: SettingRowNavigate
+    private lateinit var transferOwnerRow: SettingRowNavigate
     private lateinit var autoDeleteRow: SettingRowNavigate
     private lateinit var pinnedMessagesRow: SettingRowNavigate
     private lateinit var searchMessagesRow: SettingRowNavigate
@@ -68,6 +70,10 @@ internal class GroupChatSettingRowsController(
         }
         groupManageRow = SettingRowNavigate(context).apply {
             setTitle(context.getString(R.string.chat_setting_group_management))
+            setShowArrow(true)
+        }
+        transferOwnerRow = SettingRowNavigate(context).apply {
+            setTitle(context.getString(R.string.chat_setting_transfer_group_owner))
             setShowArrow(true)
         }
         autoDeleteRow = SettingRowNavigate(context).apply {
@@ -187,6 +193,14 @@ internal class GroupChatSettingRowsController(
         } else {
             groupManageRow.isClickable = false
             groupManageRow.setOnClickListener(null)
+        }
+
+        transferOwnerRow.visibility = if (permissions.canTransferOwner) View.VISIBLE else View.GONE
+        transferOwnerRow.isClickable = permissions.canTransferOwner
+        transferOwnerRow.setOnClickListener {
+            if (permissions.canTransferOwner) {
+                onOpenTransferOwner(viewModel)
+            }
         }
 
         val canManageAutoDelete = state.selfRole == GroupMemberRole.OWNER ||
@@ -321,7 +335,16 @@ internal class GroupChatSettingRowsController(
     private fun rebuildSettingsSection() {
         rebuildSection(
             settingsSection,
-            listOf(groupNoticeRow, groupQRCodeRow, groupManageRow, autoDeleteRow, groupTypeRow, joinMethodRow, inviteMethodRow)
+            listOf(
+                groupNoticeRow,
+                groupQRCodeRow,
+                groupManageRow,
+                transferOwnerRow,
+                autoDeleteRow,
+                groupTypeRow,
+                joinMethodRow,
+                inviteMethodRow
+            )
         )
     }
 }

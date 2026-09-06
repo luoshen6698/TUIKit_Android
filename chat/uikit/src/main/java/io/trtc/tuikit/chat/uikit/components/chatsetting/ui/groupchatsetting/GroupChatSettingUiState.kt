@@ -41,7 +41,8 @@ internal data class GroupChatSettingPermissionSnapshot(
     val canToggleDoNotDisturb: Boolean,
     val canTogglePinned: Boolean,
     val canAddMember: Boolean,
-    val canRemoveMember: Boolean
+    val canRemoveMember: Boolean,
+    val canTransferOwner: Boolean
 )
 
 internal fun createGroupChatSettingUiState(
@@ -109,6 +110,7 @@ private fun createPermissionSnapshot(
         canToggleDoNotDisturb = canPerformAction(groupType, selfRole, GroupPermission.SET_DO_NOT_DISTURB),
         canTogglePinned = canPerformAction(groupType, selfRole, GroupPermission.PIN_GROUP),
         canAddMember = canAddMember,
-        canRemoveMember = canPerformAction(groupType, selfRole, GroupPermission.REMOVE_GROUP_MEMBER)
+        canRemoveMember = canPerformAction(groupType, selfRole, GroupPermission.REMOVE_GROUP_MEMBER),
+        canTransferOwner = canPerformAction(groupType, selfRole, GroupPermission.TRANSFER_OWNER)
     )
 }

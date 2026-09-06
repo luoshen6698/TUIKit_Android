@@ -12,6 +12,7 @@
     <string name="chat_setting_history_section">聊天记录</string>
     <string name="chat_setting_group_function_section">群功能</string>
     <string name="chat_setting_chat_settings_section">聊天设置</string>
+    <string name="chat_setting_safety_data_section">安全与数据</string>
     <string name="chat_setting_create_group">创建群聊</string>
     <string name="chat_setting_add_blacklist">加入黑名单</string>
     <string name="chat_setting_send_messages">发送消息</string>

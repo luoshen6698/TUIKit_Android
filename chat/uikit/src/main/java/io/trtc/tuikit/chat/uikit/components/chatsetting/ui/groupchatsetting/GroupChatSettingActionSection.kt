@@ -9,77 +9,52 @@ import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingAction
 import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingCustomAction
 import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingScene
 import io.trtc.tuikit.chat.uikit.components.chatsetting.permission.GroupPermission
-import io.trtc.tuikit.chat.uikit.components.chatsetting.ui.GroupMemberPickerDialog
-import io.trtc.tuikit.chat.uikit.components.chatsetting.ui.SettingRowButton
+import io.trtc.tuikit.chat.uikit.components.chatsetting.ui.SettingRowNavigate
 import io.trtc.tuikit.chat.uikit.components.chatsetting.viewmodel.GroupChatSettingViewModel
 import io.trtc.tuikit.atomicx.widget.basicwidget.alertdialog.AtomicAlertDialog
 import io.trtc.tuikit.atomicx.widget.basicwidget.alertdialog.cancelButton
 import io.trtc.tuikit.atomicx.widget.basicwidget.alertdialog.confirmButton
 import io.trtc.tuikit.atomicx.widget.basicwidget.toast.AtomicToast
-import io.trtc.tuikit.atomicxcore.api.group.GroupMemberRole
 import io.trtc.tuikit.atomicxcore.api.group.GroupType
+import io.trtc.tuikit.atomicxcore.api.group.GroupMemberRole
 
 internal class GroupChatSettingActionSection(
     private val context: Context,
     private val createDivider: () -> View,
-    private val createSpacer: () -> View,
     private val canPerformAction: (GroupType, GroupMemberRole, GroupPermission) -> Boolean,
     private val onGroupDeletedProvider: () -> (() -> Unit)?,
-    private val onOpenTransferOwner: () -> Boolean,
     private val displayGroupIDProvider: () -> String?,
 ) {
     fun rebuild(
-        actionSection: LinearLayout,
-        actionSpacer: View,
+        safetySection: LinearLayout,
+        safetyTitle: View,
+        safetySpacer: View,
+        dangerSection: LinearLayout,
+        dangerSpacer: View,
         viewModel: GroupChatSettingViewModel,
         groupType: GroupType,
         selfRole: GroupMemberRole
     ) {
-        actionSection.removeAllViews()
-
-        val builtInRows = mutableListOf<SettingRowButton>()
-        if (canPerformAction(groupType, selfRole, GroupPermission.TRANSFER_OWNER)) {
-            builtInRows.add(createTransferOwnerRow(viewModel))
-        }
-
+        val safetyRows = customActions(viewModel).map { createCustomActionRow(it) }.toMutableList()
         if (canPerformAction(groupType, selfRole, GroupPermission.CLEAR_HISTORY_MESSAGES)) {
-            builtInRows.add(createClearHistoryRow(viewModel))
+            safetyRows.add(createClearHistoryRow(viewModel))
         }
 
+        val dangerRows = mutableListOf<SettingRowNavigate>()
         if (canPerformAction(groupType, selfRole, GroupPermission.DELETE_AND_QUIT)) {
-            builtInRows.add(createDeleteAndQuitRow(viewModel))
+            dangerRows.add(createDeleteAndQuitRow(viewModel))
         }
-
         if (canPerformAction(groupType, selfRole, GroupPermission.DISMISS_GROUP)) {
-            builtInRows.add(createDismissGroupRow(viewModel))
+            dangerRows.add(createDismissGroupRow(viewModel))
         }
 
-        val customRows = customActions(viewModel).map { createCustomActionRow(it) }
+        rebuildSection(safetySection, safetyRows)
+        rebuildSection(dangerSection, dangerRows)
 
-        if (customRows.isNotEmpty()) {
-            customRows.forEachIndexed { index, row ->
-                actionSection.addView(row)
-                if (index != customRows.lastIndex) {
-                    actionSection.addView(createDivider())
-                }
-            }
-        }
-
-        if (builtInRows.isNotEmpty()) {
-            if (customRows.isNotEmpty()) {
-                actionSection.addView(createSpacer())
-            }
-            builtInRows.forEachIndexed { index, row ->
-                actionSection.addView(row)
-                if (index != builtInRows.lastIndex) {
-                    actionSection.addView(createDivider())
-                }
-            }
-        }
-
-        val hasActions = builtInRows.isNotEmpty() || customRows.isNotEmpty()
-        actionSection.visibility = if (hasActions) View.VISIBLE else View.GONE
-        actionSpacer.visibility = if (hasActions) View.VISIBLE else View.GONE
+        val hasSafetyActions = safetyRows.isNotEmpty()
+        safetyTitle.visibility = if (hasSafetyActions) View.VISIBLE else View.GONE
+        safetySpacer.visibility = if (hasSafetyActions) View.VISIBLE else View.GONE
+        dangerSpacer.visibility = if (dangerRows.isNotEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun customActions(viewModel: GroupChatSettingViewModel): List<ChatSettingCustomAction> {
@@ -96,59 +71,20 @@ internal class GroupChatSettingActionSection(
         )
     }
 
-    private fun createCustomActionRow(action: ChatSettingCustomAction): SettingRowButton {
-        return SettingRowButton(context).apply {
+    private fun createCustomActionRow(action: ChatSettingCustomAction): SettingRowNavigate {
+        return SettingRowNavigate(context).apply {
             setTitle(action.title)
-            setButtonStyle(
-                when (action.style) {
-                    ChatSettingActionStyle.LINK -> SettingRowButton.Style.LINK
-                    ChatSettingActionStyle.DANGER -> SettingRowButton.Style.DANGER
-                    ChatSettingActionStyle.NORMAL -> SettingRowButton.Style.NORMAL
-                }
-            )
+            setShowArrow(action.style != ChatSettingActionStyle.DANGER)
+            setDangerStyle(action.style == ChatSettingActionStyle.DANGER)
+            setPrimaryTitleStyle(action.style != ChatSettingActionStyle.DANGER)
             setOnClickListener { action.onClick(context) }
         }
     }
 
-    private fun createTransferOwnerRow(viewModel: GroupChatSettingViewModel): SettingRowButton {
-        return SettingRowButton(context).apply {
-            setTitle(context.getString(R.string.chat_setting_transfer_group_owner))
-            setButtonStyle(SettingRowButton.Style.LINK)
-            setOnClickListener {
-                if (onOpenTransferOwner()) return@setOnClickListener
-                viewModel.loadAllGroupMembers {
-                    val candidates = viewModel.memberList.value
-                        .filter { it.role != GroupMemberRole.OWNER }
-                    GroupMemberPickerDialog(
-                        context = context,
-                        title = context.getString(R.string.chat_setting_transfer_group_owner),
-                        candidates = candidates,
-                        maxSelection = 1,
-                        onConfirm = { selected ->
-                            val member = selected.firstOrNull() ?: return@GroupMemberPickerDialog
-                            AtomicAlertDialog(context).apply {
-                                init {
-                                    content = context.getString(R.string.chat_setting_tansfer_owner_tips)
-                                    confirmButton(
-                                        context.getString(R.string.uikit_confirm),
-                                        type = AtomicAlertDialog.TextColorPreset.RED
-                                    ) { _ ->
-                                        viewModel.changeOwner(member.userID)
-                                    }
-                                    cancelButton(context.getString(R.string.uikit_cancel))
-                                }
-                                show()
-                            }
-                        }
-                    ).show()
-                }
-            }
-        }
-    }
-
-    private fun createClearHistoryRow(viewModel: GroupChatSettingViewModel): SettingRowButton {
-        return SettingRowButton(context).apply {
+    private fun createClearHistoryRow(viewModel: GroupChatSettingViewModel): SettingRowNavigate {
+        return SettingRowNavigate(context).apply {
             setTitle(context.getString(R.string.chat_setting_clear_history_messages))
+            setShowArrow(false)
             setDangerStyle(true)
             setOnClickListener {
                 AtomicAlertDialog(context).apply {
@@ -191,9 +127,10 @@ internal class GroupChatSettingActionSection(
         }
     }
 
-    private fun createDeleteAndQuitRow(viewModel: GroupChatSettingViewModel): SettingRowButton {
-        return SettingRowButton(context).apply {
+    private fun createDeleteAndQuitRow(viewModel: GroupChatSettingViewModel): SettingRowNavigate {
+        return SettingRowNavigate(context).apply {
             setTitle(context.getString(R.string.chat_setting_delete_and_quit))
+            setShowArrow(false)
             setDangerStyle(true)
             setOnClickListener {
                 AtomicAlertDialog(context).apply {
@@ -218,9 +155,10 @@ internal class GroupChatSettingActionSection(
         }
     }
 
-    private fun createDismissGroupRow(viewModel: GroupChatSettingViewModel): SettingRowButton {
-        return SettingRowButton(context).apply {
+    private fun createDismissGroupRow(viewModel: GroupChatSettingViewModel): SettingRowNavigate {
+        return SettingRowNavigate(context).apply {
             setTitle(context.getString(R.string.chat_setting_dismiss_group))
+            setShowArrow(false)
             setDangerStyle(true)
             setOnClickListener {
                 AtomicAlertDialog(context).apply {
@@ -243,5 +181,16 @@ internal class GroupChatSettingActionSection(
                 }
             }
         }
+    }
+
+    private fun rebuildSection(section: LinearLayout, rows: List<View>) {
+        section.removeAllViews()
+        rows.forEachIndexed { index, row ->
+            section.addView(row)
+            if (index != rows.lastIndex) {
+                section.addView(createDivider())
+            }
+        }
+        section.visibility = if (rows.isEmpty()) View.GONE else View.VISIBLE
     }
 }
