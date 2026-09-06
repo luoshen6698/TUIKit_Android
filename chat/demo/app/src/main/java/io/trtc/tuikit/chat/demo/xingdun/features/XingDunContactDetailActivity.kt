@@ -6,6 +6,7 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.InsetDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -139,7 +140,6 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun header(): View = FrameLayout(this).apply {
-        setBackgroundColor(Color.WHITE)
         addView(TextView(context).apply {
             text = "‹"
             textSize = 34f
@@ -159,17 +159,23 @@ class XingDunContactDetailActivity : BaseActivity() {
             marginEnd = 58.dp()
         })
         more = TextView(context).apply {
-            text = "•••"
-            textSize = 15f
+            text = "…"
+            textSize = 17f
             gravity = Gravity.CENTER
             isSingleLine = true
             setTextColor(BRAND)
-            background = rounded(0xFFF0F2F5.toInt(), 21f)
+            background = InsetDrawable(
+                rounded(0xFFF0F2F5.toInt(), 17f),
+                7.dp(),
+                9.dp(),
+                7.dp(),
+                9.dp(),
+            )
             contentDescription = getString(R.string.xingdun_contact_detail_more)
             setOnClickListener { showMoreMenu(this) }
         }
-        addView(more, FrameLayout.LayoutParams(42.dp(), 42.dp(), Gravity.END or Gravity.CENTER_VERTICAL).apply {
-            marginEnd = 5.dp()
+        addView(more, FrameLayout.LayoutParams(48.dp(), 52.dp(), Gravity.END or Gravity.CENTER_VERTICAL).apply {
+            marginEnd = 2.dp()
         })
     }
 
