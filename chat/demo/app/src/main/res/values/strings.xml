@@ -1235,6 +1235,10 @@
     <string name="xingdun_group_info_retry">Reload</string>
     <string name="xingdun_group_info_avatar">Group avatar</string>
     <string name="xingdun_group_info_name">Group name</string>
+    <string name="xingdun_group_info_name_hint">Enter a group name</string>
+    <string name="xingdun_group_info_name_required">Enter a group name.</string>
+    <string name="xingdun_group_info_name_too_long">The group name cannot exceed 100 UTF-8 bytes.</string>
+    <string name="xingdun_group_info_name_updated">Group name updated</string>
     <string name="xingdun_group_info_intro">Group description</string>
     <string name="xingdun_group_info_intro_hint">Enter a group description</string>
     <string name="xingdun_group_info_id">Group ID</string>

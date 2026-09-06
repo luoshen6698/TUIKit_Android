@@ -222,6 +222,8 @@ open class XingDunGroupInfoActivity : BaseActivity() {
             title = getString(R.string.xingdun_group_info_name),
             value = value.name.ifBlank { getString(R.string.xingdun_not_set) },
             colors = current,
+            showsDisclosure = value.canEditGroupInfo,
+            onClick = if (value.canEditGroupInfo) ({ showNameEditor(value) }) else null,
         ))
         identity.addView(rowDivider(current))
         identity.addView(textRow(
@@ -381,6 +383,108 @@ open class XingDunGroupInfoActivity : BaseActivity() {
         dialog.show()
     }
 
+    private fun showNameEditor(value: XingDunGroupDetail) {
+        val current = colors()
+        val wrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20.dp(), 8.dp(), 20.dp(), 0)
+        }
+        val editor = EditText(this).apply {
+            setText(value.name)
+            setSelection(text.length)
+            setSingleLine()
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            setTextColor(current.textColorPrimary)
+            setHintTextColor(current.textColorTertiary)
+            setHint(R.string.xingdun_group_info_name_hint)
+            background = rounded(current.bgColorOperate, 12f, current.strokeColorPrimary)
+            setPadding(12.dp(), 12.dp(), 12.dp(), 12.dp())
+        }
+        val counter = TextView(this).apply {
+            gravity = Gravity.END
+            setTextColor(current.textColorTertiary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setPadding(0, 6.dp(), 0, 0)
+        }
+        fun updateCounter() {
+            counter.text = getString(
+                R.string.xingdun_group_info_byte_count,
+                editor.text.toString().toByteArray(Charsets.UTF_8).size,
+                NAME_MAX_BYTES,
+            )
+        }
+        editor.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = updateCounter()
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        updateCounter()
+        wrapper.addView(editor, matchWrap())
+        wrapper.addView(counter, matchWrap())
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.xingdun_group_info_name)
+            .setView(wrapper)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.xingdun_group_info_save, null)
+            .create()
+        dialog.setOnShowListener {
+            editor.requestFocus()
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val candidate = editor.text.toString().trim()
+                when {
+                    candidate.isEmpty() -> Toast.makeText(
+                        this,
+                        R.string.xingdun_group_info_name_required,
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    candidate.toByteArray(Charsets.UTF_8).size > NAME_MAX_BYTES -> Toast.makeText(
+                        this,
+                        R.string.xingdun_group_info_name_too_long,
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    candidate == value.name -> dialog.dismiss()
+                    else -> saveName(candidate, dialog)
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun saveName(value: String, dialog: AlertDialog) {
+        val scope = activityScope ?: return
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = false
+        scope.launch {
+            runCatching {
+                val session = XingDunSessionManager.currentSession()
+                    ?: error(getString(R.string.xingdun_session_expired))
+                XingDunSessionManager.apiClient().postEmpty(
+                    session,
+                    "team/update",
+                    mapOf("team_id" to groupID, "name" to value),
+                )
+            }.onSuccess {
+                detail = detail?.copy(name = value)
+                detail?.let(::renderDetail)
+                GroupStore.shared.loadJoinedGroups()
+                dialog.dismiss()
+                Toast.makeText(
+                    this@XingDunGroupInfoActivity,
+                    R.string.xingdun_group_info_name_updated,
+                    Toast.LENGTH_SHORT,
+                ).show()
+                loadDetail(force = true)
+            }.onFailure { error ->
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = true
+                Toast.makeText(
+                    this@XingDunGroupInfoActivity,
+                    error.localizedMessage ?: getString(R.string.xingdun_action_failed),
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
     private fun saveIntroduction(value: String, dialog: AlertDialog) {
         val scope = activityScope ?: return
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = false
@@ -460,6 +564,7 @@ open class XingDunGroupInfoActivity : BaseActivity() {
     companion object {
         private const val EXTRA_GROUP_ID = "group_id"
         const val EXTRA_DEBUG_PREVIEW = "xingdun_debug_group_info_preview"
+        private const val NAME_MAX_BYTES = 100
         private const val INTRO_MAX_BYTES = 240
         private const val BRAND = 0xFF23B39C.toInt()
         private const val WARNING = 0xFFB36A00.toInt()
