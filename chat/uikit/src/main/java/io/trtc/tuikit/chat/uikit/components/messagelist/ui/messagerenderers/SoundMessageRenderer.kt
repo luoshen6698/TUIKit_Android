@@ -59,6 +59,9 @@ class SoundMessageRenderer : MessageRenderer, RecyclableMessageRenderer {
                 else -> if (isRtl) !isSelf else isSelf
             }
         }
+
+        internal fun shouldShowDurationBeforeIcon(isSelf: Boolean, isRtl: Boolean): Boolean =
+            isSelf != isRtl
     }
 
     override fun createView(context: Context, parent: ViewGroup): View {
@@ -88,7 +91,7 @@ class SoundMessageRenderer : MessageRenderer, RecyclableMessageRenderer {
             ellipsize = android.text.TextUtils.TruncateAt.END
             tag = TAG_DURATION
         }
-        applyContentOrder(container, animIcon, durationView, isRtl = false)
+        applyContentOrder(container, animIcon, durationView, durationBeforeIcon = false)
 
         return container
     }
@@ -129,7 +132,12 @@ class SoundMessageRenderer : MessageRenderer, RecyclableMessageRenderer {
         } else {
             Gravity.START or Gravity.CENTER_VERTICAL
         }
-        applyContentOrder(container, animIcon, durationView, isRtl)
+        applyContentOrder(
+            container,
+            animIcon,
+            durationView,
+            durationBeforeIcon = shouldShowDurationBeforeIcon(message.isSentBySelf, isRtl),
+        )
         animIcon.scaleX = if (isRtl) -1f else 1f
 
         tintVoiceLayers(animIcon.drawable, contentColor)
@@ -180,7 +188,7 @@ class SoundMessageRenderer : MessageRenderer, RecyclableMessageRenderer {
         container: LinearLayout,
         animIcon: ImageView,
         durationView: TextView,
-        isRtl: Boolean,
+        durationBeforeIcon: Boolean,
     ) {
         val density = container.resources.displayMetrics.density
         val spacing = (4 * density).toInt()
@@ -191,7 +199,7 @@ class SoundMessageRenderer : MessageRenderer, RecyclableMessageRenderer {
             ViewGroup.LayoutParams.WRAP_CONTENT,
         )
         container.removeAllViews()
-        if (isRtl) {
+        if (durationBeforeIcon) {
             container.addView(durationView, durationLp)
             iconLp.marginStart = spacing
             container.addView(animIcon, iconLp)
