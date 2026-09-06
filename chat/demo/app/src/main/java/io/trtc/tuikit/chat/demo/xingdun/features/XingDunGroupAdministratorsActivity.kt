@@ -433,16 +433,9 @@ open class XingDunGroupAdministratorsActivity : BaseActivity() {
             } else {
                 visible.forEachIndexed { index, member ->
                     if (index > 0) list.addView(rowDivider(current))
-                    list.addView(TextView(this).apply {
-                        text = "${member.displayName()}\n${member.userId}"
-                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-                        setTextColor(current.textColorPrimary)
-                        setPadding(12.dp(), 12.dp(), 12.dp(), 12.dp())
-                        isClickable = true
-                        setOnClickListener {
-                            dialog.dismiss()
-                            setAdministrator(member, true)
-                        }
+                    list.addView(candidateRow(member, current) {
+                        dialog.dismiss()
+                        setAdministrator(member, true)
                     })
                 }
             }
@@ -475,6 +468,41 @@ open class XingDunGroupAdministratorsActivity : BaseActivity() {
             recentLoadError = failed
             renderCandidates()
         }
+    }
+
+    private fun candidateRow(
+        member: XingDunGroupMember,
+        colors: ColorTokens,
+        onClick: () -> Unit,
+    ): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = 64.dp()
+        setPadding(12.dp(), 8.dp(), 12.dp(), 8.dp())
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { onClick() }
+        addView(Avatar(this@XingDunGroupAdministratorsActivity).apply {
+            setSize(Avatar.AvatarSize.M)
+            setContent(Avatar.AvatarContent.Image(member.avatar, member.displayName()))
+        })
+        addView(LinearLayout(this@XingDunGroupAdministratorsActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(12.dp(), 0, 0, 0)
+            addView(TextView(this@XingDunGroupAdministratorsActivity).apply {
+                text = member.displayName()
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setTextColor(colors.textColorPrimary)
+                maxLines = 1
+            })
+            addView(TextView(this@XingDunGroupAdministratorsActivity).apply {
+                text = member.userId
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                setTextColor(colors.textColorSecondary)
+                maxLines = 1
+            })
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
     }
 
     private fun loadRecentConversations(onLoaded: (List<String>?, Boolean) -> Unit) {
