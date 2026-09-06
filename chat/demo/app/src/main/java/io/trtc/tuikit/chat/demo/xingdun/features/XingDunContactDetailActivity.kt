@@ -3,7 +3,9 @@ package io.trtc.tuikit.chat.demo.xingdun.features
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.InsetDrawable
@@ -53,7 +55,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class XingDunContactDetailActivity : BaseActivity() {
     private lateinit var content: LinearLayout
     private lateinit var loading: ProgressBar
-    private lateinit var more: TextView
+    private lateinit var more: View
     private lateinit var chatButton: TextView
     private lateinit var detailRefresh: SwipeRefreshLayout
 
@@ -158,12 +160,21 @@ class XingDunContactDetailActivity : BaseActivity() {
             marginStart = 58.dp()
             marginEnd = 58.dp()
         })
-        more = TextView(context).apply {
-            text = "…"
-            textSize = 17f
-            gravity = Gravity.CENTER
-            isSingleLine = true
-            setTextColor(BRAND)
+        more = object : View(context) {
+            private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = BRAND }
+
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                val density = resources.displayMetrics.density
+                val centerX = width / 2f
+                val centerY = height / 2f
+                val spacing = 5.5f * density
+                val radius = 1.25f * density
+                for (position in -1..1) {
+                    canvas.drawCircle(centerX + position * spacing, centerY, radius, dotPaint)
+                }
+            }
+        }.apply {
             background = InsetDrawable(
                 rounded(0xFFF0F2F5.toInt(), 17f),
                 7.dp(),
