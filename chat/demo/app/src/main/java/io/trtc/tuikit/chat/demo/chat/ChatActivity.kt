@@ -6,8 +6,11 @@ import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import com.tencent.imsdk.v2.V2TIMAdvancedMsgListener
+import com.tencent.imsdk.v2.V2TIMImageElem
 import com.tencent.imsdk.v2.V2TIMManager
 import com.tencent.imsdk.v2.V2TIMMessage
+import com.tencent.imsdk.v2.V2TIMValueCallback
+import com.tencent.imsdk.v2.V2TIMVideoElem
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.TextPaint
@@ -90,7 +93,9 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
@@ -98,6 +103,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 
 class ChatActivity : BaseActivity() {
 
@@ -201,6 +209,7 @@ class ChatActivity : BaseActivity() {
         private const val C2C_CONVERSATION_ID_PREFIX = "c2c_"
         private const val GROUP_CONVERSATION_ID_PREFIX = "group_"
         private const val UNREAD_BADGE_DEBOUNCE_MS = 300L
+        private const val FAVORITE_MEDIA_RESOLVE_TIMEOUT_MILLIS = 8_000L
         private const val FAVORITE_ACTION_ID = "xingdun.message.favorite"
         private const val PIN_ACTION_ID = "xingdun.message.pin"
         private const val MARK_ACTION_ID = "xingdun.message.mark"
@@ -556,7 +565,7 @@ class ChatActivity : BaseActivity() {
                 if (currentlyFavorite) {
                     XingDunMessageFavoriteRepository.unfavorite(messageID)
                 } else {
-                    XingDunMessageFavoriteRepository.favorite(favoriteRequest(message))
+                    XingDunMessageFavoriteRepository.favorite(favoriteRequestWithResolvedMedia(message))
                 }
             }
             activeFavoriteMessageIDs.remove(messageID)
@@ -594,27 +603,104 @@ class ChatActivity : BaseActivity() {
         )
     }
 
-    private fun favoriteAttachment(message: MessageInfo): Any = when (val payload = message.messagePayload) {
-        is ImageMessagePayload -> {
-            val original = payload.originalImageURL?.takeIf(String::isNotBlank)
-            val thumbnail = payload.thumbImageURL?.takeIf(String::isNotBlank)
+    private suspend fun favoriteRequestWithResolvedMedia(message: MessageInfo): XingDunFavoriteMessageRequest {
+        val request = favoriteRequest(message)
+        val messageType = request.messageType
+        if (messageType != "PICTURE" && messageType != "VIDEO") return request
+
+        val payload = message.messagePayload
+        var previewURL = when (payload) {
+            is ImageMessagePayload -> payload.thumbImageURL?.takeIf(String::isNotBlank)
                 ?: payload.largeImageURL?.takeIf(String::isNotBlank)
-                ?: original
-            buildList {
-                val info = buildList {
-                    original?.let { add(mapOf("Type" to 1, "URL" to it)) }
-                    thumbnail?.let { add(mapOf("Type" to 3, "URL" to it)) }
+                ?: payload.originalImageURL?.takeIf(String::isNotBlank)
+            is VideoMessagePayload -> payload.videoSnapshotURL?.takeIf(String::isNotBlank)
+            else -> null
+        }
+        var playbackURL = (payload as? VideoMessagePayload)?.videoURL?.takeIf(String::isNotBlank)
+        if (XingDunMessageFavoritePolicy.hasCompleteMedia(messageType, previewURL, playbackURL)) return request
+
+        val rawMessage = withTimeoutOrNull(FAVORITE_MEDIA_RESOLVE_TIMEOUT_MILLIS) {
+            findFavoriteMessage(message.msgID)
+        }
+        val attachment = when (messageType) {
+            "PICTURE" -> {
+                val images = rawMessage?.imageElem?.imageList.orEmpty()
+                val originalURL = images.firstOrNull { it.type == V2TIMImageElem.V2TIM_IMAGE_TYPE_ORIGIN }
+                    ?.url?.takeIf(String::isNotBlank)
+                    ?: (payload as? ImageMessagePayload)?.originalImageURL?.takeIf(String::isNotBlank)
+                val thumbnailURL = images.firstOrNull { it.type == V2TIMImageElem.V2TIM_IMAGE_TYPE_THUMB }
+                    ?.url?.takeIf(String::isNotBlank)
+                    ?: (payload as? ImageMessagePayload)?.thumbImageURL?.takeIf(String::isNotBlank)
+                val largeURL = images.firstOrNull { it.type == V2TIMImageElem.V2TIM_IMAGE_TYPE_LARGE }
+                    ?.url?.takeIf(String::isNotBlank)
+                    ?: (payload as? ImageMessagePayload)?.largeImageURL?.takeIf(String::isNotBlank)
+                previewURL = thumbnailURL ?: largeURL ?: originalURL
+                playbackURL = originalURL ?: previewURL
+                XingDunMessageFavoritePolicy.imageAttachment(playbackURL, previewURL, largeURL)
+            }
+            "VIDEO" -> {
+                val video = rawMessage?.videoElem
+                if (video != null) {
+                    val (snapshot, playback) = coroutineScope {
+                        val snapshotTask = async { awaitFavoriteVideoURL(video, snapshot = true) }
+                        val playbackTask = async { awaitFavoriteVideoURL(video, snapshot = false) }
+                        snapshotTask.await() to playbackTask.await()
+                    }
+                    previewURL = snapshot ?: previewURL
+                    playbackURL = playback ?: playbackURL
                 }
-                if (info.isNotEmpty()) add(mapOf("MsgType" to "TIMImageElem", "MsgContent" to mapOf("ImageInfoArray" to info)))
+                XingDunMessageFavoritePolicy.videoAttachment(previewURL, playbackURL)
+            }
+            else -> request.attachment
+        }
+        check(XingDunMessageFavoritePolicy.hasCompleteMedia(messageType, previewURL, playbackURL)) {
+            "Favorite media is not ready"
+        }
+        return request.copy(attachment = attachment)
+    }
+
+    private suspend fun findFavoriteMessage(messageID: String): V2TIMMessage? =
+        suspendCancellableCoroutine { continuation ->
+            V2TIMManager.getMessageManager().findMessages(
+                listOf(messageID),
+                object : V2TIMValueCallback<List<V2TIMMessage>> {
+                    override fun onSuccess(messages: List<V2TIMMessage>?) {
+                        if (continuation.isActive) continuation.resume(messages.orEmpty().firstOrNull { it.msgID == messageID })
+                    }
+
+                    override fun onError(code: Int, desc: String?) {
+                        if (continuation.isActive) continuation.resume(null)
+                    }
+                },
+            )
+        }
+
+    private suspend fun awaitFavoriteVideoURL(video: V2TIMVideoElem, snapshot: Boolean): String? =
+        withTimeoutOrNull(FAVORITE_MEDIA_RESOLVE_TIMEOUT_MILLIS) {
+            suspendCancellableCoroutine { continuation ->
+                val callback = object : V2TIMValueCallback<String> {
+                    override fun onSuccess(url: String?) {
+                        if (continuation.isActive) continuation.resume(url?.takeIf(String::isNotBlank))
+                    }
+
+                    override fun onError(code: Int, desc: String?) {
+                        if (continuation.isActive) continuation.resume(null)
+                    }
+                }
+                if (snapshot) video.getSnapshotUrl(callback) else video.getVideoUrl(callback)
             }
         }
-        is VideoMessagePayload -> mapOf(
-            "ThumbUrl" to payload.videoSnapshotURL.orEmpty(),
-            "VideoUrl" to payload.videoURL.orEmpty(),
-        ).filterValues(String::isNotBlank).let { content ->
-            if (content.isEmpty()) emptyList()
-            else listOf(mapOf("MsgType" to "TIMVideoFileElem", "MsgContent" to content))
-        }
+
+    private fun favoriteAttachment(message: MessageInfo): Any = when (val payload = message.messagePayload) {
+        is ImageMessagePayload -> XingDunMessageFavoritePolicy.imageAttachment(
+            payload.originalImageURL,
+            payload.thumbImageURL,
+            payload.largeImageURL,
+        )
+        is VideoMessagePayload -> XingDunMessageFavoritePolicy.videoAttachment(
+            payload.videoSnapshotURL,
+            payload.videoURL,
+        )
         is AudioMessagePayload -> listOf(
             mapOf(
                 "MsgType" to "TIMSoundElem",

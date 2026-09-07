@@ -101,6 +101,37 @@ internal object XingDunMessageFavoriteRepository {
 }
 
 internal object XingDunMessageFavoritePolicy {
+    fun imageAttachment(originalURL: String?, thumbnailURL: String?, largeURL: String?): Any {
+        val original = originalURL?.takeIf(String::isNotBlank)
+        val thumbnail = thumbnailURL?.takeIf(String::isNotBlank)
+            ?: largeURL?.takeIf(String::isNotBlank)
+            ?: original
+        val imageInfo = buildList {
+            original?.let { add(mapOf("Type" to 1, "URL" to it)) }
+            thumbnail?.let { add(mapOf("Type" to 3, "URL" to it)) }
+        }
+        return if (imageInfo.isEmpty()) emptyList<Map<String, Any>>() else listOf(
+            mapOf("MsgType" to "TIMImageElem", "MsgContent" to mapOf("ImageInfoArray" to imageInfo)),
+        )
+    }
+
+    fun videoAttachment(snapshotURL: String?, videoURL: String?): Any {
+        val content = mapOf(
+            "ThumbUrl" to snapshotURL.orEmpty(),
+            "VideoUrl" to videoURL.orEmpty(),
+        ).filterValues(String::isNotBlank)
+        return if (content.isEmpty()) emptyList<Map<String, Any>>() else listOf(
+            mapOf("MsgType" to "TIMVideoFileElem", "MsgContent" to content),
+        )
+    }
+
+    fun hasCompleteMedia(messageType: String, previewURL: String?, playbackURL: String?): Boolean =
+        when (messageType.uppercase()) {
+            "PICTURE" -> !previewURL.isNullOrBlank()
+            "VIDEO" -> !previewURL.isNullOrBlank() && !playbackURL.isNullOrBlank()
+            else -> true
+        }
+
     fun favoriteIDs(page: JsonObject): Map<String, Int?> {
         val items = sequenceOf("items", "list")
             .mapNotNull { key -> page.get(key)?.takeIf(JsonElement::isJsonArray)?.asJsonArray }

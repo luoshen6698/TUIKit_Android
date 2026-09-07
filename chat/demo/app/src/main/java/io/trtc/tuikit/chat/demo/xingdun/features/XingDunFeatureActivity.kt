@@ -71,7 +71,9 @@ import com.tencent.mmkv.MMKV
 import com.tencent.imsdk.v2.V2TIMImageElem
 import com.tencent.imsdk.v2.V2TIMManager
 import com.tencent.imsdk.v2.V2TIMMessage
+import com.tencent.imsdk.v2.V2TIMMessageListGetOption
 import com.tencent.imsdk.v2.V2TIMValueCallback
+import com.tencent.imsdk.v2.V2TIMVideoElem
 import com.google.zxing.BarcodeFormat
 import com.journeyapps.barcodescanner.BarcodeEncoder
 import io.trtc.tuikit.atomicxcore.api.contact.ContactInfo
@@ -109,10 +111,15 @@ import io.trtc.tuikit.chat.uikit.components.audioplayer.AudioPlayerListener
 import io.trtc.tuikit.chat.uikit.components.imageviewer.EventHandler
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageElement
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageViewer
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import kotlin.coroutines.resume
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -188,6 +195,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var favoriteLoading = false
     private var favoriteTouchStartY = 0f
     private val favoriteMediaOverrides = mutableMapOf<String, FavoriteMediaOverride>()
+    private val favoriteMediaRepairAttempts = mutableSetOf<String>()
     private var pendingFavoriteForwardText: String? = null
     private var accountSecurityTouchStartY = 0f
     private var accountSecurityLoading = false
@@ -242,6 +250,15 @@ open class XingDunFeatureActivity : BaseActivity() {
         val previewURL: String? = null,
         val playbackURL: String? = null,
         val audioDuration: Int? = null,
+    )
+
+    private data class FavoriteMediaTarget(
+        val messageID: String,
+        val messageType: String,
+        val conversationID: String,
+        val senderID: String,
+        val text: String,
+        val sentAtMillis: Long?,
     )
 
     private val attachmentPicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -6810,7 +6827,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun hydrateFavoriteMedia() {
-        val messageTypes = favoriteRecords.mapNotNull { favorite ->
+        val targets = favoriteRecords.mapNotNull { favorite ->
             val snapshot = favorite.getAsJsonObject("message") ?: favorite
             val messageID = snapshot.string("message_id")?.trim().orEmpty()
             val messageType = snapshot.string("message_type")?.uppercase(Locale.ROOT).orEmpty()
@@ -6821,54 +6838,161 @@ open class XingDunFeatureActivity : BaseActivity() {
                 "AUDIO" -> favoriteMediaURL(snapshot, messageType, preview = false) == null
                 else -> false
             }
-            if (messageID.isNotEmpty() && needsFallback) messageID to messageType else null
-        }.toMap()
-        messageTypes.keys.chunked(10).forEach { messageIDs ->
-            V2TIMManager.getMessageManager().findMessages(
-                messageIDs,
-                object : V2TIMValueCallback<List<V2TIMMessage>> {
-                    override fun onSuccess(messages: List<V2TIMMessage>?) {
-                        messages.orEmpty().forEach { message ->
-                            when (messageTypes[message.msgID]) {
-                                "PICTURE" -> {
-                                    val url = message.imageElem?.imageList
-                                        ?.sortedBy { image ->
-                                            when (image.type) {
-                                                V2TIMImageElem.V2TIM_IMAGE_TYPE_THUMB -> 0
-                                                V2TIMImageElem.V2TIM_IMAGE_TYPE_LARGE -> 1
-                                                else -> 2
-                                            }
-                                        }
-                                        ?.firstNotNullOfOrNull { normalizedFavoriteMediaURL(it.url.orEmpty()) }
-                                    updateFavoriteMediaOverride(message.msgID, previewURL = url)
-                                }
-                                "VIDEO" -> message.videoElem?.let { video ->
-                                    video.getSnapshotUrl(object : V2TIMValueCallback<String> {
-                                        override fun onSuccess(url: String?) =
-                                            updateFavoriteMediaOverride(message.msgID, previewURL = url)
-                                        override fun onError(code: Int, desc: String?) = Unit
-                                    })
-                                    video.getVideoUrl(object : V2TIMValueCallback<String> {
-                                        override fun onSuccess(url: String?) =
-                                            updateFavoriteMediaOverride(message.msgID, playbackURL = url)
-                                        override fun onError(code: Int, desc: String?) = Unit
-                                    })
-                                }
-                                "AUDIO" -> message.soundElem?.let { sound ->
-                                    updateFavoriteMediaOverride(message.msgID, audioDuration = sound.duration.coerceAtLeast(1))
-                                    sound.getUrl(object : V2TIMValueCallback<String> {
-                                        override fun onSuccess(url: String?) =
-                                            updateFavoriteMediaOverride(message.msgID, playbackURL = url)
-                                        override fun onError(code: Int, desc: String?) = Unit
-                                    })
-                                }
+            if (!needsFallback || messageID.isEmpty()) return@mapNotNull null
+            FavoriteMediaTarget(
+                messageID = messageID,
+                messageType = messageType,
+                conversationID = favorite.string("conversation_id").orEmpty(),
+                senderID = snapshot.string("sender").orEmpty(),
+                text = snapshot.string("text").orEmpty(),
+                sentAtMillis = snapshot.get("sent_at")?.takeUnless(JsonElement::isJsonNull)
+                    ?.let { runCatching { it.asLong }.getOrNull() },
+            )
+        }
+        if (targets.isEmpty()) return
+        lifecycleScope.launch {
+            val localMessages = targets.map(FavoriteMediaTarget::messageID).chunked(10)
+                .flatMap { findFavoriteMessages(it) }
+                .associateBy(V2TIMMessage::getMsgID)
+            targets.forEach { target ->
+                val message = localMessages[target.messageID]
+                    ?: if (target.messageType == "PICTURE" || target.messageType == "VIDEO") {
+                        findFavoriteCloudMessage(target)
+                    } else null
+                if (message != null) applyFavoriteMediaMessage(target, message)
+            }
+        }
+    }
+
+    private suspend fun findFavoriteMessages(messageIDs: List<String>): List<V2TIMMessage> =
+        withTimeoutOrNull(FAVORITE_MEDIA_LOOKUP_TIMEOUT_MILLIS) {
+            suspendCancellableCoroutine<List<V2TIMMessage>> { continuation ->
+                V2TIMManager.getMessageManager().findMessages(
+                    messageIDs,
+                    object : V2TIMValueCallback<List<V2TIMMessage>> {
+                        override fun onSuccess(messages: List<V2TIMMessage>?) {
+                            if (continuation.isActive) continuation.resume(messages.orEmpty())
+                        }
+
+                        override fun onError(code: Int, desc: String?) {
+                            if (continuation.isActive) continuation.resume(emptyList<V2TIMMessage>())
+                        }
+                    },
+                )
+            }
+        }.orEmpty()
+
+    private suspend fun findFavoriteCloudMessage(target: FavoriteMediaTarget): V2TIMMessage? {
+        val sentAtSeconds = target.sentAtMillis?.let { if (it > 10_000_000_000L) it / 1_000L else it }
+            ?.takeIf { it > 0L } ?: return null
+        val option = V2TIMMessageListGetOption().apply {
+            setGetType(V2TIMMessageListGetOption.V2TIM_GET_CLOUD_OLDER_MSG)
+            setCount(FAVORITE_MEDIA_CLOUD_COUNT)
+            setGetTimeBegin(sentAtSeconds + FAVORITE_MEDIA_CLOUD_WINDOW_SECONDS / 2)
+            setGetTimePeriod(FAVORITE_MEDIA_CLOUD_WINDOW_SECONDS)
+            setMessageTypeList(listOf(
+                if (target.messageType == "PICTURE") V2TIMMessage.V2TIM_ELEM_TYPE_IMAGE
+                else V2TIMMessage.V2TIM_ELEM_TYPE_VIDEO,
+            ))
+            when {
+                target.conversationID.startsWith("c2c_") -> setUserID(target.conversationID.removePrefix("c2c_"))
+                target.conversationID.startsWith("group_") -> setGroupID(target.conversationID.removePrefix("group_"))
+                else -> return null
+            }
+        }
+        return withTimeoutOrNull(FAVORITE_MEDIA_LOOKUP_TIMEOUT_MILLIS) {
+            suspendCancellableCoroutine { continuation ->
+                V2TIMManager.getMessageManager().getHistoryMessageList(
+                    option,
+                    object : V2TIMValueCallback<List<V2TIMMessage>> {
+                        override fun onSuccess(messages: List<V2TIMMessage>?) {
+                            if (continuation.isActive) {
+                                continuation.resume(messages.orEmpty().firstOrNull { it.msgID == target.messageID })
                             }
                         }
+
+                        override fun onError(code: Int, desc: String?) {
+                            if (continuation.isActive) continuation.resume(null)
+                        }
+                    },
+                )
+            }
+        }
+    }
+
+    private suspend fun applyFavoriteMediaMessage(target: FavoriteMediaTarget, message: V2TIMMessage) {
+        when (target.messageType) {
+            "PICTURE" -> {
+                val images = message.imageElem?.imageList.orEmpty()
+                val original = images.firstOrNull { it.type == V2TIMImageElem.V2TIM_IMAGE_TYPE_ORIGIN }
+                    ?.url?.let(::normalizedFavoriteMediaURL)
+                val thumbnail = images.firstOrNull { it.type == V2TIMImageElem.V2TIM_IMAGE_TYPE_THUMB }
+                    ?.url?.let(::normalizedFavoriteMediaURL)
+                val large = images.firstOrNull { it.type == V2TIMImageElem.V2TIM_IMAGE_TYPE_LARGE }
+                    ?.url?.let(::normalizedFavoriteMediaURL)
+                val preview = thumbnail ?: large ?: original
+                val playback = original ?: large ?: preview
+                updateFavoriteMediaOverride(target.messageID, previewURL = preview, playbackURL = playback)
+                if (XingDunMessageFavoritePolicy.hasCompleteMedia("PICTURE", preview, playback)) {
+                    repairFavoriteMedia(target, message, XingDunMessageFavoritePolicy.imageAttachment(playback, preview, large))
+                }
+            }
+            "VIDEO" -> message.videoElem?.let { video ->
+                val (preview, playback) = coroutineScope {
+                    val previewTask = async { awaitFavoriteVideoURL(video, snapshot = true) }
+                    val playbackTask = async { awaitFavoriteVideoURL(video, snapshot = false) }
+                    previewTask.await() to playbackTask.await()
+                }
+                updateFavoriteMediaOverride(target.messageID, previewURL = preview, playbackURL = playback)
+                if (XingDunMessageFavoritePolicy.hasCompleteMedia("VIDEO", preview, playback)) {
+                    repairFavoriteMedia(target, message, XingDunMessageFavoritePolicy.videoAttachment(preview, playback))
+                }
+            }
+            "AUDIO" -> message.soundElem?.let { sound ->
+                updateFavoriteMediaOverride(target.messageID, audioDuration = sound.duration.coerceAtLeast(1))
+                sound.getUrl(object : V2TIMValueCallback<String> {
+                    override fun onSuccess(url: String?) =
+                        updateFavoriteMediaOverride(target.messageID, playbackURL = url)
+                    override fun onError(code: Int, desc: String?) = Unit
+                })
+            }
+        }
+    }
+
+    private suspend fun awaitFavoriteVideoURL(video: V2TIMVideoElem, snapshot: Boolean): String? =
+        withTimeoutOrNull(FAVORITE_MEDIA_LOOKUP_TIMEOUT_MILLIS) {
+            suspendCancellableCoroutine { continuation ->
+                val callback = object : V2TIMValueCallback<String> {
+                    override fun onSuccess(url: String?) {
+                        if (continuation.isActive) continuation.resume(url?.let(::normalizedFavoriteMediaURL))
                     }
 
-                    override fun onError(code: Int, desc: String?) = Unit
-                },
+                    override fun onError(code: Int, desc: String?) {
+                        if (continuation.isActive) continuation.resume(null)
+                    }
+                }
+                if (snapshot) video.getSnapshotUrl(callback) else video.getVideoUrl(callback)
+            }
+        }
+
+    private suspend fun repairFavoriteMedia(target: FavoriteMediaTarget, message: V2TIMMessage, attachment: Any) {
+        if (!favoriteMediaRepairAttempts.add(target.messageID)) return
+        val result = runCatching {
+            XingDunMessageFavoriteRepository.favorite(
+                XingDunFavoriteMessageRequest(
+                    messageId = target.messageID,
+                    conversationId = target.conversationID,
+                    messageSequence = message.seq,
+                    senderId = target.senderID.ifBlank { message.sender.orEmpty() },
+                    messageType = target.messageType,
+                    text = target.text,
+                    attachment = attachment,
+                    sentAt = target.sentAtMillis ?: message.timestamp * 1_000L,
+                ),
             )
+        }
+        if (result.isFailure) {
+            favoriteMediaRepairAttempts.remove(target.messageID)
         }
     }
 
@@ -7627,6 +7751,9 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val PERMISSION_PREFERENCES = "xingdun_permission_ui"
         private const val REPORT_PAGE_SIZE = 20
         private const val FAVORITE_PAGE_SIZE = 20
+        private const val FAVORITE_MEDIA_LOOKUP_TIMEOUT_MILLIS = 8_000L
+        private const val FAVORITE_MEDIA_CLOUD_WINDOW_SECONDS = 10 * 60L
+        private const val FAVORITE_MEDIA_CLOUD_COUNT = 100
         private const val FAVORITE_ACTION_COPY = 1
         private const val FAVORITE_ACTION_FORWARD = 2
         private const val FAVORITE_ACTION_REMOVE = 3
