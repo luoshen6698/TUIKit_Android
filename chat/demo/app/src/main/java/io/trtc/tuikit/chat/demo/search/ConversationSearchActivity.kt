@@ -104,9 +104,8 @@ open class ConversationSearchActivity : BaseActivity() {
                 finish()
             }
         }
-        val isGroup = conversationID.startsWith("group_")
         page.configureHistoryLanding(
-            buildCategoryLanding(conversationID, isGroup),
+            buildCategoryLanding(conversationID),
             getString(R.string.xingdun_chat_history_search_hint),
         )
         findViewById<FrameLayout>(R.id.demo_chatSettingContainer).addView(
@@ -123,7 +122,7 @@ open class ConversationSearchActivity : BaseActivity() {
         }
     }
 
-    private fun buildCategoryLanding(conversationID: String, isGroup: Boolean): View = LinearLayout(this).apply {
+    private fun buildCategoryLanding(conversationID: String): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER_HORIZONTAL
         setPadding(8.dp(), 12.dp(), 8.dp(), 22.dp())
@@ -132,7 +131,6 @@ open class ConversationSearchActivity : BaseActivity() {
             gravity = Gravity.CENTER
         }
         val categories = buildList {
-            if (isGroup) add(Category(R.string.xingdun_chat_history_member, android.R.drawable.ic_menu_myplaces, XingDunChatHistoryCategoryActivity.MODE_MEMBER))
             add(Category(R.string.xingdun_chat_history_image, android.R.drawable.ic_menu_gallery, XingDunChatHistoryCategoryActivity.MODE_IMAGE))
             add(Category(R.string.xingdun_chat_history_video, android.R.drawable.ic_menu_slideshow, XingDunChatHistoryCategoryActivity.MODE_VIDEO))
             add(Category(R.string.xingdun_chat_history_file, android.R.drawable.ic_menu_save, XingDunChatHistoryCategoryActivity.MODE_FILE))
