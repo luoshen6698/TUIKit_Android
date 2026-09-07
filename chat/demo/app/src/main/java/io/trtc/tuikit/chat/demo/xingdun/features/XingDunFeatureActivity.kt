@@ -6857,7 +6857,8 @@ open class XingDunFeatureActivity : BaseActivity() {
             targets.forEach { target ->
                 val message = localMessages[target.messageID]
                     ?: if (target.messageType == "PICTURE" || target.messageType == "VIDEO") {
-                        findFavoriteCloudMessage(target)
+                        findFavoriteHistoryMessage(target, V2TIMMessageListGetOption.V2TIM_GET_LOCAL_OLDER_MSG)
+                            ?: findFavoriteHistoryMessage(target, V2TIMMessageListGetOption.V2TIM_GET_CLOUD_OLDER_MSG)
                     } else null
                 if (message != null) applyFavoriteMediaMessage(target, message)
             }
@@ -6882,11 +6883,11 @@ open class XingDunFeatureActivity : BaseActivity() {
             }
         }.orEmpty()
 
-    private suspend fun findFavoriteCloudMessage(target: FavoriteMediaTarget): V2TIMMessage? {
+    private suspend fun findFavoriteHistoryMessage(target: FavoriteMediaTarget, getType: Int): V2TIMMessage? {
         val sentAtSeconds = target.sentAtMillis?.let { if (it > 10_000_000_000L) it / 1_000L else it }
             ?.takeIf { it > 0L } ?: return null
         val option = V2TIMMessageListGetOption().apply {
-            setGetType(V2TIMMessageListGetOption.V2TIM_GET_CLOUD_OLDER_MSG)
+            setGetType(getType)
             setCount(FAVORITE_MEDIA_CLOUD_COUNT)
             setGetTimeBegin(sentAtSeconds + FAVORITE_MEDIA_CLOUD_WINDOW_SECONDS / 2)
             setGetTimePeriod(FAVORITE_MEDIA_CLOUD_WINDOW_SECONDS)
@@ -6907,7 +6908,15 @@ open class XingDunFeatureActivity : BaseActivity() {
                     object : V2TIMValueCallback<List<V2TIMMessage>> {
                         override fun onSuccess(messages: List<V2TIMMessage>?) {
                             if (continuation.isActive) {
-                                continuation.resume(messages.orEmpty().firstOrNull { it.msgID == target.messageID })
+                                val candidates = messages.orEmpty()
+                                continuation.resume(
+                                    candidates.firstOrNull { it.msgID == target.messageID }
+                                        ?: candidates.filter { message ->
+                                            val senderMatches = target.senderID.isBlank() || message.sender == target.senderID
+                                            val timestampDelta = kotlin.math.abs(message.timestamp - sentAtSeconds)
+                                            senderMatches && timestampDelta <= FAVORITE_MEDIA_TIMESTAMP_TOLERANCE_SECONDS
+                                        }.singleOrNull(),
+                                )
                             }
                         }
 
@@ -7754,6 +7763,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val FAVORITE_MEDIA_LOOKUP_TIMEOUT_MILLIS = 8_000L
         private const val FAVORITE_MEDIA_CLOUD_WINDOW_SECONDS = 10 * 60L
         private const val FAVORITE_MEDIA_CLOUD_COUNT = 100
+        private const val FAVORITE_MEDIA_TIMESTAMP_TOLERANCE_SECONDS = 2L
         private const val FAVORITE_ACTION_COPY = 1
         private const val FAVORITE_ACTION_FORWARD = 2
         private const val FAVORITE_ACTION_REMOVE = 3
