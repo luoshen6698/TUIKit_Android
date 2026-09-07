@@ -126,4 +126,14 @@ class XingDunGroupDetailContractTest {
         assertFalse(administrator.copy(muteAllLevel = 2).canSendMessages)
         assertTrue(member.copy(muteAll = true, muteAllLevel = 2, currentUserIsAssignedCs = true).canSendMessages)
     }
+
+    @Test
+    fun mentionAllPermissionMatchesIOSRoleAndPolicyMatrix() {
+        val restrictedMember = XingDunGroupDetail(currentUserRole = "member", atAllMode = 2)
+        assertFalse(restrictedMember.canMentionAll)
+        assertTrue(restrictedMember.copy(atAllMode = 1).canMentionAll)
+        assertTrue(restrictedMember.copy(currentUserRole = "administrator").canMentionAll)
+        assertTrue(restrictedMember.copy(currentUserRole = "owner").canMentionAll)
+        assertTrue(restrictedMember.copy(currentUserIsAssignedCs = true).canMentionAll)
+    }
 }

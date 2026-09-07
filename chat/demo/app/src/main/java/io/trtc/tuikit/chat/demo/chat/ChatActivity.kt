@@ -138,6 +138,7 @@ class ChatActivity : BaseActivity() {
     private lateinit var pinnedMessageSummary: TextView
     private lateinit var pinnedMessageCount: TextView
     private lateinit var pinnedMessageChevron: ImageView
+    private lateinit var messageInputConfig: ChatMessageInputConfig
 
     private var isPeerTyping = false
     private var latestChatTitle: String = ""
@@ -322,9 +323,10 @@ class ChatActivity : BaseActivity() {
         )
         XingDunCustomMessagePresentation.configure(messageListConfig)
         configureBusinessMessageActions(messageListConfig)
-        val messageInputConfig = ChatMessageInputConfig(
+        messageInputConfig = ChatMessageInputConfig(
             isShowAudioCall = featureAvailability.audioCall,
             isShowVideoCall = featureAvailability.videoCall,
+            canMentionAll = !isGroupConversation,
         )
         messageInputConfig.transformOutgoingText(XingDunEmojiCompatibility::transformOutgoingText)
         configureMessageInputActions(messageInputConfig, isC2CConversation, featureAvailability.redpacket)
@@ -719,6 +721,9 @@ class ChatActivity : BaseActivity() {
 
     private fun loadGroupRuntimePermissions() {
         if (!conversationID.startsWith(GROUP_CONVERSATION_ID_PREFIX)) return
+        if (::messageInputConfig.isInitialized) {
+            messageInputConfig.canMentionAll = false
+        }
         val revision = ++groupPermissionRevision
         groupPermissionJob?.cancel()
         groupPermissionJob = activityScope?.launch {
@@ -733,6 +738,7 @@ class ChatActivity : BaseActivity() {
             }
             if (revision != groupPermissionRevision) return@launch
             result.onSuccess { detail ->
+                messageInputConfig.canMentionAll = detail.canMentionAll
                 if (messagePinEnabled) {
                     canManagePinnedMessages = XingDunPinnedMessagePolicy.canManage(
                         detail.currentUserRole,
@@ -745,6 +751,7 @@ class ChatActivity : BaseActivity() {
                 )
             }.onFailure {
                 if (it is CancellationException) throw it
+                messageInputConfig.canMentionAll = false
                 chatPageView.setComposerRestriction(
                     getString(R.string.xingdun_group_sending_permission_unavailable),
                 )

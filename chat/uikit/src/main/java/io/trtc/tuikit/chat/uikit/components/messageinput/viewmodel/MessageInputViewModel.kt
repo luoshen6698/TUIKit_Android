@@ -33,6 +33,7 @@ import io.trtc.tuikit.chat.uikit.components.messageinput.config.ChatMessageInput
 import io.trtc.tuikit.chat.uikit.components.messageinput.config.MessageInputConfigProtocol
 import io.trtc.tuikit.chat.uikit.components.messageinput.data.MessageInputMenuAction
 import io.trtc.tuikit.chat.uikit.components.messageinput.model.MentionInfo
+import io.trtc.tuikit.chat.uikit.components.messageinput.model.MentionAllPermissionPolicy
 import io.trtc.tuikit.chat.uikit.components.messageinput.ui.GroupMemberPickerDialog
 import io.trtc.tuikit.chat.uikit.components.messageinput.utils.VideoFrameExtractor
 import io.trtc.tuikit.chat.uikit.components.videorecorder.RecordMode
@@ -92,6 +93,9 @@ class MessageInputViewModel(
 
     private val _conversationInfo = MutableStateFlow<ConversationInfo?>(null)
     val conversationInfo: StateFlow<ConversationInfo?> = _conversationInfo.asStateFlow()
+
+    val canMentionAll: Boolean
+        get() = messageInputConfig.canMentionAll
 
     init {
         conversationListStore.getConversationInfo(conversationID, object : GetConversationInfoCompletionHandler {
@@ -308,7 +312,11 @@ class MessageInputViewModel(
         mentionList: List<MentionInfo>,
         quotedMessage: MessageInfo? = null,
         onSuccess: (() -> Unit)? = null
-    ) {
+    ): Boolean {
+        if (!MentionAllPermissionPolicy.canSend(messageInputConfig.canMentionAll, mentionList)) {
+            context?.let { showMentionAllNotAllowed(it) }
+            return false
+        }
         val outgoingText = messageInputConfig.transformOutgoingText(text)
         val payload = SendMessagePayload.TextSendMessagePayload(outgoingText)
         val option = createSendMessageOption(
@@ -326,6 +334,7 @@ class MessageInputViewModel(
                 context?.let { showSendFailed(it) }
             }
         })
+        return true
     }
 
     fun sendFaceMessage(
@@ -707,6 +716,10 @@ class MessageInputViewModel(
 
     private fun showSendFailed(context: Context) {
         showErrorOnMain(context, context.getString(R.string.message_input_send_failed))
+    }
+
+    private fun showMentionAllNotAllowed(context: Context) {
+        showErrorOnMain(context, context.getString(R.string.message_input_mention_all_not_allowed))
     }
 
     private fun showFileTooLarge(context: Context) {

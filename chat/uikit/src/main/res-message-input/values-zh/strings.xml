@@ -12,6 +12,7 @@
     <string name="message_input_more">更多</string>
     <string name="message_input_back">返回</string>
     <string name="message_input_mention_all">所有人</string>
+    <string name="message_input_mention_all_not_allowed">当前账号没有权限@所有人。</string>
     <string name="message_input_mention_select_member">选择群成员</string>
     <string name="message_input_press_to_talk">按住说话</string>
     <string name="message_input_audio">语音</string>

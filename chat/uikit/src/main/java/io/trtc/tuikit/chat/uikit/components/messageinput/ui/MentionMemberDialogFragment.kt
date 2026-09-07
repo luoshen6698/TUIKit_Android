@@ -17,6 +17,7 @@ import io.trtc.tuikit.chat.uikit.components.common.expandTouchTarget
 import io.trtc.tuikit.atomicx.common.util.ScreenUtil.dp2px
 import io.trtc.tuikit.chat.uikit.components.common.WindowThemeUtil
 import io.trtc.tuikit.chat.uikit.components.messageinput.model.MentionInfo
+import io.trtc.tuikit.chat.uikit.components.messageinput.model.MentionAllPermissionPolicy
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.chat.uikit.components.userpicker.adapter.SelectionCheckBoxView
@@ -58,6 +59,9 @@ class MentionMemberDialogFragment : DialogFragment() {
 
     private val groupID: String
         get() = arguments?.getString(ARG_GROUP_ID).orEmpty()
+
+    private val canMentionAll: Boolean
+        get() = arguments?.getBoolean(ARG_CAN_MENTION_ALL, true) ?: true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -185,6 +189,11 @@ class MentionMemberDialogFragment : DialogFragment() {
         rootLayout.addView(divider)
 
         atAllRow = buildAtAllRow(dm)
+        atAllRow.visibility = if (MentionAllPermissionPolicy.shouldShow(canMentionAll)) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
         rootLayout.addView(atAllRow)
 
         userPickerView = UserPickerView(ctx)
@@ -269,7 +278,7 @@ class MentionMemberDialogFragment : DialogFragment() {
         confirmButton.setOnClickListener {
             val ctx = context ?: return@setOnClickListener
             val mentionInfos = buildList {
-                if (atAll) {
+                if (atAll && canMentionAll) {
                     add(
                         MentionInfo(
                             userID = MentionInfo.AT_ALL_USER_ID,
@@ -289,6 +298,7 @@ class MentionMemberDialogFragment : DialogFragment() {
         }
 
         atAllRow.setOnClickListener {
+            if (!canMentionAll) return@setOnClickListener
             atAll = !atAll
             updateAtAllCheckbox()
         }
@@ -375,11 +385,13 @@ class MentionMemberDialogFragment : DialogFragment() {
     companion object {
 
         private const val ARG_GROUP_ID = "arg_group_id"
+        private const val ARG_CAN_MENTION_ALL = "arg_can_mention_all"
         private const val TAG = "MentionMemberDialogFragment"
 
         fun show(
             activity: FragmentActivity,
             groupID: String,
+            canMentionAll: Boolean = true,
             onConfirm: (List<MentionInfo>) -> Unit,
             onDismiss: () -> Unit = {}
         ) {
@@ -389,6 +401,7 @@ class MentionMemberDialogFragment : DialogFragment() {
             val fragment = MentionMemberDialogFragment().apply {
                 arguments = Bundle().apply {
                     putString(ARG_GROUP_ID, groupID)
+                    putBoolean(ARG_CAN_MENTION_ALL, canMentionAll)
                 }
                 this.onConfirm = onConfirm
                 this.onDismissCallback = onDismiss

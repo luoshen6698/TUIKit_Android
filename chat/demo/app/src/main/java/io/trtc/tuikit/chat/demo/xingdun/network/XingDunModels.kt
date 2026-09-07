@@ -233,6 +233,13 @@ data class XingDunGroupDetail(
         get() = currentUserRole == "owner" ||
             (currentUserIsAssignedCs && currentUserRole == "administrator")
 
+    /** Matches iOS: @all is allowed for everyone mode, owners/admins, and assigned customer service. */
+    val canMentionAll: Boolean
+        get() = atAllMode == MODE_ALL ||
+            currentUserRole == "owner" ||
+            currentUserRole == "administrator" ||
+            currentUserIsAssignedCs
+
     val canSetMuteAll: Boolean
         get() = currentUserIsAssignedCs ||
             (muteAllLevel != MUTE_LEVEL_CUSTOMER_SERVICE && canEditManagement)

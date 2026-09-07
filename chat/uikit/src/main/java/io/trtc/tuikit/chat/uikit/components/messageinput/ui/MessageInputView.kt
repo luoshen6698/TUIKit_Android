@@ -553,7 +553,11 @@ class MessageInputView @JvmOverloads constructor(
             currentState = { coordinator.state.value },
             updateSendButtonVisibility = { state -> updateSendButtonVisibility(state) },
             clearQuote = { coordinator.dispatch(OverlayEvent.ClearQuote) },
-            onMentionTrigger = { mentionController.showMentionMemberDialog() },
+            onMentionTrigger = {
+                if (::coordinator.isInitialized && ::mentionController.isInitialized) {
+                    mentionController.showMentionMemberDialog()
+                }
+            },
             onTypingContentChanged = { isTyping -> typingStatusSender?.invoke(isTyping) },
             initialInputText = previousInputText
         )

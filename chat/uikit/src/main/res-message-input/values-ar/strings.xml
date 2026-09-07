@@ -12,6 +12,7 @@
     <string name="message_input_more">المزيد</string>
     <string name="message_input_back">رجوع</string>
     <string name="message_input_mention_all">الجميع</string>
+    <string name="message_input_mention_all_not_allowed">ليس لديك إذن للإشارة إلى الجميع.</string>
     <string name="message_input_mention_select_member">اختر عضوًا في المجموعة</string>
     <string name="message_input_press_to_talk">اضغط للتحدث</string>
     <string name="message_input_audio">صوت</string>

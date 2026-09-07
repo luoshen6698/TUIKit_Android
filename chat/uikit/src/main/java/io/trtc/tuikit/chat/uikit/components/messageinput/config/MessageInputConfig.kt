@@ -8,6 +8,8 @@ interface MessageInputConfigProtocol {
     val isShowMore: Boolean
     val isShowEmoji: Boolean
     val enableMention: Boolean
+    val canMentionAll: Boolean
+        get() = true
     val enableLongPressToTalk: Boolean
         get() = true
     val audioMaxRecordDurationMs: Int
@@ -26,6 +28,7 @@ class ChatMessageInputConfig : MessageInputConfigProtocol {
     private var _isShowMore: Boolean? = null
     private var _isShowEmoji: Boolean? = null
     private var _enableMention: Boolean? = null
+    private var _canMentionAll: Boolean? = null
     private var _enableLongPressToTalk: Boolean? = null
     private var _audioMaxRecordDurationMs: Int? = null
     private var _actionCustomizer: MessageInputActionCustomizer? = null
@@ -38,6 +41,7 @@ class ChatMessageInputConfig : MessageInputConfigProtocol {
         isShowVideoCall: Boolean? = null,
         isShowMore: Boolean? = null,
         enableMention: Boolean? = null,
+        canMentionAll: Boolean? = null,
         enableLongPressToTalk: Boolean? = null,
         audioMaxRecordDurationMs: Int? = null,
         isShowEmoji: Boolean? = null
@@ -48,6 +52,7 @@ class ChatMessageInputConfig : MessageInputConfigProtocol {
         this._isShowVideoCall = isShowVideoCall
         this._isShowMore = isShowMore
         this._enableMention = enableMention
+        this._canMentionAll = canMentionAll
         this._enableLongPressToTalk = enableLongPressToTalk
         this._audioMaxRecordDurationMs = audioMaxRecordDurationMs
         this._isShowEmoji = isShowEmoji
@@ -93,6 +98,12 @@ class ChatMessageInputConfig : MessageInputConfigProtocol {
         get() = _enableMention ?: true
         set(value) {
             _enableMention = value
+        }
+
+    override var canMentionAll: Boolean
+        get() = _canMentionAll ?: true
+        set(value) {
+            _canMentionAll = value
         }
 
     override var enableLongPressToTalk: Boolean

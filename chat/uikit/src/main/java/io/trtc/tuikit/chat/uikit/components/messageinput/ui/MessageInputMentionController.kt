@@ -31,7 +31,8 @@ internal class MessageInputMentionController(
     }
 
     fun showMentionMemberDialog() {
-        val conversationID = viewModelProvider()?.conversationID ?: return
+        val viewModel = viewModelProvider() ?: return
+        val conversationID = viewModel.conversationID
         val groupID = ConversationIDUtil.groupIdOrNull(conversationID) ?: return
         val activity = context as? FragmentActivity ?: return
 
@@ -40,6 +41,7 @@ internal class MessageInputMentionController(
         MentionMemberDialogFragment.show(
             activity = activity,
             groupID = groupID,
+            canMentionAll = viewModel.canMentionAll,
             onConfirm = { selectedMentions ->
                 textController.insertMentionsReplacingTrigger(selectedMentions)
             }

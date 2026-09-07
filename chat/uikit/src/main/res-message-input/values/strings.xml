@@ -12,6 +12,7 @@
     <string name="message_input_more">More</string>
     <string name="message_input_back">Back</string>
     <string name="message_input_mention_all">All</string>
+    <string name="message_input_mention_all_not_allowed">You don\'t have permission to mention everyone.</string>
     <string name="message_input_mention_select_member">Select Member</string>
     <string name="message_input_press_to_talk">Press to Talk</string>
     <string name="message_input_audio">Audio</string>
