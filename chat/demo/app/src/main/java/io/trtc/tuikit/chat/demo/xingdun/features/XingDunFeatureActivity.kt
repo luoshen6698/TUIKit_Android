@@ -2054,12 +2054,17 @@ open class XingDunFeatureActivity : BaseActivity() {
         setBusy(true)
         lifecycleScope.launch {
             runCatching {
-                XingDunSessionManager.apiClient().getNullable<JsonObject>(
+                val payload = XingDunSessionManager.apiClient().getNullable<JsonElement>(
                     requireSession(),
                     "user/searchForFriend",
                     mapOf("keyword" to keyword),
-                    JsonObject::class.java,
+                    JsonElement::class.java,
                 )
+                try {
+                    XingDunFriendSearchPayloadPolicy.profile(payload)
+                } catch (_: IllegalArgumentException) {
+                    throw IllegalStateException(getString(R.string.xingdun_error_response_format))
+                }
             }.onSuccess { profile ->
                 onSearchingChanged(false)
                 setBusy(false)

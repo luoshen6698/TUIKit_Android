@@ -414,7 +414,7 @@
     <string name="xingdun_friend_application_too_long">The application message must be 256 bytes or fewer.</string>
     <string name="xingdun_friend_added">Friend added.</string>
     <string name="xingdun_friend_application_sent">Friend request sent.</string>
-    <string name="xingdun_friend_not_found">User not found</string>
+    <string name="xingdun_friend_not_found">This user does not exist</string>
     <string name="xingdun_friend_not_found_detail">Check the login name, XingDun account, IM account, or phone number.</string>
     <string name="xingdun_friend_relationship_none">Not connected</string>
     <string name="xingdun_friend_relationship_self">This is your account</string>

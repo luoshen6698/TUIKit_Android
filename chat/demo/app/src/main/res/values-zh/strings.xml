@@ -408,7 +408,7 @@
     <string name="xingdun_friend_application_too_long">申请理由不能超过 256 个字节。</string>
     <string name="xingdun_friend_added">已添加为好友。</string>
     <string name="xingdun_friend_application_sent">好友申请已发送。</string>
-    <string name="xingdun_friend_not_found">未找到用户</string>
+    <string name="xingdun_friend_not_found">该用户不存在</string>
     <string name="xingdun_friend_not_found_detail">请核对登录名、星盾账号、IM 账号或手机号。</string>
     <string name="xingdun_friend_relationship_none">暂无好友关系</string>
     <string name="xingdun_friend_relationship_self">这是您自己的账号</string>
