@@ -24,6 +24,9 @@
     <string name="message_list_message_tips_you_recall_message">您撤回了一条消息</string>
     <string name="message_list_message_tips_recall_message_format">"%1$s" 撤回了一条消息</string>
     <string name="message_list_message_tips_others_recall_message">对方撤回了一条消息</string>
+    <string name="message_list_message_tips_customer_service_recall_message">客服撤回了一条消息</string>
+    <string name="message_list_message_tips_group_manager_recall_message">群管理员撤回了一条消息</string>
+    <string name="message_list_message_tips_administrator_recall_message">管理员撤回了一条消息</string>
     <string name="message_list_group_event_member_joined">成员加入群聊</string>
     <string name="message_list_group_event_members_invited">邀请成员加入群聊</string>
     <string name="message_list_group_event_member_left">成员退出群聊</string>

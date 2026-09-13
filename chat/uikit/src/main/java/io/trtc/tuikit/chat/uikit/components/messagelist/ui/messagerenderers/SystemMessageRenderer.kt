@@ -17,6 +17,7 @@ import io.trtc.tuikit.atomicxcore.api.conversation.ConversationType
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageStatus
 import io.trtc.tuikit.atomicxcore.api.message.TipsMessagePayload
+import java.util.Locale
 
 class SystemMessageRenderer : MessageRenderer {
 
@@ -60,6 +61,12 @@ internal data class RecalledMessageDisplaySpec(
     val formatArg: String? = null,
 )
 
+internal enum class ManagementRecallActor {
+    CUSTOMER_SERVICE,
+    GROUP_MANAGER,
+    SYSTEM_ADMINISTRATOR,
+}
+
 internal object RecalledMessageDisplayPolicy {
     fun format(context: Context, message: MessageInfo): String? {
         val spec = createSpec(message) ?: return null
@@ -70,6 +77,18 @@ internal object RecalledMessageDisplayPolicy {
     fun createSpec(message: MessageInfo): RecalledMessageDisplaySpec? {
         if (message.status != MessageStatus.REVOKED) {
             return null
+        }
+        when (managementRecallActor(message.revokeReason, message.revokerInfo?.userID)) {
+            ManagementRecallActor.CUSTOMER_SERVICE -> return RecalledMessageDisplaySpec(
+                R.string.message_list_message_tips_customer_service_recall_message,
+            )
+            ManagementRecallActor.GROUP_MANAGER -> return RecalledMessageDisplaySpec(
+                R.string.message_list_message_tips_group_manager_recall_message,
+            )
+            ManagementRecallActor.SYSTEM_ADMINISTRATOR -> return RecalledMessageDisplaySpec(
+                R.string.message_list_message_tips_administrator_recall_message,
+            )
+            null -> Unit
         }
         if (message.isSentBySelf) {
             return RecalledMessageDisplaySpec(R.string.message_list_message_tips_you_recall_message)
@@ -88,5 +107,22 @@ internal object RecalledMessageDisplayPolicy {
             R.string.message_list_message_tips_normal_recall_message
         }
         return RecalledMessageDisplaySpec(textResId)
+    }
+
+    internal fun managementRecallActor(reason: String?, revokerUserID: String?): ManagementRecallActor? {
+        val normalizedReason = reason?.trim()?.lowercase(Locale.ROOT).orEmpty()
+        if (normalizedReason.contains("xingdun management recall")) {
+            if (normalizedReason.contains("customer_service")) {
+                return ManagementRecallActor.CUSTOMER_SERVICE
+            }
+            if (normalizedReason.contains("group_manager")) {
+                return ManagementRecallActor.GROUP_MANAGER
+            }
+        }
+        return if (revokerUserID?.trim().equals("administrator", ignoreCase = true)) {
+            ManagementRecallActor.SYSTEM_ADMINISTRATOR
+        } else {
+            null
+        }
     }
 }

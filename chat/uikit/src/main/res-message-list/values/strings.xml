@@ -24,6 +24,9 @@
     <string name="message_list_message_tips_you_recall_message">You recalled a message</string>
     <string name="message_list_message_tips_recall_message_format">"%1$s" recalled a message</string>
     <string name="message_list_message_tips_others_recall_message">The other user recalled a message</string>
+    <string name="message_list_message_tips_customer_service_recall_message">Customer service recalled a message</string>
+    <string name="message_list_message_tips_group_manager_recall_message">A group manager recalled a message</string>
+    <string name="message_list_message_tips_administrator_recall_message">An administrator recalled a message</string>
     <string name="message_list_group_event_member_joined">A member joined the group</string>
     <string name="message_list_group_event_members_invited">Members were invited to the group</string>
     <string name="message_list_group_event_member_left">A member left the group</string>
