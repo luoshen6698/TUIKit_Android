@@ -1,10 +1,12 @@
 package io.trtc.tuikit.chat.demo.xingdun.features
 
 import android.app.AlertDialog
+import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Editable
@@ -13,6 +15,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -24,6 +27,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.tencent.imsdk.v2.V2TIMConversation
@@ -39,6 +43,7 @@ import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMember
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
+import io.trtc.tuikit.chat.uikit.components.widgets.DialogNavBar
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -339,7 +344,7 @@ open class XingDunGroupAdministratorsActivity : BaseActivity() {
         var recentLoadError = false
         val wrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(20.dp(), 4.dp(), 20.dp(), 8.dp())
+            setPadding(16.dp(), 8.dp(), 16.dp(), 8.dp())
         }
         val tabs = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -374,9 +379,9 @@ open class XingDunGroupAdministratorsActivity : BaseActivity() {
         }
         wrapper.addView(tabs, matchWrap())
         wrapper.addView(search, matchWrap().apply { topMargin = 10.dp() })
-        wrapper.addView(scrollView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 360.dp()).apply { topMargin = 10.dp() })
+        wrapper.addView(scrollView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = 10.dp() })
 
-        lateinit var dialog: AlertDialog
+        lateinit var dialog: Dialog
         fun updateTabAppearance() {
             listOf(CandidateTab.RECENT to recentTab, CandidateTab.CONTACTS to contactsTab).forEach { (tab, view) ->
                 val selected = selectedTab == tab
@@ -456,11 +461,42 @@ open class XingDunGroupAdministratorsActivity : BaseActivity() {
             selectedTab = CandidateTab.CONTACTS
             renderCandidates()
         }
-        dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_group_administrator_add)
-            .setView(wrapper)
-            .setNegativeButton(android.R.string.cancel, null)
-            .create()
+        val rootLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_LOCALE
+            setBackgroundColor(current.bgColorOperate)
+            fitsSystemWindows = true
+        }
+        dialog = Dialog(this, android.R.style.Theme_NoTitleBar).apply {
+            window?.apply {
+                setBackgroundDrawable(ColorDrawable(current.bgColorOperate))
+                setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
+                addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+                clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                statusBarColor = current.bgColorOperate
+                navigationBarColor = current.bgColorOperate
+                WindowInsetsControllerCompat(this, decorView).run {
+                    val lightBackground = isLightColor(current.bgColorOperate)
+                    isAppearanceLightStatusBars = lightBackground
+                    isAppearanceLightNavigationBars = lightBackground
+                }
+            }
+        }
+        rootLayout.addView(DialogNavBar.create(
+            this,
+            DialogNavBar.Config(
+                mode = DialogNavBar.Mode.CancelTitleConfirm,
+                title = getString(R.string.xingdun_group_administrator_add),
+                colors = current,
+                onLeadingClick = { dialog.dismiss() },
+            ),
+        ))
+        rootLayout.addView(wrapper, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            0,
+            1f,
+        ))
+        dialog.setContentView(rootLayout)
         renderCandidates()
         dialog.show()
         loadRecentConversations { ids, failed ->
@@ -649,6 +685,13 @@ open class XingDunGroupAdministratorsActivity : BaseActivity() {
     }
 
     private fun colors(): ColorTokens = themeStore.themeState.value.currentTheme.tokens.color
+
+    private fun isLightColor(color: Int): Boolean {
+        val red = (color shr 16) and 0xFF
+        val green = (color shr 8) and 0xFF
+        val blue = color and 0xFF
+        return (0.299 * red + 0.587 * green + 0.114 * blue) / 255 > 0.5
+    }
 
     private fun rounded(color: Int, radiusDp: Float) = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
