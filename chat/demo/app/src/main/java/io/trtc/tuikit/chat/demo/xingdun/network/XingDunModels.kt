@@ -211,6 +211,7 @@ data class XingDunGroupDetail(
     val isOfficial: Boolean = false,
     val isCustomerService: Boolean = false,
     val currentUserIsAssignedCs: Boolean = false,
+    val assignedCustomerServiceUserId: String? = null,
 ) {
     val publicGroupId: String?
         get() = displayGroupId?.trim()?.takeIf { value -> value.isNotEmpty() && value.all(Char::isDigit) }

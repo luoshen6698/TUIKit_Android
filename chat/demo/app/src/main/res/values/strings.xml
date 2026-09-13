@@ -1535,4 +1535,9 @@
     <string name="xingdun_chat_history_message">Message</string>
     <string name="xingdun_chat_history_load_failed">Couldn’t load chat history. Try again.</string>
     <string name="xingdun_conversation_refresh_failed">Couldn’t refresh conversations. Try again.</string>
+    <string name="xingdun_group_management_recall_action">Recall</string>
+    <string name="xingdun_group_management_recall_confirm_title">Recall this group message?</string>
+    <string name="xingdun_group_management_recall_confirm_message">The message will be recalled for all group members. This action is recorded for audit.</string>
+    <string name="xingdun_group_management_recall_success">Message recalled.</string>
+    <string name="xingdun_group_management_recall_failed">Could not recall the message. Refresh group permissions and try again.</string>
 </resources>

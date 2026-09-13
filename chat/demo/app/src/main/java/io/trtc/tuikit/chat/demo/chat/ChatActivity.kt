@@ -65,6 +65,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactForwardPickerActi
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFavoriteMessageRequest
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMessageRecallAuthorization
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoritePolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoriteRepository
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunLocalMessageMarkRepository
@@ -73,6 +74,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessageRepository
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunEmojiCompatibility
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagesActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPager
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessage
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessagePage
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunRuntimeFeaturePolicy
@@ -154,6 +156,8 @@ class ChatActivity : BaseActivity() {
     private var messageFavoriteEnabled = false
     private var messagePinEnabled = false
     private var canManagePinnedMessages = false
+    private var groupMessageRecallAuthorization: XingDunGroupMessageRecallAuthorization? = null
+    private val activeManagementRecallMessageIDs = mutableSetOf<String>()
     private var pinnedPage = XingDunPinnedMessagePage()
     private val activeFavoriteMessageIDs = mutableSetOf<String>()
     private val contactCardPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -214,6 +218,7 @@ class ChatActivity : BaseActivity() {
         private const val PIN_ACTION_ID = "xingdun.message.pin"
         private const val MARK_ACTION_ID = "xingdun.message.mark"
         private const val REPORT_ACTION_ID = "xingdun.message.report"
+        private const val MANAGEMENT_RECALL_ACTION_ID = "xingdun.message.managementRecall"
         private const val CONTACT_CARD_ACTION_ID = "xingdun.messageInput.contactCard"
         private const val REDPACKET_ACTION_ID = "xingdun.messageInput.redpacket"
         private const val MENTION_ACTION_ID = "xingdun.messageInput.mention"
@@ -520,6 +525,65 @@ class ChatActivity : BaseActivity() {
                 )
                 if (!insertBefore(MessageActionIDs.DELETE, reportAction)) add(reportAction)
             }
+
+            if (!message.isSentBySelf &&
+                conversationID.startsWith(GROUP_CONVERSATION_ID_PREFIX) &&
+                groupMessageRecallAuthorization?.canRecallOther(message.from.userID) == true) {
+                val recallAction = MessageCustomAction(
+                    ID = MANAGEMENT_RECALL_ACTION_ID,
+                    title = getString(R.string.xingdun_group_management_recall_action),
+                    iconResID = R.drawable.xingdun_ic_message_recall,
+                    action = { confirmManagementRecall(it) },
+                    dangerous = true,
+                )
+                if (!insertBefore(MessageActionIDs.DELETE, recallAction)) add(recallAction)
+            }
+        }
+    }
+
+    private fun confirmManagementRecall(message: MessageInfo) {
+        val messageID = message.msgID.takeIf(String::isNotBlank) ?: return
+        if (messageID in activeManagementRecallMessageIDs) return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.xingdun_group_management_recall_confirm_title)
+            .setMessage(R.string.xingdun_group_management_recall_confirm_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.xingdun_group_management_recall_action) { _, _ ->
+                performManagementRecall(messageID)
+            }
+            .show()
+    }
+
+    private fun performManagementRecall(messageID: String) {
+        val groupID = conversationID.removePrefix(GROUP_CONVERSATION_ID_PREFIX).trim()
+        val session = XingDunSessionManager.currentSession() ?: return
+        val scope = activityScope ?: return
+        if (groupID.isEmpty() || !activeManagementRecallMessageIDs.add(messageID)) return
+        scope.launch {
+            try {
+                runCatching {
+                    XingDunSessionManager.apiClient().postEmpty(
+                        session,
+                        "message/groupRecall",
+                        mapOf("group_id" to groupID, "message_server_id" to messageID),
+                    )
+                }.onSuccess {
+                    Toast.makeText(
+                        this@ChatActivity,
+                        R.string.xingdun_group_management_recall_success,
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }.onFailure { error ->
+                    if (error is CancellationException) throw error
+                    Toast.makeText(
+                        this@ChatActivity,
+                        R.string.xingdun_group_management_recall_failed,
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } finally {
+                activeManagementRecallMessageIDs.remove(messageID)
+            }
         }
     }
 
@@ -813,18 +877,31 @@ class ChatActivity : BaseActivity() {
         val revision = ++groupPermissionRevision
         groupPermissionJob?.cancel()
         groupPermissionJob = activityScope?.launch {
+            val groupID = conversationID.removePrefix(GROUP_CONVERSATION_ID_PREFIX)
             val result = runCatching {
                 val session = XingDunSessionManager.currentSession() ?: error("Missing session")
-                XingDunSessionManager.apiClient().get<XingDunGroupDetail>(
+                val detail = XingDunSessionManager.apiClient().get<XingDunGroupDetail>(
                     session,
                     "team/detail",
-                    mapOf("team_id" to conversationID.removePrefix(GROUP_CONVERSATION_ID_PREFIX)),
+                    mapOf("team_id" to groupID),
                     XingDunGroupDetail::class.java,
                 )
+                val members = runCatching {
+                    XingDunGroupMemberPager.loadAll(
+                        XingDunSessionManager.apiClient(),
+                        session,
+                        groupID,
+                        getString(R.string.xingdun_group_members_pagination_failed),
+                    )
+                }.getOrNull()
+                detail to members
             }
             if (revision != groupPermissionRevision) return@launch
-            result.onSuccess { detail ->
+            result.onSuccess { (detail, members) ->
                 messageInputConfig.canMentionAll = detail.canMentionAll
+                groupMessageRecallAuthorization = members?.let {
+                    XingDunGroupMessageRecallAuthorization.from(detail, it)
+                }
                 if (messagePinEnabled) {
                     canManagePinnedMessages = XingDunPinnedMessagePolicy.canManage(
                         detail.currentUserRole,
@@ -837,6 +914,7 @@ class ChatActivity : BaseActivity() {
                 )
             }.onFailure {
                 if (it is CancellationException) throw it
+                groupMessageRecallAuthorization = null
                 messageInputConfig.canMentionAll = false
                 chatPageView.setComposerRestriction(
                     getString(R.string.xingdun_group_sending_permission_unavailable),

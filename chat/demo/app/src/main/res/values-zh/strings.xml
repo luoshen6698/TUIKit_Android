@@ -1517,4 +1517,9 @@
     <string name="xingdun_chat_history_message">消息</string>
     <string name="xingdun_chat_history_load_failed">聊天记录加载失败，请稍后重试。</string>
     <string name="xingdun_conversation_refresh_failed">会话刷新失败，请稍后重试。</string>
+    <string name="xingdun_group_management_recall_action">撤回</string>
+    <string name="xingdun_group_management_recall_confirm_title">撤回这条群消息？</string>
+    <string name="xingdun_group_management_recall_confirm_message">撤回后所有群成员都无法再查看该消息，本次操作会记录审计。</string>
+    <string name="xingdun_group_management_recall_success">消息已撤回。</string>
+    <string name="xingdun_group_management_recall_failed">撤回失败，请刷新群权限后重试。</string>
 </resources>
