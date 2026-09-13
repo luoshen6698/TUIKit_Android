@@ -76,6 +76,7 @@ class AtomicAZOrderedList @JvmOverloads constructor(
     private var onItemLongClickListener: ((AZOrderedListItem<Any?>, View) -> Unit)? = null
     private var headerView: View? = null
     private var footerView: View? = null
+    private var showDisclosure = true
 
     var onUserInteraction: (() -> Unit)? = null
 
@@ -185,6 +186,11 @@ class AtomicAZOrderedList @JvmOverloads constructor(
         listAdapter.notifyDataSetChanged()
     }
 
+    fun setShowDisclosure(show: Boolean) {
+        showDisclosure = show
+        listAdapter.notifyDataSetChanged()
+    }
+
     private sealed class FlatItem {
         data class CustomHeader(val view: View) : FlatItem()
         data class SectionHeader(val letter: String) : FlatItem()
@@ -286,6 +292,7 @@ class AtomicAZOrderedList @JvmOverloads constructor(
                     holder.avatar.setContent(
                         Avatar.AvatarContent.Image(item.item.avatarUrl, item.item.label)
                     )
+                    holder.disclosureView.visibility = if (showDisclosure) VISIBLE else INVISIBLE
                     holder.disclosureView.setColorFilter(colors.textColorTertiary, PorterDuff.Mode.SRC_IN)
                     holder.itemView.setOnClickListener {
                         onItemClickListener?.invoke(item.item)

@@ -125,6 +125,7 @@ class ContactListView @JvmOverloads constructor(
 
         azOrderedList = AtomicAZOrderedList(context).apply {
             layoutDirection = LAYOUT_DIRECTION_LOCALE
+            setShowDisclosure(false)
             onUserInteraction = {
                 searchBarView.hideKeyboard()
             }
@@ -504,6 +505,7 @@ class ContactListView @JvmOverloads constructor(
         val disclosureView = ImageView(context).apply {
             setImageResource(R.drawable.uikit_ic_arrow_right)
             setColorFilter(colors.textColorTertiary, PorterDuff.Mode.SRC_IN)
+            visibility = INVISIBLE
         }
         rowView.addView(
             disclosureView,
