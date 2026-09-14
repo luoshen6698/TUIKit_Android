@@ -176,8 +176,9 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var attachmentFailureHandler: ((Throwable) -> Unit)? = null
     private var pendingInvitePoster: Bitmap? = null
     private var invitePosterSaving = false
-    private var invitePosterSaveButton: Button? = null
-    private var invitePosterCopyButton: Button? = null
+    private var invitePosterSaveButton: TextView? = null
+    private var invitePosterSaveContainer: View? = null
+    private var invitePosterCopyContainer: View? = null
     private var pendingPersonalQRCode: XingDunPersonalQRCodeArtifact? = null
     private var personalQRCodeSaving = false
     private var personalQRCodeSaveButton: TextView? = null
@@ -2851,7 +2852,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             setText(R.string.xingdun_invite_poster_preparing)
             textSize = 16f
             gravity = Gravity.CENTER
-            setTextColor(Color.LTGRAY)
+            setTextColor(0xFF6E7775.toInt())
             setPadding(0, 180.dp(), 0, 0)
         })
     }
@@ -2865,51 +2866,85 @@ open class XingDunFeatureActivity : BaseActivity() {
             adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = getString(R.string.xingdun_invite_poster_description)
-            background = roundedDrawable(Color.WHITE, 16f)
+            background = roundedDrawable(Color.WHITE, 20f)
             clipToOutline = true
+            elevation = 2.dp().toFloat()
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = 4.dp()
-            marginStart = 30.dp()
-            marginEnd = 30.dp()
+            topMargin = 8.dp()
         })
-        val saveButton = invitePosterButton(R.string.xingdun_save_invite_poster, primary = true) {
+        val (saveContainer, saveButton) = invitePosterButton(
+            label = R.string.xingdun_save_invite_poster,
+            icon = R.drawable.xingdun_ic_save_image,
+            primary = true,
+        ) {
             saveInvitePoster(poster)
         }
-        val copyButton = invitePosterButton(R.string.xingdun_copy_share_link, primary = false) {
+        val (copyContainer) = invitePosterButton(
+            label = R.string.xingdun_copy_share_link,
+            icon = R.drawable.xingdun_ic_link,
+            primary = false,
+        ) {
             if (invitePosterSaving) return@invitePosterButton
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.xingdun_copy_share_link), shareUrl))
             showInvitePosterFeedback(R.string.xingdun_share_link_copied)
         }
         invitePosterSaveButton = saveButton
-        invitePosterCopyButton = copyButton
-        content.addView(saveButton)
-        content.addView(copyButton)
+        invitePosterSaveContainer = saveContainer
+        invitePosterCopyContainer = copyContainer
+        content.addView(saveContainer, invitePosterButtonLayoutParams(14))
+        content.addView(copyContainer, invitePosterButtonLayoutParams(10))
     }
 
-    private fun invitePosterButton(label: Int, primary: Boolean, action: () -> Unit): Button =
-        actionButton(label, action).apply {
-            val foreground = if (primary) Color.WHITE else 0xFF28B7A2.toInt()
+    private fun invitePosterButton(
+        label: Int,
+        icon: Int,
+        primary: Boolean,
+        action: () -> Unit,
+    ): Pair<FrameLayout, TextView> {
+        val foreground = if (primary) Color.WHITE else 0xFF168F7C.toInt()
+        val background = roundedDrawable(if (primary) 0xFF20A88F.toInt() else Color.WHITE, 14f).apply {
+            if (!primary) setStroke(1.dp(), 0xFF8DD8CC.toInt())
+        }
+        val labelView = TextView(this).apply {
+            setText(label)
             setTextColor(foreground)
-            background = roundedDrawable(if (primary) 0xFF28B7A2.toInt() else 0xFF063B36.toInt(), 10f)
-            compoundDrawablePadding = 8.dp()
-            setCompoundDrawablesWithIntrinsicBounds(
-                if (primary) R.drawable.xingdun_ic_save_image else R.drawable.xingdun_ic_link,
-                0,
-                0,
-                0,
-            )
-            compoundDrawableTintList = android.content.res.ColorStateList.valueOf(foreground)
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()).apply {
-                topMargin = 12.dp()
-                marginStart = 30.dp()
-                marginEnd = 30.dp()
-            }
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }
+        val buttonContent = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            addView(ImageView(this@XingDunFeatureActivity).apply {
+                setImageDrawable(ContextCompat.getDrawable(this@XingDunFeatureActivity, icon)?.mutate()?.apply {
+                    setTint(foreground)
+                })
+                contentDescription = null
+            }, LinearLayout.LayoutParams(20.dp(), 20.dp()))
+            addView(labelView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = 7.dp()
+            })
+        }
+        val container = FrameLayout(this).apply {
+            this.background = background
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { action() }
+            addView(buttonContent, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+        }
+        return container to labelView
+    }
+
+    private fun invitePosterButtonLayoutParams(topMarginDp: Int) =
+        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()).apply {
+            topMargin = topMarginDp.dp()
         }
 
     private fun showInvitePosterUnavailable() {
         invitePosterSaveButton = null
-        invitePosterCopyButton = null
+        invitePosterSaveContainer = null
+        invitePosterCopyContainer = null
         invitePosterSaving = false
         content.removeAllViews()
         content.gravity = Gravity.CENTER
@@ -2917,18 +2952,23 @@ open class XingDunFeatureActivity : BaseActivity() {
             setText(R.string.xingdun_invite_poster_unavailable)
             textSize = 20f
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(0xFF1F2725.toInt())
         })
         content.addView(TextView(this).apply {
             setText(R.string.xingdun_invite_poster_unavailable_detail)
             textSize = 14f
             gravity = Gravity.CENTER
-            setTextColor(Color.LTGRAY)
+            setTextColor(0xFF6E7775.toInt())
             setPadding(0, 10.dp(), 0, 12.dp())
         })
-        content.addView(invitePosterButton(R.string.xingdun_retry, primary = true) {
+        val (retryButton) = invitePosterButton(
+            label = R.string.xingdun_retry,
+            icon = R.drawable.xingdun_ic_about_refresh,
+            primary = true,
+        ) {
             showInvite()
-        })
+        }
+        content.addView(retryButton, invitePosterButtonLayoutParams(12))
     }
 
     private fun createInvitePoster(
@@ -2940,35 +2980,71 @@ open class XingDunFeatureActivity : BaseActivity() {
         val poster = Bitmap.createBitmap(1_080, 1_440, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(poster)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
-        canvas.drawColor(Color.rgb(245, 247, 250))
-        paint.color = Color.rgb(20, 46, 74)
-        canvas.drawRect(0f, 0f, 1_080f, 430f, paint)
-        paint.color = Color.rgb(31, 140, 89)
-        canvas.drawRect(0f, 414f, 1_080f, 430f, paint)
-        drawPosterText(canvas, paint, brandName, 120f, 62f, Color.WHITE, true)
-        drawPosterText(canvas, paint, getString(R.string.xingdun_invite_poster_tagline), 210f, 32f, Color.WHITE)
+        canvas.drawColor(0xFFF8FBFA.toInt())
+        paint.color = 0xFFEAF8F4.toInt()
+        canvas.drawRect(0f, 0f, 1_080f, 340f, paint)
+        drawPosterBrandLogo(canvas, paint)
+        drawPosterText(canvas, paint, brandName, 126f, 58f, 0xFF173C37.toInt(), true, 250f, 750f, Paint.Align.LEFT)
+        drawPosterText(
+            canvas,
+            paint,
+            getString(R.string.xingdun_invite_poster_tagline),
+            190f,
+            31f,
+            0xFF66807A.toInt(),
+            false,
+            250f,
+            750f,
+            Paint.Align.LEFT,
+        )
+        paint.color = 0xFFDDF4EE.toInt()
+        canvas.drawRoundRect(72f, 238f, 1_008f, 318f, 30f, 30f, paint)
         drawPosterText(
             canvas,
             paint,
             getString(R.string.xingdun_invite_poster_invitation, nickname.ifBlank { brandName }),
-            326f,
+            290f,
             32f,
-            Color.rgb(220, 229, 238)
+            0xFF168F7C.toInt(),
+            true,
         )
+        paint.color = 0xFFDCE9E6.toInt()
+        canvas.drawRoundRect(62f, 356f, 1_018f, 1_236f, 44f, 44f, paint)
         paint.color = Color.WHITE
-        canvas.drawRoundRect(90f, 500f, 990f, 1_320f, 24f, 24f, paint)
-        canvas.drawBitmap(qrBitmap, null, android.graphics.RectF(230f, 570f, 850f, 1_190f), paint)
+        canvas.drawRoundRect(72f, 346f, 1_008f, 1_226f, 42f, 42f, paint)
+        paint.isAntiAlias = false
+        canvas.drawBitmap(qrBitmap, null, android.graphics.RectF(190f, 390f, 890f, 1_090f), paint)
+        paint.isAntiAlias = true
+        paint.color = 0xFFEAF8F4.toInt()
+        canvas.drawRoundRect(220f, 1_108f, 860f, 1_194f, 30f, 30f, paint)
         drawPosterText(
             canvas,
             paint,
             getString(R.string.xingdun_invite_poster_code, inviteCode.uppercase(Locale.ROOT)),
-            1_255f,
-            34f,
-            Color.rgb(20, 46, 74),
+            1_164f,
+            33f,
+            0xFF168F7C.toInt(),
             true,
         )
-        drawPosterText(canvas, paint, getString(R.string.xingdun_invite_poster_scan_hint, brandName), 1_390f, 27f, Color.rgb(89, 99, 112))
+        drawPosterText(
+            canvas,
+            paint,
+            getString(R.string.xingdun_invite_poster_scan_hint, brandName),
+            1_330f,
+            32f,
+            0xFF6E7775.toInt(),
+        )
+        paint.color = 0xFF20A88F.toInt()
+        canvas.drawRoundRect(460f, 1_380f, 620f, 1_388f, 4f, 4f, paint)
         return poster
+    }
+
+    private fun drawPosterBrandLogo(canvas: Canvas, paint: Paint) {
+        paint.color = Color.WHITE
+        canvas.drawRoundRect(72f, 70f, 212f, 210f, 32f, 32f, paint)
+        BitmapFactory.decodeResource(resources, R.drawable.xingdun_brand_logo)?.let { logo ->
+            canvas.drawBitmap(logo, null, android.graphics.RectF(82f, 80f, 202f, 200f), paint)
+        }
     }
 
     private fun drawPosterText(
@@ -2978,15 +3054,19 @@ open class XingDunFeatureActivity : BaseActivity() {
         baseline: Float,
         size: Float,
         color: Int,
-        bold: Boolean = false
+        bold: Boolean = false,
+        x: Float = 540f,
+        maxWidth: Float = 900f,
+        align: Paint.Align = Paint.Align.CENTER,
     ) {
+        paint.textAlign = align
         paint.textSize = size
         paint.color = color
         paint.typeface = if (bold) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
-        while (paint.textSize > 18f && paint.measureText(text) > 900f) {
+        while (paint.textSize > 18f && paint.measureText(text) > maxWidth) {
             paint.textSize -= 1f
         }
-        canvas.drawText(text, 540f, baseline, paint)
+        canvas.drawText(text, x, baseline, paint)
     }
 
     private fun saveInvitePoster(poster: Bitmap) {
@@ -3026,14 +3106,12 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun setInvitePosterSaving(saving: Boolean) {
         invitePosterSaving = saving
         invitePosterSaveButton?.apply {
-            isEnabled = !saving
             setText(if (saving) R.string.xingdun_invite_poster_saving else R.string.xingdun_save_invite_poster)
-            alpha = if (saving) 0.48f else 1f
         }
-        invitePosterCopyButton?.apply {
-            isEnabled = !saving
-            alpha = if (saving) 0.48f else 1f
-        }
+        invitePosterSaveContainer?.isEnabled = !saving
+        invitePosterSaveContainer?.alpha = if (saving) 0.48f else 1f
+        invitePosterCopyContainer?.isEnabled = !saving
+        invitePosterCopyContainer?.alpha = if (saving) 0.48f else 1f
     }
 
     private fun showInvitePosterFeedback(message: Int) {
