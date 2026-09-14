@@ -514,6 +514,7 @@
     <string name="xingdun_profile_set_birthday">设置生日</string>
     <string name="xingdun_personal_qr">我的二维码</string>
     <string name="xingdun_personal_qr_description">%1$s\n账号：%2$s</string>
+    <string name="xingdun_personal_qr_account_format">账号：%1$s</string>
     <string name="xingdun_personal_qr_validity">此二维码用于识别您的星盾账号，请仅分享给可信联系人。</string>
     <string name="xingdun_personal_qr_scan_hint">扫一扫上面的二维码，加我为好友</string>
     <string name="xingdun_personal_qr_validity_format">有效期 7 天（%1$s），到期后重新进入将更新</string>

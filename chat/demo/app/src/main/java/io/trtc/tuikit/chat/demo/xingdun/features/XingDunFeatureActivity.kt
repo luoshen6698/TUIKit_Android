@@ -180,7 +180,8 @@ open class XingDunFeatureActivity : BaseActivity() {
     private var invitePosterCopyButton: Button? = null
     private var pendingPersonalQRCode: XingDunPersonalQRCodeArtifact? = null
     private var personalQRCodeSaving = false
-    private var personalQRCodeSaveButton: Button? = null
+    private var personalQRCodeSaveButton: TextView? = null
+    private var personalQRCodeSaveContainer: View? = null
     private var reportTargetFilter: String? = null
     private var reportStatusFilter: Int? = null
     private var reportPage = 1
@@ -7385,18 +7386,20 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun applyPersonalQRCodeChrome() {
-        window.statusBarColor = Color.BLACK
-        window.navigationBarColor = Color.BLACK
-        headerBar.setBackgroundColor(Color.BLACK)
-        scrollView.setBackgroundColor(Color.BLACK)
-        content.setBackgroundColor(Color.BLACK)
-        status.setBackgroundColor(Color.BLACK)
-        status.setTextColor(Color.WHITE)
+        val background = 0xFFF3F6F5.toInt()
+        window.statusBarColor = background
+        window.navigationBarColor = background
+        headerBar.setBackgroundColor(background)
+        scrollView.setBackgroundColor(background)
+        content.setBackgroundColor(background)
+        content.setPadding(14.dp(), 10.dp(), 14.dp(), 28.dp())
+        status.setBackgroundColor(background)
+        status.setTextColor(0xFF6E7775.toInt())
         (headerBar.getChildAt(0) as? TextView)?.apply {
-            setTextColor(Color.WHITE)
-            backgroundTintList = android.content.res.ColorStateList.valueOf(Color.BLACK)
+            setTextColor(0xFF1F2725.toInt())
+            backgroundTintList = android.content.res.ColorStateList.valueOf(background)
         }
-        (headerBar.getChildAt(1) as? TextView)?.setTextColor(Color.WHITE)
+        (headerBar.getChildAt(1) as? TextView)?.setTextColor(0xFF1F2725.toInt())
     }
 
     private fun renderPersonalQRCode(artifact: XingDunPersonalQRCodeArtifact) {
@@ -7408,36 +7411,56 @@ open class XingDunFeatureActivity : BaseActivity() {
             adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = getString(R.string.xingdun_personal_qr_image_description)
-            background = roundedDrawable(Color.WHITE, 16f)
+            background = roundedDrawable(Color.WHITE, 20f)
             clipToOutline = true
+            elevation = 2.dp().toFloat()
             setOnLongClickListener {
                 showPersonalQRCodeActions(this, artifact)
                 true
             }
         }
         content.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = 4.dp()
-            marginStart = 30.dp()
-            marginEnd = 30.dp()
+            topMargin = 8.dp()
         })
-        val saveButton = actionButton(R.string.xingdun_personal_qr_save_image) {
-            savePersonalQRCode(artifact)
-        }.apply {
+        val saveIcon = ContextCompat.getDrawable(this, R.drawable.xingdun_ic_save_image)?.mutate()?.apply {
+            setTint(Color.WHITE)
+            setBounds(0, 0, 20.dp(), 20.dp())
+        }
+        val saveButton = TextView(this).apply {
+            setText(R.string.xingdun_personal_qr_save_image)
             setTextColor(Color.WHITE)
-            backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF28B7A2.toInt())
-            compoundDrawablePadding = 8.dp()
-            setCompoundDrawablesWithIntrinsicBounds(R.drawable.xingdun_ic_save_image, 0, 0, 0)
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }
+        val saveButtonContent = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            addView(ImageView(this@XingDunFeatureActivity).apply {
+                setImageDrawable(saveIcon)
+                contentDescription = null
+            }, LinearLayout.LayoutParams(20.dp(), 20.dp()))
+            addView(saveButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = 7.dp()
+            })
+        }
+        val saveContainer = FrameLayout(this).apply {
+            background = roundedDrawable(0xFF20A88F.toInt(), 14f)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { savePersonalQRCode(artifact) }
+            addView(saveButtonContent, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         }
         personalQRCodeSaveButton = saveButton
-        content.addView(saveButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()).apply {
-            topMargin = 16.dp()
-            marginStart = 30.dp()
-            marginEnd = 30.dp()
+        personalQRCodeSaveContainer = saveContainer
+        content.addView(saveContainer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dp()).apply {
+            topMargin = 14.dp()
         })
     }
 
     private fun showPersonalQRCodeUnavailable() {
         personalQRCodeSaveButton = null
+        personalQRCodeSaveContainer = null
         personalQRCodeSaving = false
         content.removeAllViews()
         content.gravity = Gravity.CENTER
@@ -7445,13 +7468,13 @@ open class XingDunFeatureActivity : BaseActivity() {
             setText(R.string.xingdun_personal_qr_unavailable)
             textSize = 20f
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(0xFF1F2725.toInt())
         })
         content.addView(TextView(this).apply {
             setText(R.string.xingdun_personal_qr_unavailable_detail)
             textSize = 14f
             gravity = Gravity.CENTER
-            setTextColor(Color.LTGRAY)
+            setTextColor(0xFF6E7775.toInt())
             setPadding(0, 10.dp(), 0, 0)
         })
     }
@@ -7489,10 +7512,10 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun setPersonalQRCodeSaving(saving: Boolean) {
         personalQRCodeSaving = saving
         personalQRCodeSaveButton?.apply {
-            isEnabled = !saving
             setText(if (saving) R.string.xingdun_personal_qr_saving else R.string.xingdun_personal_qr_save_image)
-            alpha = if (saving) 0.48f else 1f
         }
+        personalQRCodeSaveContainer?.isEnabled = !saving
+        personalQRCodeSaveContainer?.alpha = if (saving) 0.48f else 1f
     }
 
     private fun showPersonalQRCodeActions(anchor: View, artifact: XingDunPersonalQRCodeArtifact) {

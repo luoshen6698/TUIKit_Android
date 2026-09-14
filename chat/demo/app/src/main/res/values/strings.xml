@@ -520,6 +520,7 @@
     <string name="xingdun_profile_set_birthday">Set birthday</string>
     <string name="xingdun_personal_qr">My QR code</string>
     <string name="xingdun_personal_qr_description">%1$s\nAccount: %2$s</string>
+    <string name="xingdun_personal_qr_account_format">Account: %1$s</string>
     <string name="xingdun_personal_qr_validity">This QR code identifies your XingDun account. Share it only with people you trust.</string>
     <string name="xingdun_personal_qr_scan_hint">Scan the QR code above to add me as a friend</string>
     <string name="xingdun_personal_qr_validity_format">Valid for 7 days (until %1$s). Reopen this page after it expires to refresh.</string>

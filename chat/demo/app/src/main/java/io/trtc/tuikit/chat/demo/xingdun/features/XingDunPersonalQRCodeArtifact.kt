@@ -62,7 +62,7 @@ class XingDunPersonalQRCodeArtifactStore(private val context: Context) {
         val expiresAt = now + VALIDITY_MILLIS
         val qrCode = BarcodeEncoder().encodeBitmap(payload, BarcodeFormat.QR_CODE, 720, 720)
         val avatar = avatarURL?.takeIf(String::isNotBlank)?.let(::downloadBitmap)
-        val card = renderCard(qrCode, avatar, displayName, expiresAt, locale)
+        val card = renderCard(qrCode, avatar, displayName, accountID, expiresAt, locale)
         runCatching {
             FileOutputStream(imageFile).use { output -> check(card.compress(Bitmap.CompressFormat.PNG, 100, output)) }
             preferences.edit().putLong(expiresKey, expiresAt).apply()
@@ -74,6 +74,7 @@ class XingDunPersonalQRCodeArtifactStore(private val context: Context) {
         qrCode: Bitmap,
         avatar: Bitmap?,
         displayName: String,
+        accountID: String,
         expiresAt: Long,
         locale: Locale,
     ): Bitmap {
@@ -82,21 +83,35 @@ class XingDunPersonalQRCodeArtifactStore(private val context: Context) {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         canvas.drawColor(Color.WHITE)
 
+        paint.color = 0xFFEAF8F4.toInt()
+        canvas.drawRect(0f, 0f, 1_080f, 250f, paint)
         drawAvatar(canvas, paint, avatar, displayName)
-        drawText(canvas, paint, displayName, 250f, 166f, 58f, Color.BLACK, Paint.Align.LEFT, 720f, true)
-        paint.color = 0xFF909295.toInt()
-        canvas.drawRect(80f, 310f, 1_000f, 312f, paint)
+        drawText(canvas, paint, displayName, 242f, 128f, 55f, 0xFF173C37.toInt(), Paint.Align.LEFT, 760f, true)
+        drawText(
+            canvas,
+            paint,
+            context.getString(R.string.xingdun_personal_qr_account_format, accountID),
+            242f,
+            184f,
+            32f,
+            0xFF66807A.toInt(),
+            Paint.Align.LEFT,
+            760f,
+            false,
+        )
+        paint.color = 0xFFD9EDE8.toInt()
+        canvas.drawRect(72f, 278f, 1_008f, 280f, paint)
         paint.isAntiAlias = false
-        canvas.drawBitmap(qrCode, null, RectF(180f, 345f, 900f, 1_065f), paint)
+        canvas.drawBitmap(qrCode, null, RectF(140f, 316f, 940f, 1_116f), paint)
         paint.isAntiAlias = true
         drawText(
             canvas,
             paint,
             context.getString(R.string.xingdun_personal_qr_scan_hint),
             540f,
-            1_145f,
-            38f,
-            0xFF949699.toInt(),
+            1_206f,
+            40f,
+            0xFF6E7775.toInt(),
             Paint.Align.CENTER,
             900f,
             false,
@@ -104,12 +119,14 @@ class XingDunPersonalQRCodeArtifactStore(private val context: Context) {
         val isChinese = locale.language == Locale.CHINESE.language
         val formatter = SimpleDateFormat(if (isChinese) "yyyy年M月d日 HH:mm" else "MMM d, yyyy HH:mm", locale)
         val validity = context.getString(R.string.xingdun_personal_qr_validity_format, formatter.format(Date(expiresAt)))
-        drawText(canvas, paint, validity, 540f, 1_280f, 34f, 0xFFFA9414.toInt(), Paint.Align.CENTER, 920f, true)
+        paint.color = 0xFFEAF8F4.toInt()
+        canvas.drawRoundRect(RectF(76f, 1_280f, 1_004f, 1_394f), 30f, 30f, paint)
+        drawText(canvas, paint, validity, 540f, 1_350f, 33f, 0xFF168F7C.toInt(), Paint.Align.CENTER, 860f, true)
         return bitmap
     }
 
     private fun drawAvatar(canvas: Canvas, paint: Paint, avatar: Bitmap?, displayName: String) {
-        val bounds = RectF(90f, 78f, 210f, 198f)
+        val bounds = RectF(72f, 57f, 208f, 193f)
         canvas.save()
         canvas.clipPath(Path().apply { addOval(bounds, Path.Direction.CW) })
         if (avatar != null) {
@@ -117,12 +134,12 @@ class XingDunPersonalQRCodeArtifactStore(private val context: Context) {
         } else {
             paint.color = 0xFFE0F3EF.toInt()
             canvas.drawOval(bounds, paint)
-            drawText(canvas, paint, displayName.trim().take(1).uppercase(), 150f, 158f, 52f, 0xFF128B78.toInt(), Paint.Align.CENTER, 100f, true)
+            drawText(canvas, paint, displayName.trim().take(1).uppercase(), 140f, 147f, 56f, 0xFF128B78.toInt(), Paint.Align.CENTER, 110f, true)
         }
         canvas.restore()
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 3f
-        paint.color = 0xFFE3E6E8.toInt()
+        paint.strokeWidth = 5f
+        paint.color = 0xFF2AB098.toInt()
         canvas.drawOval(bounds, paint)
         paint.style = Paint.Style.FILL
     }
@@ -174,7 +191,7 @@ class XingDunPersonalQRCodeArtifactStore(private val context: Context) {
     }
 
     private companion object {
-        const val CACHE_DIRECTORY = "xingdun-personal-qr-v4"
+        const val CACHE_DIRECTORY = "xingdun-personal-qr-v6"
         const val CACHE_PREFERENCES = "xingdun_personal_qr_cache"
         const val VALIDITY_MILLIS = 7L * 24L * 60L * 60L * 1_000L
     }
