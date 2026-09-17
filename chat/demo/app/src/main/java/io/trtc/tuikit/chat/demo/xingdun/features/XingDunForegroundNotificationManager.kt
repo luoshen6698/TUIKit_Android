@@ -59,7 +59,12 @@ internal object XingDunForegroundNotificationManager {
                 val data = message.customElem?.data?.toString(Charsets.UTF_8)
                 XingDunCustomMessageParser.parse(data)?.let {
                     when (it.type) {
-                        "auto_delete_config" -> XingDunAutoDeleteRepository.applyRemote(conversationID, it.values)
+                        "auto_delete_config" -> XingDunConversationPreviewCleaner.onAutoDeleteConfigurationReceived(
+                            appContext,
+                            conversationID,
+                            it.values,
+                            message,
+                        )
                         "remote_delete" -> XingDunConversationPreviewCleaner.onRemoteDeleteReceived(
                             appContext,
                             conversationID,

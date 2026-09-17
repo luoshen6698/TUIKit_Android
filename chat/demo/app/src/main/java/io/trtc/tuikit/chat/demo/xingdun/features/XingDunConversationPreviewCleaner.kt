@@ -14,11 +14,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 internal object XingDunConversationPreviewPolicy {
     fun shouldRemoveFromLocalHistory(message: XingDunCustomMessage?): Boolean =
-        message?.type == "remote_delete" && message.isControl
+        message?.type in setOf("auto_delete_config", "remote_delete") && message?.isControl == true
 }
 
 /**
- * Removes the invisible remote-delete envelope after applying it locally.
+ * Removes invisible auto-delete control envelopes after applying them locally.
  * Tencent IM then promotes the latest remaining chat message as the conversation preview.
  */
 internal object XingDunConversationPreviewCleaner {
@@ -37,7 +37,17 @@ internal object XingDunConversationPreviewCleaner {
         controlMessage: V2TIMMessage,
     ) {
         XingDunAutoDeleteRepository.applyRemoteDeletion(context, conversationID, values)
-        removeRemoteDeleteEnvelope(context, conversationID, values, controlMessage)
+        removeControlEnvelope(context, conversationID, values, controlMessage)
+    }
+
+    fun onAutoDeleteConfigurationReceived(
+        context: Context,
+        conversationID: String,
+        values: Map<String, String>,
+        controlMessage: V2TIMMessage,
+    ) {
+        XingDunAutoDeleteRepository.applyRemote(conversationID, values)
+        removeControlEnvelope(context, conversationID, values, controlMessage)
     }
 
     fun cleanupExistingConversationPreviews(context: Context) {
@@ -85,11 +95,18 @@ internal object XingDunConversationPreviewCleaner {
         val controlMessage = conversation.lastMessage ?: return
         val custom = parse(controlMessage) ?: return
         if (!XingDunConversationPreviewPolicy.shouldRemoveFromLocalHistory(custom)) return
-        XingDunAutoDeleteRepository.applyRemoteDeletion(context, conversation.conversationID, custom.values)
-        removeRemoteDeleteEnvelope(context, conversation.conversationID, custom.values, controlMessage)
+        when (custom.type) {
+            "auto_delete_config" -> XingDunAutoDeleteRepository.applyRemote(conversation.conversationID, custom.values)
+            "remote_delete" -> XingDunAutoDeleteRepository.applyRemoteDeletion(
+                context,
+                conversation.conversationID,
+                custom.values,
+            )
+        }
+        removeControlEnvelope(context, conversation.conversationID, custom.values, controlMessage)
     }
 
-    private fun removeRemoteDeleteEnvelope(
+    private fun removeControlEnvelope(
         context: Context,
         conversationID: String,
         values: Map<String, String>,

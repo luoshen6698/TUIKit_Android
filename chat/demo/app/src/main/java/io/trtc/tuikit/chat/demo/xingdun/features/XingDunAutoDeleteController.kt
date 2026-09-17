@@ -71,7 +71,7 @@ internal class XingDunAutoDeleteController(
         val due = messages.filter { message ->
             val custom = XingDunCustomMessageParser.parse(message)
             val removableControl = XingDunConversationPreviewPolicy.shouldRemoveFromLocalHistory(custom)
-            val protectedControl = custom?.type in setOf("auto_delete_config", "config_refresh")
+            val protectedControl = custom?.type == "config_refresh"
             removableControl || (!protectedControl && (message.msgID in deletedIDs ||
                 (configuration != null && message.status.name == "SEND_SUCCESS" && XingDunAutoDeletePolicy.isExpired(
                     message.timestamp, configuration.ttlSeconds, configuration.enabled,
