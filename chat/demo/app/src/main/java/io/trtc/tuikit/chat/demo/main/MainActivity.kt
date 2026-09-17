@@ -59,6 +59,7 @@ import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.search.SearchActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactDetailActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunConversationPreviewCleaner
 import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunBlacklistActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupListActivity
@@ -272,6 +273,7 @@ class MainActivity : BaseActivity() {
     override fun onStart() {
         super.onStart()
         mainScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        XingDunConversationPreviewCleaner.cleanupExistingConversationPreviews(this)
         refreshUnreadCounts()
         contactsPage?.let(::refreshCustomerServiceContacts)
 

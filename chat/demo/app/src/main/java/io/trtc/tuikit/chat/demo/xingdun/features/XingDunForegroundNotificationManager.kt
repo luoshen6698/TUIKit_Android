@@ -60,7 +60,12 @@ internal object XingDunForegroundNotificationManager {
                 XingDunCustomMessageParser.parse(data)?.let {
                     when (it.type) {
                         "auto_delete_config" -> XingDunAutoDeleteRepository.applyRemote(conversationID, it.values)
-                        "remote_delete" -> XingDunAutoDeleteRepository.applyRemoteDeletion(appContext, conversationID, it.values)
+                        "remote_delete" -> XingDunConversationPreviewCleaner.onRemoteDeleteReceived(
+                            appContext,
+                            conversationID,
+                            it.values,
+                            message,
+                        )
                         "pin_message" -> XingDunPinnedMessageRepository.applyRemote(conversationID, it.values)
                     }
                 }
@@ -133,6 +138,7 @@ internal object XingDunForegroundNotificationManager {
 
     fun resetTenantState() {
         activeConversationID = null
+        XingDunConversationPreviewCleaner.resetAccountState()
     }
 
     fun soundEnabled(context: Context): Boolean = preferences(context).getBoolean(KEY_SOUND, true)

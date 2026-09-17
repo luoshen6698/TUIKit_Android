@@ -70,15 +70,24 @@ internal class XingDunAutoDeleteController(
         val deletedIDs = XingDunAutoDeleteRepository.deletedIDs(context, conversationID)
         val due = messages.filter { message ->
             val custom = XingDunCustomMessageParser.parse(message)
-            val protectedControl = custom?.type in setOf("auto_delete_config", "remote_delete", "config_refresh")
-            !protectedControl && (message.msgID in deletedIDs ||
+            val removableControl = XingDunConversationPreviewPolicy.shouldRemoveFromLocalHistory(custom)
+            val protectedControl = custom?.type in setOf("auto_delete_config", "config_refresh")
+            removableControl || (!protectedControl && (message.msgID in deletedIDs ||
                 (configuration != null && message.status.name == "SEND_SUCCESS" && XingDunAutoDeletePolicy.isExpired(
                     message.timestamp, configuration.ttlSeconds, configuration.enabled,
                     configuration.updatedAt, System.currentTimeMillis(),
-                )))
+                ))))
         }
         if (due.isEmpty()) return
-        XingDunAutoDeleteRepository.rememberDeleted(context, conversationID, due.map { it.msgID }.toSet())
+        XingDunAutoDeleteRepository.rememberDeleted(
+            context,
+            conversationID,
+            due.filterNot { message ->
+                XingDunConversationPreviewPolicy.shouldRemoveFromLocalHistory(
+                    XingDunCustomMessageParser.parse(message),
+                )
+            }.map { it.msgID }.toSet(),
+        )
         deleting = true
         store.deleteMessages(due, object : CompletionHandler {
             override fun onSuccess() { deleting = false }
