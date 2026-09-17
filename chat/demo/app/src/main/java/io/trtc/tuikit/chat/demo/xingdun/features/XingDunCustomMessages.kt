@@ -377,7 +377,7 @@ internal object XingDunCustomMessageParser {
         "video_call", "config_refresh", "auto_delete_config", "remote_delete", "pin_message",
         "read_receipt_summary", "report_notice", "workspace_application", "cs_control"
     )
-    private val hiddenTypes = setOf("auto_delete_config", "remote_delete", "pin_message", "read_receipt_summary")
+    private val hiddenTypes = setOf("remote_delete", "pin_message", "read_receipt_summary")
 
     fun parse(message: MessageInfo): XingDunCustomMessage? {
         if (message.messageType != MessageType.CUSTOM) return null

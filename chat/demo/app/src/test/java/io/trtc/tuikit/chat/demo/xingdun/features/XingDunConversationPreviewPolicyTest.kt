@@ -17,7 +17,7 @@ class XingDunConversationPreviewPolicyTest {
     }
 
     @Test
-    fun `auto delete configuration is hidden but visible custom messages remain`() {
+    fun `auto delete configuration stays in history but is skipped in conversation list`() {
         val settingNotice = requireNotNull(
             XingDunCustomMessageParser.parse(
                 """{"xd_type":"auto_delete_config","payload":{"ttl_seconds":120,"version":1}}""",
@@ -29,7 +29,9 @@ class XingDunConversationPreviewPolicyTest {
             ),
         )
 
-        assertTrue(XingDunConversationPreviewPolicy.shouldRemoveFromLocalHistory(settingNotice))
+        assertFalse(XingDunConversationPreviewPolicy.shouldRemoveFromLocalHistory(settingNotice))
+        assertTrue(XingDunConversationPreviewPolicy.shouldSkipInConversationList(settingNotice))
         assertFalse(XingDunConversationPreviewPolicy.shouldRemoveFromLocalHistory(textCard))
+        assertFalse(XingDunConversationPreviewPolicy.shouldSkipInConversationList(textCard))
     }
 }

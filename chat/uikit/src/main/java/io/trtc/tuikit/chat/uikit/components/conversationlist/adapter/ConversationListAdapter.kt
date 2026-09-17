@@ -36,6 +36,7 @@ import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import io.trtc.tuikit.atomicxcore.api.conversation.ConversationInfo
 import io.trtc.tuikit.atomicxcore.api.conversation.GroupAtType
 import io.trtc.tuikit.atomicxcore.api.conversation.ReceiveMessageOption
+import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageStatus
 
 internal fun resolveConversationAvatarBadge(conversation: ConversationInfo): Avatar.AvatarBadge {
@@ -100,11 +101,29 @@ class ConversationListAdapter(
     inner class ConversationViewHolder(
         private val itemLayout: ConversationItemLayout
     ) : RecyclerView.ViewHolder(itemLayout) {
+        private var bindToken: String = ""
+        private var previewMessage: MessageInfo? = null
+        private var hasPreviewOverride: Boolean = false
 
         fun bind(conversation: ConversationInfo) {
             val colors = this@ConversationListAdapter.colors
+            bindToken = "${conversation.conversationID}:${conversation.lastMessage?.msgID.orEmpty()}"
+            previewMessage = null
+            hasPreviewOverride = ConversationPreviewMessageRegistry.shouldOverride(conversation)
 
             itemLayout.bindConversation(conversation, colors, context, summaryFormatter)
+            if (hasPreviewOverride) {
+                val requestToken = bindToken
+                itemLayout.bindPreviewMessage(conversation, null, colors, context, summaryFormatter)
+                ConversationPreviewMessageRegistry.requestPreviewMessage(conversation) { message ->
+                    itemLayout.post {
+                        if (bindToken == requestToken) {
+                            previewMessage = message
+                            itemLayout.bindPreviewMessage(conversation, message, colors, context, summaryFormatter)
+                        }
+                    }
+                }
+            }
 
             itemLayout.setOnClickListener {
                 onItemClick(conversation)
@@ -119,6 +138,9 @@ class ConversationListAdapter(
 
         fun bindTheme(conversation: ConversationInfo) {
             itemLayout.bindTheme(conversation, colors, context, summaryFormatter)
+            if (hasPreviewOverride) {
+                itemLayout.bindPreviewMessage(conversation, previewMessage, colors, context, summaryFormatter)
+            }
         }
     }
 
@@ -321,9 +343,7 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
         bindAvatarBadge(conversation)
 
         titleView.text = conversation.title ?: conversation.conversationID
-        timeView.text = ChatDateTimeUtils.formatConversationListTime(conversation.lastMessage?.timestamp)
-
-        bindTheme(conversation, colors, context, summaryFormatter)
+        bindPreviewMessage(conversation, conversation.lastMessage, colors, context, summaryFormatter)
     }
 
     fun bindTheme(
@@ -331,17 +351,41 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
         colors: ColorTokens,
         context: Context,
         summaryFormatter: MessageListMessageSummaryFormatter = MessageListMessageSummaryFormatter()
+    ) = bindThemeWithMessage(conversation, conversation.lastMessage, colors, context, summaryFormatter)
+
+    fun bindPreviewMessage(
+        conversation: ConversationInfo,
+        previewMessage: MessageInfo?,
+        colors: ColorTokens,
+        context: Context,
+        summaryFormatter: MessageListMessageSummaryFormatter = MessageListMessageSummaryFormatter(),
+    ) {
+        timeView.text = ChatDateTimeUtils.formatConversationListTime(previewMessage?.timestamp)
+        bindThemeWithMessage(conversation, previewMessage, colors, context, summaryFormatter)
+    }
+
+    private fun bindThemeWithMessage(
+        conversation: ConversationInfo,
+        previewMessage: MessageInfo?,
+        colors: ColorTokens,
+        context: Context,
+        summaryFormatter: MessageListMessageSummaryFormatter,
     ) {
         setBackgroundColor(
             if (conversation.isPinned) colors.bgColorInput else colors.bgColorOperate
         )
         titleView.setTextColor(colors.textColorPrimary)
         subtitleView.setTextColor(colors.textColorSecondary)
-        val rawSubtitle = buildSubtitle(conversation, colors, context, summaryFormatter)
+        val rawSubtitle = buildSubtitle(conversation, previewMessage, colors, context, summaryFormatter)
         val fallbackSubtitle = buildSubtitle(
-            conversation, colors, context, summaryFormatter, EmojiSpanHelper::replaceEmojiKeysWithNames
+            conversation,
+            previewMessage,
+            colors,
+            context,
+            summaryFormatter,
+            EmojiSpanHelper::replaceEmojiKeysWithNames,
         )
-        val bindToken = "${conversation.conversationID}|${conversation.lastMessage?.msgID.orEmpty()}|$rawSubtitle|${subtitleView.textSize}"
+        val bindToken = "${conversation.conversationID}|${previewMessage?.msgID.orEmpty()}|$rawSubtitle|${subtitleView.textSize}"
         subtitleView.setTag(R.id.emoji_span_bind_token_tag, bindToken)
         subtitleView.text = fallbackSubtitle
         EmojiSpanHelper.applyEmojiSpans(context, rawSubtitle, subtitleView.textSize, subtitleView) { spanned ->
@@ -354,7 +398,7 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
         pinnedAccent.setBackgroundColor(colors.textColorLink)
         pinnedAccent.visibility = if (conversation.isPinned) VISIBLE else GONE
         bindMuteIcon(conversation, colors)
-        bindSendStatus(conversation, colors)
+        bindSendStatus(previewMessage, colors)
     }
 
     fun setHighlighted(highlighted: Boolean, colors: ColorTokens) {
@@ -378,9 +422,8 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
         }
     }
 
-    private fun bindSendStatus(conversation: ConversationInfo, colors: ColorTokens) {
-        val lastMsg = conversation.lastMessage
-        when (lastMsg?.status) {
+    private fun bindSendStatus(message: MessageInfo?, colors: ColorTokens) {
+        when (message?.status) {
             MessageStatus.SEND_FAIL, MessageStatus.VIOLATION -> {
                 sendFailIcon.visibility = VISIBLE
                 sendFailIcon.setTextColor(colors.textColorButton)
@@ -401,6 +444,7 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
 
     private fun buildSubtitle(
         conversation: ConversationInfo,
+        previewMessage: MessageInfo?,
         colors: ColorTokens,
         context: Context,
         summaryFormatter: MessageListMessageSummaryFormatter,
@@ -418,7 +462,7 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
             }
         }
 
-        val defaultSubtitle = transform(getMessageAbstract(conversation, context, summaryFormatter))
+        val defaultSubtitle = transform(getMessageAbstract(previewMessage, context, summaryFormatter, conversation.conversationID))
         if (atTagText.isNotEmpty()) {
             return SpannableStringBuilder().apply {
                 appendErrorText(colors, atTagText)
@@ -453,12 +497,12 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
     }
 
     private fun getMessageAbstract(
-        conversation: ConversationInfo,
+        messageInfo: MessageInfo?,
         context: Context,
-        summaryFormatter: MessageListMessageSummaryFormatter
+        summaryFormatter: MessageListMessageSummaryFormatter,
+        conversationID: String,
     ): String {
-        val messageInfo = conversation.lastMessage ?: return ""
-        return summaryFormatter.format(context, messageInfo, conversation.conversationID)
+        return messageInfo?.let { summaryFormatter.format(context, it, conversationID) }.orEmpty()
     }
 
     private fun buildAtTagText(conversation: ConversationInfo, context: Context): String {

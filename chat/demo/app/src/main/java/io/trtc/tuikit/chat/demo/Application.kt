@@ -17,6 +17,7 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseAccessActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessagePresentation
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunConversationPreviewResolver
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunLocalMessageMarkRepository
@@ -60,6 +61,7 @@ class Application : Application() {
         XingDunRouter.initialize(this)
         XingDunPushManager.initialize(this)
         XingDunCustomMessagePresentation.registerGlobalSummaries()
+        XingDunConversationPreviewResolver.register()
         XingDunForegroundNotificationManager.initialize(this)
         MessageLocalMarkConfig.provider = XingDunLocalMessageMarkRepository::isMarked
         BusinessActionRegistry.handler = XingDunBusinessActionHandler(this)
