@@ -37,6 +37,7 @@ class MessageListAdapter internal constructor(
     private val enableQuoteNavigation: Boolean = true,
     private val showMessageReadReceipt: Boolean = true,
     private val showInlineMessageTime: Boolean = false,
+    private val preferQuoteSnapshotContent: Boolean = false,
     private val resolver: MessageRendererResolver = MessageRendererResolver(emptyList()),
     private val renderActions: MessageRenderActions = NoOpMessageRenderActions
 ) : ListAdapter<MessageInfo, RecyclerView.ViewHolder>(DIFF) {
@@ -250,6 +251,7 @@ class MessageListAdapter internal constructor(
                 enableMessageInteraction = enableMessageInteraction,
                 enableQuoteNavigation = enableQuoteNavigation,
                 showMessageReadReceipt = showMessageReadReceipt,
+                preferQuoteSnapshotContent = preferQuoteSnapshotContent,
                 inlineTimeString = inlineTimeString
             )
 

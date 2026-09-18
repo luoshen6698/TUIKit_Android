@@ -14,7 +14,8 @@ import io.trtc.tuikit.atomicxcore.api.message.VideoMessagePayload
 internal object MessageQuoteDisplayPolicy {
     fun resolve(
         quoteInfo: MessageQuoteInfo,
-        labels: MessageQuoteLabels
+        labels: MessageQuoteLabels,
+        preferSnapshotContent: Boolean = false
     ): MessageQuoteDisplayData {
         val senderName = resolveSenderName(quoteInfo)
         val payload = quoteInfo.messagePayload
@@ -34,11 +35,13 @@ internal object MessageQuoteDisplayPolicy {
         }
         when (quoteInfo.status) {
             MessageStatus.DELETED -> {
-                return MessageQuoteDisplayData(
-                    senderName = senderName,
-                    contentText = labels.deleted,
-                    isStatusText = true
-                )
+                if (!preferSnapshotContent) {
+                    return MessageQuoteDisplayData(
+                        senderName = senderName,
+                        contentText = labels.deleted,
+                        isStatusText = true
+                    )
+                }
             }
             else -> Unit
         }

@@ -134,6 +134,7 @@ class MessageItemView(
         enableMessageInteraction: Boolean = true,
         enableQuoteNavigation: Boolean = true,
         showMessageReadReceipt: Boolean = true,
+        preferQuoteSnapshotContent: Boolean = false,
         inlineTimeString: String? = null
     ) {
         val cellSpacingPx = (config.cellSpacing * density).toInt()
@@ -318,6 +319,7 @@ class MessageItemView(
             colors = colors,
             isMultiSelectMode = isMultiSelectMode,
             enableQuoteNavigation = enableQuoteNavigation,
+            preferSnapshotContent = preferQuoteSnapshotContent,
             onQuoteClick = onQuoteClick
         )
         updateAuxiliaryTextBubble(
@@ -554,6 +556,7 @@ class MessageItemView(
         colors: ColorTokens,
         isMultiSelectMode: Boolean,
         enableQuoteNavigation: Boolean,
+        preferSnapshotContent: Boolean,
         onQuoteClick: (MessageQuoteInfo) -> Unit
     ) {
         val quoteInfo = message.quoteInfo
@@ -567,6 +570,7 @@ class MessageItemView(
             quoteInfo = quoteInfo,
             colors = colors,
             quoteMaxWidth = bubbleContainer.maxWidth,
+            preferSnapshotContent = preferSnapshotContent,
             onClick = if (enableQuoteNavigation && !isMultiSelectMode) {
                 { onQuoteClick(quoteInfo) }
             } else {

@@ -183,6 +183,7 @@ class MergedMessageDetailActivity : AppCompatActivity() {
             enableQuoteNavigation = true,
             showMessageReadReceipt = false,
             showInlineMessageTime = true,
+            preferQuoteSnapshotContent = true,
             resolver = rendererResolver
         )
 

@@ -92,10 +92,15 @@ internal class MessageQuoteBubbleView(context: Context) : MaxWidthLinearLayout(c
         colors: ColorTokens,
         labels: MessageQuoteLabels = createLabels(),
         quoteMaxWidth: Int,
+        preferSnapshotContent: Boolean = false,
         onClick: (() -> Unit)?
     ) {
         maxWidth = quoteMaxWidth
-        val displayData = MessageQuoteDisplayPolicy.resolve(quoteInfo, labels)
+        val displayData = MessageQuoteDisplayPolicy.resolve(
+            quoteInfo = quoteInfo,
+            labels = labels,
+            preferSnapshotContent = preferSnapshotContent
+        )
         val style = MessageQuoteBubbleStylePolicy.resolve(colors)
         orientation = style.orientation.toLinearLayoutOrientation()
         setPadding(
