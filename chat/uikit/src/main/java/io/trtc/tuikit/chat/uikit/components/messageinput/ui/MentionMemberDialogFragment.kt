@@ -18,8 +18,10 @@ import io.trtc.tuikit.atomicx.common.util.ScreenUtil.dp2px
 import io.trtc.tuikit.chat.uikit.components.common.WindowThemeUtil
 import io.trtc.tuikit.chat.uikit.components.messageinput.model.MentionInfo
 import io.trtc.tuikit.chat.uikit.components.messageinput.model.MentionAllPermissionPolicy
+import io.trtc.tuikit.chat.uikit.components.messageinput.model.MentionMemberSearchPolicy
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
+import io.trtc.tuikit.chat.uikit.components.contactlist.ui.ContactListSearchBarView
 import io.trtc.tuikit.chat.uikit.components.userpicker.adapter.SelectionCheckBoxView
 import io.trtc.tuikit.chat.uikit.components.userpicker.model.UserPickerData
 import io.trtc.tuikit.chat.uikit.components.userpicker.ui.UserPickerView
@@ -47,6 +49,7 @@ class MentionMemberDialogFragment : DialogFragment() {
     private lateinit var cancelButton: TextView
     private lateinit var titleText: TextView
     private lateinit var confirmButton: TextView
+    private lateinit var searchBarView: ContactListSearchBarView
     private lateinit var atAllRow: LinearLayout
     private lateinit var atAllCheckbox: SelectionCheckBoxView
     private lateinit var userPickerView: UserPickerView
@@ -55,7 +58,8 @@ class MentionMemberDialogFragment : DialogFragment() {
     private val groupMembers = mutableListOf<GroupMember>()
     private var isLoadingMore = false
     private var atAll = false
-    private val selectedMembers = mutableListOf<GroupMember>()
+    private var searchQuery = ""
+    private val selectedMemberIDs = linkedSetOf<String>()
 
     private val groupID: String
         get() = arguments?.getString(ARG_GROUP_ID).orEmpty()
@@ -188,6 +192,14 @@ class MentionMemberDialogFragment : DialogFragment() {
         }
         rootLayout.addView(divider)
 
+        searchBarView = ContactListSearchBarView(ctx).apply {
+            onQueryChange = { query ->
+                searchQuery = query
+                updateUserPickerData()
+            }
+        }
+        rootLayout.addView(searchBarView)
+
         atAllRow = buildAtAllRow(dm)
         atAllRow.visibility = if (MentionAllPermissionPolicy.shouldShow(canMentionAll)) {
             View.VISIBLE
@@ -286,7 +298,9 @@ class MentionMemberDialogFragment : DialogFragment() {
                         )
                     )
                 }
-                addAll(selectedMembers.map {
+                addAll(selectedMemberIDs.mapNotNull { selectedID ->
+                    groupMembers.firstOrNull { member -> member.userID == selectedID }
+                }.map {
                     MentionInfo(
                         userID = it.userID,
                         displayName = it.displayName
@@ -304,8 +318,13 @@ class MentionMemberDialogFragment : DialogFragment() {
         }
 
         userPickerView.setOnSelectedChangedListener<GroupMember> { selected ->
-            selectedMembers.clear()
-            selectedMembers.addAll(selected.map { it.extraData })
+            val mergedIDs = MentionMemberSearchPolicy.mergeSelectedIDs(
+                currentSelectedIDs = selectedMemberIDs,
+                visibleMemberIDs = visibleGroupMembers().map { it.userID },
+                visibleSelectedIDs = selected.map { it.key }
+            )
+            selectedMemberIDs.clear()
+            selectedMemberIDs.addAll(mergedIDs)
         }
 
         userPickerView.setOnReachEndListener {
@@ -348,8 +367,14 @@ class MentionMemberDialogFragment : DialogFragment() {
     }
 
     private fun updateUserPickerData() {
-        val dataSource = groupMembers.map { it.toUserPickerData() }
-        userPickerView.setDataSource(dataSource)
+        userPickerView.apply {
+            setDataSource(visibleGroupMembers().map { it.toUserPickerData() })
+            setDefaultSelectedItems(selectedMemberIDs.toList())
+        }
+    }
+
+    private fun visibleGroupMembers(): List<GroupMember> {
+        return MentionMemberSearchPolicy.filter(groupMembers, searchQuery)
     }
 
 
@@ -365,6 +390,7 @@ class MentionMemberDialogFragment : DialogFragment() {
         val headerBar = rootLayout.getChildAt(0)
         (headerBar as? FrameLayout)?.setBackgroundColor(colors.bgColorOperate)
 
+        searchBarView.applyTheme()
         atAllRow.setBackgroundColor(colors.bgColorOperate)
 
         cancelButton.setTextColor(colors.textColorLink)
