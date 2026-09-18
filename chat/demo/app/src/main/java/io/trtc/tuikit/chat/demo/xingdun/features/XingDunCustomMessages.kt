@@ -58,6 +58,8 @@ internal data class XingDunCustomMessage(
     fun requiresGroupPermissionRefresh(): Boolean =
         type == "config_refresh" && values["scope"].equals("group", ignoreCase = true)
 
+    fun isLegacyCallSummary(): Boolean = type in LEGACY_CALL_SUMMARY_TYPES
+
     fun contactCard(): XingDunContactCardPayload? {
         if (type !in CONTACT_CARD_TYPES) return null
         fun first(vararg names: String): String? = names.firstNotNullOfOrNull { name ->
@@ -136,6 +138,13 @@ internal data class XingDunCustomMessage(
 
     private companion object {
         val CONTACT_CARD_TYPES = setOf("contact_card", "xingdun_contact_card", "card")
+        val LEGACY_CALL_SUMMARY_TYPES = setOf(
+            "call_record",
+            "xingdun_call_record",
+            "call",
+            "audio_call",
+            "video_call",
+        )
     }
 }
 
@@ -427,6 +436,9 @@ internal object XingDunCustomMessagePresentation {
     private val controlMatcher = MessageMatcher { message ->
         XingDunCustomMessageParser.parse(message)?.isControl == true
     }
+    private val legacyCallSummaryMatcher = MessageMatcher { message ->
+        XingDunCustomMessageParser.parse(message)?.isLegacyCallSummary() == true
+    }
     private val contactCardMatcher = MessageMatcher { message ->
         XingDunCustomMessageParser.parse(message)?.takeUnless(XingDunCustomMessage::isControl)?.contactCard() != null
     }
@@ -448,6 +460,7 @@ internal object XingDunCustomMessagePresentation {
 
     fun configure(config: ChatMessageListConfig) {
         config.addMessageExclusion(controlMatcher)
+        config.addMessageExclusion(legacyCallSummaryMatcher)
         config.addCustomMessageRenderer(
             matcher = groupConfigurationNoticeMatcher,
             renderer = XingDunGroupConfigurationNoticeRenderer,

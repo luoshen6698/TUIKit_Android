@@ -116,6 +116,21 @@ class XingDunCustomMessageParserTest {
     }
 
     @Test
+    fun identifiesLegacyCallSummariesWithoutHidingOtherBusinessMessages() {
+        for (type in listOf("call_record", "xingdun_call_record", "call", "audio_call", "video_call")) {
+            val message = requireNotNull(
+                XingDunCustomMessageParser.parse("""{"type":"$type","duration_seconds":6}"""),
+            )
+            assertTrue(message.isLegacyCallSummary())
+        }
+
+        val contactCard = requireNotNull(
+            XingDunCustomMessageParser.parse("""{"type":"contact_card","user_id":"u1"}"""),
+        )
+        assertFalse(contactCard.isLegacyCallSummary())
+    }
+
+    @Test
     fun acceptsExplicitXingDunDescriptionEnvelope() {
         val message = XingDunCustomMessageParser.parse("{}", "XingDun:report_notice")
         assertEquals("report_notice", message?.type)
