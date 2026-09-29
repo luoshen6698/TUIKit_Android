@@ -22,6 +22,8 @@
 -keep class com.tencent.qcloud.** { *; }
 -keep class com.tencentcloud.tencentcloudcustomer.** { *; }
 -keep class com.tencent.imsdk.** { *; }
+# TRTC/LiteAV resolve Java classes and members from JNI/reflection at native load time.
+-keep class com.tencent.** { *; }
 # TIMPush and Tencent callbacks are discovered by reflection and Android components.
 -keep class com.tencent.qcloud.** { *; }
 -keep class com.tencent.timpush.** { *; }
