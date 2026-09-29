@@ -25,3 +25,23 @@
 # TIMPush and Tencent callbacks are discovered by reflection and Android components.
 -keep class com.tencent.qcloud.** { *; }
 -keep class com.tencent.timpush.** { *; }
+
+# AtomicX's compiled models retain this compile-time annotation.
+-dontwarn kotlinx.parcelize.Parcelize
+# OkHttp probes these optional JVM TLS providers; Android uses its platform provider.
+-dontwarn org.bouncycastle.jsse.BCSSLParameters
+-dontwarn org.bouncycastle.jsse.BCSSLSocket
+-dontwarn org.bouncycastle.jsse.provider.BouncyCastleJsseProvider
+-dontwarn org.conscrypt.Conscrypt$Version
+-dontwarn org.conscrypt.Conscrypt
+-dontwarn org.conscrypt.ConscryptHostnameVerifier
+-dontwarn org.openjsse.javax.net.ssl.SSLParameters
+-dontwarn org.openjsse.javax.net.ssl.SSLSocket
+-dontwarn org.openjsse.net.ssl.OpenJSSE
+
+# Gson reads API/session models reflectively, including unannotated JSON field names.
+-keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*
+-keep class io.trtc.tuikit.chat.demo.xingdun.network.** { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunVerificationMessagesActivity$ServerGroupInvitation { *; }
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken { *; }
