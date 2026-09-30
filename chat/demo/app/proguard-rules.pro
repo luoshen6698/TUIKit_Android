@@ -44,6 +44,9 @@
 # Gson reads API/session models reflectively, including unannotated JSON field names.
 -keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*
 -keep class io.trtc.tuikit.chat.demo.xingdun.network.** { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunVerificationMessagesActivity$FriendApplicationPage { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunVerificationMessagesActivity$FriendApplication { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunVerificationMessagesActivity$ApplicationUser { *; }
 -keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunVerificationMessagesActivity$ServerGroupInvitation { *; }
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken { *; }

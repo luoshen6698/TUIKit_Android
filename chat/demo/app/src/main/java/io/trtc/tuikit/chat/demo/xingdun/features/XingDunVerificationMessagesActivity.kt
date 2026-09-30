@@ -43,6 +43,7 @@ import io.trtc.tuikit.chat.uikit.components.contactlist.utils.fromUserDisplayNam
 import io.trtc.tuikit.chat.uikit.components.contactlist.utils.groupDisplayName
 import io.trtc.tuikit.chat.uikit.components.contactlist.utils.isJoinRequest
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -79,7 +80,8 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     private var nativeGroups: List<GroupApplicationInfo> = emptyList()
     private var loading = false
     private var loadingMore = false
-    private var loadError: String? = null
+    private var friendLoadError: String? = null
+    private var groupLoadError: String? = null
     private var operationError: String? = null
     private var groupPollingJob: Job? = null
     private val operatingRowKeys = mutableSetOf<String>()
@@ -262,7 +264,8 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     private fun refresh() {
         if (loading) return
         loading = true
-        loadError = null
+        friendLoadError = null
+        groupLoadError = null
         operationError = null
         render()
         lifecycleScope.launch {
@@ -270,27 +273,40 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                 val session = XingDunSessionManager.currentSession()
                     ?: error(getString(R.string.xingdun_session_expired))
                 val client = XingDunSessionManager.apiClient()
-                val received = loadFriendPage(session, Direction.RECEIVED, 1)
-                val sent = loadFriendPage(session, Direction.SENT, 1)
-                receivedFriends = received.list.map { it.copy(direction = Direction.RECEIVED) }
-                sentFriends = sent.list.map { it.copy(direction = Direction.SENT) }
-                receivedPage = received.page
-                sentPage = sent.page
-                receivedHasMore = received.hasMore
-                sentHasMore = sent.hasMore
-                mergeFriends()
-                if (received.unreadCount > 0) {
-                    runCatching { client.postEmpty(session, "friend/readApply", emptyMap<String, String>()) }
+                try {
+                    val received = loadFriendPage(session, Direction.RECEIVED, 1)
+                    val sent = loadFriendPage(session, Direction.SENT, 1)
+                    receivedFriends = received.list.map { it.copy(direction = Direction.RECEIVED) }
+                    sentFriends = sent.list.map { it.copy(direction = Direction.SENT) }
+                    receivedPage = received.page
+                    sentPage = sent.page
+                    receivedHasMore = received.hasMore
+                    sentHasMore = sent.hasMore
+                    mergeFriends()
+                    if (received.unreadCount > 0) {
+                        runCatching { client.postEmpty(session, "friend/readApply", emptyMap<String, String>()) }
+                    }
+                    contactStore.clearFriendApplicationUnreadCount(object : CompletionHandler {
+                        override fun onSuccess() = Unit
+                        override fun onFailure(code: Int, desc: String) = Unit
+                    })
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                    friendLoadError = error.message.orEmpty().ifBlank { getString(R.string.xingdun_verification_load_failed) }
                 }
-                contactStore.clearFriendApplicationUnreadCount(object : CompletionHandler {
-                    override fun onSuccess() = Unit
-                    override fun onFailure(code: Int, desc: String) = Unit
-                })
-                val type = object : TypeToken<List<ServerGroupInvitation>>() {}.type
-                serverGroups = client.get(session, "team/invitations", emptyMap(), type)
+                try {
+                    val type = object : TypeToken<List<ServerGroupInvitation>>() {}.type
+                    serverGroups = client.get(session, "team/invitations", emptyMap(), type)
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                    groupLoadError = error.message.orEmpty().ifBlank { getString(R.string.xingdun_verification_load_failed) }
+                }
                 refreshNativeGroups()
-            } catch (error: Throwable) {
-                loadError = error.message.orEmpty().ifBlank { getString(R.string.xingdun_verification_load_failed) }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                val message = error.message.orEmpty().ifBlank { getString(R.string.xingdun_verification_load_failed) }
+                friendLoadError = message
+                groupLoadError = message
             } finally {
                 loading = false
                 swipeRefresh.isRefreshing = false
@@ -374,7 +390,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
             }
             override fun onFailure(code: Int, desc: String) {
                 if (serverGroups.isEmpty()) {
-                    loadError = desc.ifBlank { getString(R.string.xingdun_verification_load_failed) }
+                    groupLoadError = desc.ifBlank { getString(R.string.xingdun_verification_load_failed) }
                     render()
                 }
             }
@@ -403,18 +419,19 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
             )
         }.onSuccess {
             serverGroups = it
-            loadError = null
+            groupLoadError = null
             refreshNativeGroups()
             render()
         }.onFailure {
             if (serverGroups.isEmpty() && nativeGroups.isEmpty()) {
-                loadError = it.message.orEmpty().ifBlank { getString(R.string.xingdun_verification_load_failed) }
+                groupLoadError = it.message.orEmpty().ifBlank { getString(R.string.xingdun_verification_load_failed) }
                 render()
             }
         }
     }
 
     private fun render() {
+        val loadError = if (selectedTab == Tab.FRIEND) friendLoadError else groupLoadError
         friendTab.background = rounded(if (selectedTab == Tab.FRIEND) Color.WHITE else Color.TRANSPARENT, 8f)
         groupTab.background = rounded(if (selectedTab == Tab.GROUP) Color.WHITE else Color.TRANSPARENT, 8f)
         clear.visibility = View.VISIBLE
@@ -681,18 +698,23 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         val page: Int = 1,
         @SerializedName(value = "page_size", alternate = ["pageSize"])
         val pageSize: Int = 20,
+        @SerializedName(value = "unread_count", alternate = ["unreadCount"])
         val unreadCount: Int = 0,
         val hasMore: Boolean = false,
     )
 
     private data class FriendApplication(
         val id: Int = 0,
+        @SerializedName(value = "from_user_id", alternate = ["fromUserId"])
         val fromUserId: Int = 0,
+        @SerializedName(value = "to_user_id", alternate = ["toUserId"])
         val toUserId: Int = 0,
+        @SerializedName(value = "apply_msg", alternate = ["applyMsg"])
         val applyMsg: String? = null,
         @SerializedName(value = "create_time", alternate = ["created_at", "createdAt"])
         val createdAt: String? = null,
         val status: Int = 0,
+        @SerializedName(value = "is_read", alternate = ["isRead"])
         val isRead: Int = 0,
         @SerializedName(value = "from_user", alternate = ["fromUser"])
         val fromUser: ApplicationUser? = null,
@@ -705,18 +727,25 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
 
     private data class ApplicationUser(
         val id: Int? = null,
+        @SerializedName(value = "custom_id", alternate = ["customId"])
         val customId: String? = null,
         val nickname: String? = null,
         val avatar: String? = null,
+        @SerializedName(value = "tim_user_id", alternate = ["timUserId"])
         val timUserId: String? = null
     )
 
     private data class ServerGroupInvitation(
         val id: Int = 0,
+        @SerializedName(value = "group_id", alternate = ["groupId"])
         val groupId: String = "",
+        @SerializedName(value = "group_name", alternate = ["groupName"])
         val groupName: String = "",
+        @SerializedName(value = "inviter_user_id", alternate = ["inviterUserId"])
         val inviterUserId: String = "",
+        @SerializedName(value = "inviter_name", alternate = ["inviterName"])
         val inviterName: String = "",
+        @SerializedName(value = "inviter_avatar", alternate = ["inviterAvatar"])
         val inviterAvatar: String? = null,
         val message: String? = null,
         val status: Int = 0
