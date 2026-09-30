@@ -67,6 +67,11 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.home.XingDunArticleActivity"
+            android:exported="false"
+            android:theme="@style/Chat_UIKit_Theme" />
+
+        <activity
             android:name="io.trtc.tuikit.chat.demo.main.MainActivity"
             android:exported="true"
             android:theme="@style/Chat_UIKit_Theme"

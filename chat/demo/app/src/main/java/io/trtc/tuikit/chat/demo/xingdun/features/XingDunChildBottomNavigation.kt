@@ -16,7 +16,7 @@ import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.main.MainActivity
 
-/** Keeps product-owned child screens inside the same four-tab navigation model as iOS. */
+/** Keeps product-owned child screens inside the same navigation model as the Android home. */
 class XingDunChildBottomNavigation @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -30,6 +30,7 @@ class XingDunChildBottomNavigation @JvmOverloads constructor(
     )
 
     private val tabs = listOf(
+        Tab(MainActivity.TAB_HOME, R.string.xingdun_home_title, R.drawable.xingdun_ic_tab_home),
         Tab(
             MainActivity.TAB_MESSAGES,
             R.string.demo_tab_messages,

@@ -1,0 +1,19 @@
+<resources>
+    <string name="xingdun_home_title">Home</string>
+    <string name="xingdun_home_local_life">Local Life</string>
+    <string name="xingdun_home_headlines">Headlines</string>
+    <string name="xingdun_home_feed">Discover</string>
+    <string name="xingdun_home_all">All</string>
+    <string name="xingdun_home_page_count">%1$d / %2$d</string>
+    <string name="xingdun_home_loading">Loading articles…</string>
+    <string name="xingdun_home_retry">Unable to load. Tap to retry.</string>
+    <string name="xingdun_home_empty">No articles yet. Check back later.</string>
+    <string name="xingdun_home_more">Load more</string>
+    <string name="xingdun_home_end">You’re all caught up</string>
+    <string name="xingdun_home_detail">Article</string>
+    <string name="xingdun_home_back">Back</string>
+    <string name="xingdun_home_unavailable">This article is unavailable or has been removed. Tap to retry.</string>
+    <string name="xingdun_home_updated">Updated %1$s</string>
+    <string name="xingdun_home_original">Read the original</string>
+    <string name="xingdun_home_link_failed">Unable to open the link</string>
+</resources>

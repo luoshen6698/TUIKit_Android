@@ -1,0 +1,19 @@
+<resources>
+    <string name="xingdun_home_title">首页</string>
+    <string name="xingdun_home_local_life">本地生活</string>
+    <string name="xingdun_home_headlines">快讯</string>
+    <string name="xingdun_home_feed">资讯推荐</string>
+    <string name="xingdun_home_all">全部</string>
+    <string name="xingdun_home_page_count">%1$d / %2$d</string>
+    <string name="xingdun_home_loading">正在加载资讯…</string>
+    <string name="xingdun_home_retry">加载失败，点按重试</string>
+    <string name="xingdun_home_empty">暂无资讯，稍后再来看看</string>
+    <string name="xingdun_home_more">加载更多</string>
+    <string name="xingdun_home_end">已经看到全部资讯</string>
+    <string name="xingdun_home_detail">资讯详情</string>
+    <string name="xingdun_home_back">返回</string>
+    <string name="xingdun_home_unavailable">文章已下架或暂不可用，点按重试</string>
+    <string name="xingdun_home_updated">更新于 %1$s</string>
+    <string name="xingdun_home_original">查看原文</string>
+    <string name="xingdun_home_link_failed">暂时无法打开链接</string>
+</resources>
