@@ -156,7 +156,7 @@ class XingDunStartupActivity : AppCompatActivity() {
         XingDunCredentialRecoveryCoordinator.onAuthenticated()
         updateStartupStatus(R.string.xingdun_startup_loading_messages)
         XingDunMessageFirstFramePreloader.preload(this, restoredSession)
-        routeToMessages()
+        routeToHome()
     }
 
     private suspend fun loginToIM(session: XingDunStoredSession): Int =
@@ -180,10 +180,10 @@ class XingDunStartupActivity : AppCompatActivity() {
             )
         }
 
-    private fun routeToMessages() {
+    private fun routeToHome() {
         routeOnce(
             Intent(this, MainActivity::class.java).apply {
-                putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_MESSAGES)
+                putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HOME)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             }
         )

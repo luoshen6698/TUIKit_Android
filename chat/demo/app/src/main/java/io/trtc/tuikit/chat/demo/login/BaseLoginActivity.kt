@@ -126,6 +126,7 @@ abstract class BaseLoginActivity : BaseActivity() {
                         }
                         onSuccess?.invoke()
                         startActivity(Intent(this@BaseLoginActivity, MainActivity::class.java).apply {
+                            putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HOME)
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                         })
                     }
