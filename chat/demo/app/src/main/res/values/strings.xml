@@ -1,4 +1,5 @@
 <resources>
+    <string name="xingdun_app_label" translatable="false">星盾xd</string>
     <string name="demo_app_name">XingDun IM</string>
     <string name="xingdun_close_symbol" translatable="false">×</string>
     <string name="xingdun_success_symbol" translatable="false">✓</string>
