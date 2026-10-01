@@ -1,7 +1,6 @@
 package io.trtc.tuikit.chat.demo.xingdun.launch
 
 import android.app.Activity
-import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.text.SpannableStringBuilder
@@ -11,6 +10,7 @@ import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
 import android.view.View
 import android.widget.TextView
+import io.trtc.tuikit.chat.demo.xingdun.legal.XingDunLegalActivity
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBootstrapConfiguration
 
@@ -41,7 +41,7 @@ internal object XingDunAuthUiSupport {
 
     fun installLegalLinks(
         activity: Activity,
-        bootstrap: XingDunBootstrapConfiguration,
+        @Suppress("UNUSED_PARAMETER") bootstrap: XingDunBootstrapConfiguration,
         target: TextView,
         onUnavailable: () -> Unit
     ) {
@@ -53,11 +53,11 @@ internal object XingDunAuthUiSupport {
             append(prefix)
             val agreementStart = length
             append(agreement)
-            setSpan(legalLink(activity, bootstrap.privacy.userAgreementUrl, onUnavailable), agreementStart, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(legalLink(activity, false, onUnavailable), agreementStart, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             append(connector)
             val privacyStart = length
             append(privacy)
-            setSpan(legalLink(activity, bootstrap.privacy.privacyUrl, onUnavailable), privacyStart, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(legalLink(activity, true, onUnavailable), privacyStart, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         target.movementMethod = LinkMovementMethod.getInstance()
         target.highlightColor = Color.TRANSPARENT
@@ -65,16 +65,12 @@ internal object XingDunAuthUiSupport {
 
     private fun legalLink(
         activity: Activity,
-        value: String,
+        privacy: Boolean,
         onUnavailable: () -> Unit
     ): ClickableSpan = object : ClickableSpan() {
         override fun onClick(widget: View) {
-            val uri = runCatching { Uri.parse(value) }.getOrNull()
-            if (uri?.scheme != "https" || uri.host.isNullOrBlank()) {
-                onUnavailable()
-                return
-            }
-            activity.startActivity(Intent(Intent.ACTION_VIEW, uri))
+            runCatching { XingDunLegalActivity.open(activity, privacy) }
+                .onFailure { onUnavailable() }
         }
 
         override fun updateDrawState(ds: TextPaint) {

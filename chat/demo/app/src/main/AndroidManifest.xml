@@ -43,6 +43,11 @@
         </activity>
 
         <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.legal.XingDunLegalActivity"
+            android:exported="false"
+            android:theme="@style/Chat_UIKit_Theme" />
+
+        <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunEnterpriseAccessActivity"
             android:exported="false"
             android:theme="@style/Chat_UIKit_Theme"

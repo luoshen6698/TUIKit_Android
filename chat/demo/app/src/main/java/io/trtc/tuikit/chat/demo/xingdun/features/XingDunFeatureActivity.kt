@@ -50,7 +50,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatDelegate
-import androidx.browser.customtabs.CustomTabsIntent
+import io.trtc.tuikit.chat.demo.xingdun.legal.XingDunLegalActivity
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
@@ -6315,99 +6315,8 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showLegalDocument(privacy: Boolean) {
-        val session = XingDunSessionManager.currentSession()
-        val debugUrl = intent.getStringExtra(EXTRA_DEBUG_LEGAL_URL)
-            ?.takeIf { BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DEBUG_BYPASS_LOGIN, false) }
-        val url = debugUrl ?: session?.let { if (privacy) it.privacy.privacyUrl else it.privacy.userAgreementUrl }
-        val uri = runCatching { Uri.parse(url.orEmpty()) }.getOrNull()
-        val remoteUri = uri?.takeIf {
-            it.scheme?.lowercase() in setOf("http", "https") && !it.host.isNullOrBlank()
-        }
-        if (remoteUri != null) {
-            val launched = runCatching {
-                CustomTabsIntent.Builder()
-                    .setShowTitle(true)
-                    .build()
-                    .launchUrl(this, remoteUri)
-            }.isSuccess
-            if (launched) {
-                finish()
-                return
-            }
-        }
-        showBundledLegalDocument(privacy)
-    }
-
-    private fun showBundledLegalDocument(privacy: Boolean) {
-        val background = 0xFFF5F5F9.toInt()
-        window.statusBarColor = background
-        window.navigationBarColor = background
-        headerBar.setBackgroundColor(background)
-        scrollView.setBackgroundColor(background)
-        content.setBackgroundColor(background)
-        content.setPadding(20.dp(), 18.dp(), 20.dp(), 32.dp())
-
-        val fullTitle = if (privacy) {
-            R.string.xingdun_privacy_policy_full_title
-        } else {
-            R.string.xingdun_user_agreement_full_title
-        }
-        val summary = if (privacy) {
-            R.string.xingdun_privacy_policy_summary
-        } else {
-            R.string.xingdun_user_agreement_summary
-        }
-        val sections = resources.getStringArray(
-            if (privacy) R.array.xingdun_privacy_policy_sections else R.array.xingdun_user_agreement_sections
-        )
-
-        content.addView(TextView(this).apply {
-            setText(fullTitle)
-            textSize = 24f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.BLACK)
-        })
-        content.addView(TextView(this).apply {
-            text = getString(
-                R.string.xingdun_legal_version_effective_date,
-                getString(R.string.xingdun_legal_current_version),
-                getString(R.string.xingdun_legal_effective_date),
-            )
-            textSize = 13f
-            setTextColor(0xFF8A8A8F.toInt())
-            setPadding(0, 7.dp(), 0, 0)
-        })
-        content.addView(TextView(this).apply {
-            setText(summary)
-            textSize = 16f
-            setTextColor(Color.BLACK)
-            setLineSpacing(4.dp().toFloat(), 1f)
-            setPadding(0, 16.dp(), 0, 10.dp())
-        })
-
-        sections.toList().chunked(2).forEach { section ->
-            if (section.size != 2) return@forEach
-            content.addView(View(this).apply {
-                setBackgroundColor(0xFFE1E1E6.toInt())
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1.dp()).apply {
-                topMargin = 18.dp()
-                bottomMargin = 16.dp()
-            })
-            content.addView(TextView(this).apply {
-                text = section[0]
-                textSize = 17f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(Color.BLACK)
-            })
-            content.addView(TextView(this).apply {
-                text = section[1]
-                textSize = 15f
-                setTextColor(0xFF66666B.toInt())
-                setLineSpacing(5.dp().toFloat(), 1f)
-                setPadding(0, 10.dp(), 0, 0)
-            })
-        }
-        status.text = ""
+        XingDunLegalActivity.open(this, privacy)
+        finish()
     }
 
     private fun showFavorites() {
@@ -7819,7 +7728,6 @@ open class XingDunFeatureActivity : BaseActivity() {
         private const val EXTRA_DEBUG_WORKSPACE_DETAIL_FIXTURE = "debug_workspace_detail_fixture"
         private const val EXTRA_DEBUG_CUSTOMER_SERVICE_FIXTURE = "debug_customer_service_fixture"
         private const val EXTRA_DEBUG_REDPACKET_FIXTURE = "debug_redpacket_fixture"
-        private const val EXTRA_DEBUG_LEGAL_URL = "debug_legal_url"
         private const val EXTRA_INITIAL_REPORT_JSON = "initial_report_json"
         private const val EXTRA_ITEM_ID = "item_id"
         private const val EXTRA_TARGET_ID = "target_id"

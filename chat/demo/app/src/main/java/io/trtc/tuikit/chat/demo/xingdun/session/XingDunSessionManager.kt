@@ -29,7 +29,7 @@ import java.util.UUID
 
 object XingDunSessionManager {
 
-    const val PRIVACY_VERSION = "2026.08.13"
+    const val PRIVACY_VERSION = io.trtc.tuikit.chat.demo.xingdun.legal.XingDunLegalDocuments.VERSION
 
     private lateinit var store: XingDunSessionStore
     private lateinit var client: XingDunApiClient
