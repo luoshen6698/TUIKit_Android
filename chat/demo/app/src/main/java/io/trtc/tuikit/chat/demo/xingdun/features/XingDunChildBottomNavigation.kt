@@ -13,6 +13,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import io.trtc.tuikit.atomicx.theme.ThemeStore
+import io.trtc.tuikit.chat.app.BuildConfig
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.main.MainActivity
 
@@ -40,7 +41,7 @@ class XingDunChildBottomNavigation @JvmOverloads constructor(
         Tab(MainActivity.TAB_CONTACTS, R.string.demo_tab_contacts, R.drawable.demo_ic_tab_contacts),
         Tab(MainActivity.TAB_WORKSPACE, R.string.demo_tab_calls, R.drawable.demo_ic_tab_calls),
         Tab(MainActivity.TAB_PROFILE, R.string.demo_tab_me, R.drawable.demo_ic_tab_me),
-    )
+    ).filter { BuildConfig.XINGDUN_HOME_ENABLED || it.route != MainActivity.TAB_HOME }
     private val nav = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL

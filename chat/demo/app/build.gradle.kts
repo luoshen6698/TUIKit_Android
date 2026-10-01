@@ -3,6 +3,13 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Only the Huawei distribution opts in to the home page at build time.
+val homeEnabled = (findProperty("XINGDUN_HOME_ENABLED") as String?
+    ?: System.getenv("XINGDUN_HOME_ENABLED") ?: "false").let {
+    require(it == "true" || it == "false") { "XINGDUN_HOME_ENABLED must be true or false." }
+    it.toBoolean()
+}
+
 val offlinePushEnabled = (findProperty("XINGDUN_OFFLINE_PUSH_ENABLED") as String?
     ?: System.getenv("XINGDUN_OFFLINE_PUSH_ENABLED") ?: "false").let {
     require(it == "true" || it == "false") { "XINGDUN_OFFLINE_PUSH_ENABLED must be true or false." }
@@ -49,6 +56,7 @@ android {
         targetSdk = 36
         versionCode = appVersionCode
         versionName = appVersionName
+        buildConfigField("boolean", "XINGDUN_HOME_ENABLED", homeEnabled.toString())
         buildConfigField("String", "XINGDUN_API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "XINGDUN_ENVIRONMENT", "\"prod\"")
         // The Honor TIMPush manifest always declares this placeholder. Debug builds intentionally

@@ -54,6 +54,7 @@ import io.trtc.tuikit.atomicxcore.api.group.GroupEvent
 import io.trtc.tuikit.atomicxcore.api.group.GroupInfo
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
+import io.trtc.tuikit.chat.app.BuildConfig
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.search.SearchActivity
@@ -146,7 +147,8 @@ class MainActivity : BaseActivity() {
     private var imConnectionNotice: IMConnectionNotice? = null
     private var customerServiceContacts: List<CustomerServiceContact> = emptyList()
     private var selectedTabIndex = 0
-    private var currentTabId = R.id.demo_tab_home
+    private val defaultTabId = if (BuildConfig.XINGDUN_HOME_ENABLED) R.id.demo_tab_home else R.id.demo_tab_messages
+    private var currentTabId = defaultTabId
     private val tabPageCache = mutableMapOf<Int, View>()
     private var isDraggingMessageBadge = false
     private var messageBadgeDragStartRawX = 0f
@@ -191,7 +193,10 @@ class MainActivity : BaseActivity() {
         }
 
         setContentView(R.layout.demo_activity_main)
-        currentTabId = savedInstanceState?.getInt("main_tab", R.id.demo_tab_home) ?: R.id.demo_tab_home
+        currentTabId = savedInstanceState?.getInt("main_tab", defaultTabId) ?: defaultTabId
+        if (!BuildConfig.XINGDUN_HOME_ENABLED && currentTabId == R.id.demo_tab_home) {
+            currentTabId = defaultTabId
+        }
 
         XingDunSessionManager.currentSession()?.let { session ->
             XingDunCallSessionInitializer.initialize(
@@ -247,9 +252,11 @@ class MainActivity : BaseActivity() {
                 iconResId = R.drawable.demo_ic_tab_me
             )
         )
-        bottomTabs = allBottomTabs
+        bottomTabs = allBottomTabs.filter { BuildConfig.XINGDUN_HOME_ENABLED || it.tabId != R.id.demo_tab_home }
         allBottomTabs.forEach { tab ->
             bottomNav.removeView(tab.root)
+        }
+        bottomTabs.forEach { tab ->
             bottomNav.addView(tab.root)
         }
 
@@ -1261,7 +1268,7 @@ class MainActivity : BaseActivity() {
     private fun selectRequestedTab(intent: Intent?) {
         if (!::bottomTabs.isInitialized) return
         val requestedTabId = when (intent?.getStringExtra(EXTRA_TARGET_TAB)) {
-            TAB_HOME -> R.id.demo_tab_home
+            TAB_HOME -> defaultTabId
             TAB_MESSAGES -> R.id.demo_tab_messages
             TAB_WORKSPACE -> R.id.demo_tab_calls
             TAB_CONTACTS -> R.id.demo_tab_contacts
