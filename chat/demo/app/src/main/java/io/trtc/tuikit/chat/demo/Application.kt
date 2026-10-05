@@ -7,6 +7,8 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import com.tencent.mmkv.MMKV
+import io.trtc.tuikit.chat.demo.xingdun.legal.XingDunPrivacyConsentStore
+import io.trtc.tuikit.chat.demo.xingdun.legal.XingDunDeferredSdkInitializers
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
 import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingActionConfig
 import io.trtc.tuikit.chat.uikit.components.chatsetting.config.ChatSettingCustomAction
@@ -42,19 +44,32 @@ class Application : Application() {
     private var startedActivityCount = 0
     private var hasObservedFirstForeground = false
 
-    private val loginListener = object : LoginListener() {
-        override fun onKickedOffline() {
-            XingDunCredentialRecoveryCoordinator.onKickedOffline()
-        }
+    private var servicesInitialized = false
+    private val loginListener by lazy {
+        object : LoginListener() {
+            override fun onKickedOffline() {
+                XingDunCredentialRecoveryCoordinator.onKickedOffline()
+            }
 
-        override fun onLoginExpired() {
-            XingDunCredentialRecoveryCoordinator.onLoginExpired()
+            override fun onLoginExpired() {
+                XingDunCredentialRecoveryCoordinator.onLoginExpired()
+            }
         }
     }
 
     override fun onCreate() {
         super.onCreate()
+        if (XingDunPrivacyConsentStore(noBackupFilesDir).hasConsent()) {
+            initializeAfterPrivacyConsent()
+        }
+    }
+
+    fun initializeAfterPrivacyConsent() {
+        check(XingDunPrivacyConsentStore(noBackupFilesDir).hasConsent())
+        if (servicesInitialized) return
         MMKV.initialize(this)
+        XingDunDeferredSdkInitializers.initialize(this)
+        com.tencent.qcloud.tuikit.tuicallkit.manager.bridge.Initializer().init(this)
         XingDunSessionManager.initialize(this)
         XingDunTenantSessionCoordinator.initialize(this)
         XingDunCredentialRecoveryCoordinator.initialize(this)
@@ -93,6 +108,7 @@ class Application : Application() {
 
         LoginStore.shared.addLoginListener(loginListener)
         registerEnterpriseForegroundRefresh()
+        servicesInitialized = true
     }
 
     private fun applyLanguageFromSettings() {

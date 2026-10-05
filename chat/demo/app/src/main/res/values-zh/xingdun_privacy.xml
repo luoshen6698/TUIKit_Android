@@ -1,0 +1,7 @@
+<resources>
+    <string name="xingdun_first_privacy_title">欢迎使用星盾xd</string>
+    <string name="xingdun_first_privacy_body">使用前，请先阅读下方《用户协议》和《隐私政策》。\n\n为提供企业通讯服务，我们会处理账号信息及您主动发送的消息、文件等内容。相机、麦克风和相册等权限仅在使用相关功能时申请。隐私政策说明了信息处理规则、第三方 SDK 和您的个人信息权利。\n\n您同意后才会启动通讯服务；如不同意，可选择退出。</string>
+    <string name="xingdun_first_privacy_accept">同意并继续</string>
+    <string name="xingdun_first_privacy_decline">不同意并退出</string>
+    <string name="xingdun_first_privacy_save_failed">暂时无法保存您的选择，请重试。</string>
+</resources>

@@ -3,6 +3,12 @@ package io.trtc.tuikit.chat.demo.xingdun.launch
 import android.content.Intent
 import android.os.Bundle
 import android.widget.TextView
+import android.widget.LinearLayout
+import android.widget.Button
+import android.widget.Toast
+import android.widget.ScrollView
+import android.view.View
+import androidx.appcompat.app.AlertDialog
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -14,6 +20,8 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.app.BuildConfig
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.AppConstants
+import io.trtc.tuikit.chat.demo.xingdun.legal.XingDunPrivacyConsentStore
+import io.trtc.tuikit.chat.demo.xingdun.legal.XingDunLegalActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.main.XingDunMessageFirstFramePreloader
@@ -46,6 +54,59 @@ class XingDunStartupActivity : AppCompatActivity() {
         startupStatusView = findViewById(R.id.xingdun_startup_status)
         splashScreen.setKeepOnScreenCondition { false }
 
+        if (!XingDunPrivacyConsentStore(noBackupFilesDir).hasConsent()) {
+            showFirstLaunchPrivacyDialog()
+            return
+        }
+        continueStartup()
+    }
+
+    private fun showFirstLaunchPrivacyDialog() {
+        startupStatusView.setText(R.string.xingdun_first_privacy_title)
+        findViewById<View>(R.id.xingdun_startup_progress).visibility = View.GONE
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val padding = (24 * resources.displayMetrics.density).toInt()
+            setPadding(padding, padding / 2, padding, 0)
+            addView(TextView(context).apply {
+                setText(R.string.xingdun_first_privacy_body)
+                textSize = 16f
+            })
+            addView(Button(context).apply {
+                setText(R.string.xingdun_user_agreement_link)
+                setOnClickListener { XingDunLegalActivity.open(this@XingDunStartupActivity, false) }
+            })
+            addView(Button(context).apply {
+                setText(R.string.xingdun_privacy_policy_link)
+                setOnClickListener { XingDunLegalActivity.open(this@XingDunStartupActivity, true) }
+            })
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.xingdun_first_privacy_title)
+            .setView(ScrollView(this).apply { addView(content) })
+            .setCancelable(false)
+            .setNegativeButton(R.string.xingdun_first_privacy_decline) { _, _ -> finishAndRemoveTask() }
+            .setPositiveButton(R.string.xingdun_first_privacy_accept, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                try {
+                    XingDunPrivacyConsentStore(noBackupFilesDir).accept()
+                } catch (_: Exception) {
+                    Toast.makeText(this, R.string.xingdun_first_privacy_save_failed, Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+                (application as io.trtc.tuikit.chat.demo.Application).initializeAfterPrivacyConsent()
+                dialog.dismiss()
+                findViewById<View>(R.id.xingdun_startup_progress).visibility = View.VISIBLE
+                startupStatusView.setText(R.string.xingdun_startup_checking_account)
+                continueStartup()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun continueStartup() {
         if (intent?.data != null) {
             routeToEnterpriseAccess()
             return

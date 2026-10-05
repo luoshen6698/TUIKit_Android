@@ -12,6 +12,7 @@
         android:orientation="vertical">
 
         <ProgressBar
+            android:id="@+id/xingdun_startup_progress"
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:indeterminate="true"

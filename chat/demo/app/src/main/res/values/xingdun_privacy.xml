@@ -1,0 +1,7 @@
+<resources>
+    <string name="xingdun_first_privacy_title">Welcome to XingDun</string>
+    <string name="xingdun_first_privacy_body">Before using the app, please read the User Agreement and Privacy Policy below.\n\nXingDun processes account details, messages and files you choose to send to provide enterprise communication. Camera, microphone and media permissions are requested only when you use the related features. The Privacy Policy explains data handling, third-party SDKs and your rights.\n\nCommunication services will start only after you agree. You can decline and exit.</string>
+    <string name="xingdun_first_privacy_accept">Agree and continue</string>
+    <string name="xingdun_first_privacy_decline">Decline and exit</string>
+    <string name="xingdun_first_privacy_save_failed">Your choice could not be saved. Please try again.</string>
+</resources>
