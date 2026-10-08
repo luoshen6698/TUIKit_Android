@@ -24,7 +24,7 @@ class ZoomableImagePageView(context: Context) : FrameLayout(context) {
     fun bind(item: ImageElement, onTap: () -> Unit) {
         val colors = ThemeStore.shared(context).themeState.value.currentTheme.tokens.color
         setBackgroundColor(colors.bgColorMask)
-        photoView.setOnPhotoTapListener { _, _, _ -> onTap() }
+        photoView.setOnViewTapListener { _, _, _ -> onTap() }
         Glide.with(context)
             .load(item.data)
             .into(photoView)
