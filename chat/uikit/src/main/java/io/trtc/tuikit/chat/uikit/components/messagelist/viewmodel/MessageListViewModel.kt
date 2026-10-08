@@ -159,7 +159,7 @@ class MessageListViewModel(
         hiddenResendingMessageIds
     ) { list, processingMessagesByConversation, hiddenMessageIds ->
         val processingMessages = processingMessagesByConversation[conversationID].orEmpty()
-        val visibleMessages = (list + processingMessages).filterNot { message ->
+        val visibleMessages = AlbumPickerProcessingMessageStore.mergeWithMessages(list, processingMessages).filterNot { message ->
             message.msgID in hiddenMessageIds
         }
         displayMapper.map(visibleMessages)

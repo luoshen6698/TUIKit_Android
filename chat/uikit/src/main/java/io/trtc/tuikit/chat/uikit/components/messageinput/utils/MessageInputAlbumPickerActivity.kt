@@ -53,8 +53,10 @@ class MessageInputAlbumPickerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        // Back/system destruction must release unsent placeholders too.
+        forwardListener?.onCancel()
         forwardListener = null
+        super.onDestroy()
     }
 
     companion object {

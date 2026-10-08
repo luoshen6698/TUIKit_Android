@@ -1,8 +1,6 @@
 package io.trtc.tuikit.chat.uikit.components.messageinput.viewmodel
 import io.trtc.tuikit.atomicx.albumpicker.AlbumMedia
 import io.trtc.tuikit.atomicx.albumpicker.AlbumPickerListener
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 
 internal class AlbumPickerMediaSendCoordinator(
@@ -15,39 +13,40 @@ internal class AlbumPickerMediaSendCoordinator(
     private val shouldProcessMedia: (AlbumMedia) -> Boolean = { true },
     private val onMediaRejected: (AlbumMedia) -> Unit = {}
 ) : AlbumPickerListener {
-    private val sentMediaIds = ConcurrentHashMap.newKeySet<ULong>()
-    private val rejectedMediaIds = ConcurrentHashMap.newKeySet<ULong>()
-    private val pendingTextSent = AtomicBoolean(false)
+    private val pendingMedia = linkedMapOf<ULong, AlbumMedia>()
+    private var selectionConfirmed = false
+    private var closed = false
     private var pendingText: String? = null
 
+    @Synchronized
     override fun onPickConfirm(
         pickedAlbumMedias: List<AlbumMedia>,
         textMessage: String?
     ) {
+        if (closed || selectionConfirmed) return
+        selectionConfirmed = true
         pendingText = textMessage
-        pickedAlbumMedias.forEach { media ->
+        pickedAlbumMedias.distinctBy { it.id }.forEach { media ->
             if (shouldProcessMedia(media)) {
+                pendingMedia[media.id] = media
                 onProcessingStarted(media)
             } else {
-                rejectedMediaIds.add(media.id)
                 onMediaRejected(media)
             }
         }
     }
 
+    @Synchronized
     override fun onMediaProcessing(
         albumMedia: AlbumMedia,
         progress: Float,
         error: Boolean
     ) {
-        if (rejectedMediaIds.contains(albumMedia.id)) {
-            return
-        }
+        // Completed/cancelled items must not be reinserted by delayed progress callbacks.
+        if (closed || albumMedia.id !in pendingMedia) return
+        pendingMedia[albumMedia.id] = albumMedia
         if (error) {
-            sendOnce(albumMedia) {
-                onProcessingFinished(albumMedia)
-                onSendOriginalMedia(albumMedia)
-            }
+            finishMedia(albumMedia, useOriginal = true)
             return
         }
 
@@ -56,32 +55,40 @@ internal class AlbumPickerMediaSendCoordinator(
             return
         }
 
-        val path = albumMedia.mediaPath
-        if (path.isNullOrBlank()) {
-            sendOnce(albumMedia) {
-                onProcessingFinished(albumMedia)
-                onSendOriginalMedia(albumMedia)
-            }
-            return
-        }
-        sendOnce(albumMedia) {
-            onProcessingFinished(albumMedia)
-            onSendProcessedMedia(albumMedia, path)
-        }
+        finishMedia(albumMedia)
     }
 
+    @Synchronized
     override fun onMediaProcessed() {
+        if (closed) return
+        closed = true
+        // The batch is terminal even when an individual 100% callback was not delivered.
+        pendingMedia.values.toList().forEach { finishMedia(it) }
         val text = pendingText
-        if (!text.isNullOrEmpty() && pendingTextSent.compareAndSet(false, true)) {
+        pendingText = null
+        if (!text.isNullOrEmpty()) {
             onSendText(text)
         }
     }
 
-    override fun onCancel() {}
+    @Synchronized
+    override fun onCancel() {
+        if (closed) return
+        closed = true
+        val cancelledMedia = pendingMedia.values.toList()
+        pendingMedia.clear()
+        pendingText = null
+        cancelledMedia.forEach(onProcessingFinished)
+    }
 
-    private fun sendOnce(albumMedia: AlbumMedia, action: () -> Unit) {
-        if (sentMediaIds.add(albumMedia.id)) {
-            action()
+    private fun finishMedia(albumMedia: AlbumMedia, useOriginal: Boolean = false) {
+        if (pendingMedia.remove(albumMedia.id) == null) return
+        onProcessingFinished(albumMedia)
+        val path = albumMedia.mediaPath
+        if (useOriginal || path.isNullOrBlank()) {
+            onSendOriginalMedia(albumMedia)
+        } else {
+            onSendProcessedMedia(albumMedia, path)
         }
     }
 

@@ -26,11 +26,28 @@ internal object AlbumPickerProcessingMessageStore {
     fun upsert(conversationID: String, media: AlbumMedia, progress: Int) {
         val message = media.toProcessingMessage(conversationID, progress)
         _messagesByConversation.update { current ->
-            val updatedMessages = current[conversationID]
-                .orEmpty()
-                .filterNot { it.msgID == message.msgID } + message
+            val previousMessages = current[conversationID].orEmpty()
+            val previous = previousMessages.firstOrNull { it.msgID == message.msgID }
+            val updatedMessages = if (previous == null) {
+                previousMessages + message
+            } else {
+                previousMessages.map {
+                    if (it.msgID == message.msgID) message.copy(timestamp = previous.timestamp) else it
+                }
+            }
             current + (conversationID to updatedMessages)
         }
+    }
+
+    fun mergeWithMessages(messages: List<MessageInfo>, processing: List<MessageInfo>): List<MessageInfo> {
+        if (processing.isEmpty()) return messages
+        // Preserve SDK order; insert temporary items at their original selection time.
+        val merged = messages.toMutableList()
+        processing.sortedBy { it.timestamp }.asReversed().forEach { message ->
+            val index = merged.indexOfFirst { (it.timestamp ?: 0L) >= (message.timestamp ?: 0L) }
+            if (index < 0) merged.add(message) else merged.add(index, message)
+        }
+        return merged
     }
 
     fun remove(conversationID: String, mediaId: ULong) {
