@@ -11,6 +11,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.RelativeLayout;
 import androidx.annotation.Nullable;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import io.trtc.tuikit.chat.uikit.R;
@@ -22,7 +23,7 @@ import io.trtc.tuikit.chat.uikit.components.videorecorder.view.preview.PreviewCo
 
 public class VideoPreviewFragment extends Fragment {
     private final String TAG = VideoPreviewFragment.class.getSimpleName() + "_" + hashCode();
-    private final Context mContext;
+    private Context mContext;
 
     private PreviewCommonCtrlView mPreviewCommonCtrlView;
     private View mRootView;
@@ -32,7 +33,12 @@ public class VideoPreviewFragment extends Fragment {
     private String mSourceFilePath;
     private VideoPreviewCore mVideoPreviewCore;
 
-    public VideoPreviewFragment(Context context) {
+    public VideoPreviewFragment() {
+    }
+
+    @Override
+    public void onAttach(@NonNull Context context) {
+        super.onAttach(context);
         mContext = context;
     }
 

@@ -29,12 +29,17 @@ public class PicturePreviewFragment extends Fragment {
     private final String TAG = PicturePreviewFragment.class.getSimpleName() + "_" + hashCode();
     private static final int EDITED_IMAGE_QUALITY = 90;
 
-    private final Context mContext;
+    private Context mContext;
 
     private String mPictureFilePath;
     private ImageEditView mImageEditView;
 
-    public PicturePreviewFragment(Context context) {
+    public PicturePreviewFragment() {
+    }
+
+    @Override
+    public void onAttach(@NonNull Context context) {
+        super.onAttach(context);
         mContext = context;
     }
 

@@ -72,13 +72,10 @@ public class VideoRecorderRecordCore {
     };
 
     public VideoRecorderRecordCore(Context context, RecordInfo recordInfo) {
-        mVideoRecorder = null;
-        try {
-            mVideoRecorder = new UGCReflectVideoRecorderCore(context);
-        } catch (Exception e) {
-            Log.i(TAG,"TXVideoRecorderReflector construct fail. error:" + e.toString());
-            mVideoRecorder = new SystemVideoRecorderCore(context);
-        }
+        // The chat camera only needs the standard photo/video flow. The optional UGC
+        // recorder can be present without a usable preview license, leaving a black
+        // TextureView without reporting a construction error. Use Camera2 directly.
+        mVideoRecorder = new SystemVideoRecorderCore(context);
         mRecordInfo = recordInfo;
     }
 

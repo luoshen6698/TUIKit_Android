@@ -289,7 +289,7 @@ class MessageInputViewModel(
 
     fun recordVideoAndSend(context: Context) {
         VideoRecorder.startRecord(
-            VideoRecorderConfig(recordMode = RecordMode.MIXED),
+            VideoRecorderConfig(recordMode = RecordMode.VIDEO_ONLY),
             object : VideoRecordListener {
                 override fun onPhotoCaptured(filePath: String?) {
                     if (!filePath.isNullOrEmpty()) {
