@@ -66,6 +66,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFavoriteMessageRequest
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMessageRecallAuthorization
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMemberPolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoritePolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoriteRepository
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunLocalMessageMarkRepository
@@ -75,6 +76,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunEmojiCompatibility
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagesActivity
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPager
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMember
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessage
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessagePage
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunRuntimeFeaturePolicy
@@ -1122,6 +1124,33 @@ class ChatActivity : BaseActivity() {
     }
 
     private fun openContactDetailFromMessage(userID: String) {
+        val groupID = getGroupID(conversationID)
+        if (groupID != null) {
+            val memberUserID = userID.trim().takeIf { it.isNotEmpty() } ?: return
+            activityScope?.launch {
+                val detail = try {
+                    val session = XingDunSessionManager.currentSession() ?: error("Missing session")
+                    XingDunSessionManager.apiClient().get<XingDunGroupDetail>(
+                        session,
+                        "team/detail",
+                        mapOf("team_id" to groupID),
+                        XingDunGroupDetail::class.java,
+                    )
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    Toast.makeText(this@ChatActivity, R.string.xingdun_group_info_load_failed, Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                val currentUserID = XingDunSessionManager.currentSession()?.timUserId.orEmpty()
+                if (!XingDunGroupMemberPolicy.canViewCard(detail, XingDunGroupMember(userId = memberUserID), currentUserID)) {
+                    Toast.makeText(this@ChatActivity, R.string.xingdun_group_member_card_restricted, Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                XingDunContactDetailActivity.start(this@ChatActivity, memberUserID, null, null)
+            }
+            return
+        }
         val peerUserID = getUserID(conversationID) ?: return
         if (userID != peerUserID) return
 
