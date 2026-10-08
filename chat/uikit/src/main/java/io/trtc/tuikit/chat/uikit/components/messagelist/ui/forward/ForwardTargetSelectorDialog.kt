@@ -495,6 +495,10 @@ class ForwardTargetSelectorDialog(
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(hPad, vPad, hPad, vPad)
+                layoutParams = RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
             }
             val avatarView = Avatar(parent.context).apply {
                 setSize(Avatar.AvatarSize.S)
