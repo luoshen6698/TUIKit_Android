@@ -61,6 +61,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -445,16 +446,19 @@ class MessageInputViewModel(
                     snapshotHeight = bitmapHeight
                 )
                 val option = createSendMessageOption(context, payload)
-                messageInputStore.sendMessage(payload, option, object : CompletionHandler {
-                    override fun onSuccess() {
-                        Log.i(TAG, "send video message success.")
-                    }
+                // Preparation stays on IO; serialize send-begin with SDK callbacks on Main.
+                withContext(Dispatchers.Main.immediate) {
+                    messageInputStore.sendMessage(payload, option, object : CompletionHandler {
+                        override fun onSuccess() {
+                            Log.i(TAG, "send video message success.")
+                        }
 
-                    override fun onFailure(code: Int, desc: String) {
-                        Log.e(TAG, "send video message failed, code: $code, desc: $desc.")
-                        showSendFailed(context)
-                    }
-                })
+                        override fun onFailure(code: Int, desc: String) {
+                            Log.e(TAG, "send video message failed, code: $code, desc: $desc.")
+                            showSendFailed(context)
+                        }
+                    })
+                }
             } finally {
                 if (!bitmap.isRecycled) {
                     bitmap.recycle()

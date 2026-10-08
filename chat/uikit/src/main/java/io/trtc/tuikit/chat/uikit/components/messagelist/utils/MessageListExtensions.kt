@@ -46,7 +46,7 @@ val MessageInfo.readReceiptDisplayState: MessageReadReceiptDisplayState
         val readCount = receipt?.readCount ?: 0
         val unreadCount = receipt?.unreadCount ?: 0
         return when {
-            receipt != null && unreadCount == 0 -> MessageReadReceiptDisplayState.ALL_READ
+            readCount > 0 && unreadCount == 0 -> MessageReadReceiptDisplayState.ALL_READ
             readCount > 0 -> MessageReadReceiptDisplayState.READ
             else -> MessageReadReceiptDisplayState.UNREAD
         }
@@ -58,7 +58,7 @@ val MessageInfo.isAllRead: Boolean
         return when {
             receipt == null -> false
             conversationType != ConversationType.GROUP -> receipt.isPeerRead
-            else -> receipt.unreadCount == 0
+            else -> receipt.readCount > 0 && receipt.unreadCount == 0
         }
     }
 
@@ -68,7 +68,7 @@ val MessageInfo.isUnread: Boolean
         return when {
             receipt == null -> true
             conversationType != ConversationType.GROUP -> !receipt.isPeerRead
-            else -> receipt.unreadCount > 0
+            else -> receipt.readCount == 0
         }
     }
 

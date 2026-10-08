@@ -15,6 +15,9 @@ class MessageListDisplayMapper(
             .filter { !it.msgID.isNullOrEmpty() }
             .filter(shouldDisplayMessage)
             .distinctBy { it.msgID }
+            // SDK models are mutable. DiffUtil needs an independent old status/receipt
+            // to observe sending -> success/failure rather than comparing the same object.
+            .map { it.copy(readReceiptInfo = it.readReceiptInfo?.copy()) }
             .toList()
     }
 }
