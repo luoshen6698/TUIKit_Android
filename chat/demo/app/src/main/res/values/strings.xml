@@ -197,6 +197,9 @@
     <string name="demo_chat_header_cancel">Cancel</string>
     <string name="demo_chat_typing_indicator">Typing…</string>
     <string name="demo_clear_all_unread_success">All unread messages cleared</string>
+    <string name="xingdun_read_all">Mark all as read</string>
+    <string name="xingdun_read_all_success">All conversations marked as read</string>
+    <string name="xingdun_read_all_failed">Could not mark all conversations as read. Please retry.</string>
     <string name="demo_group_event_kicked">You have been kicked out of the group: %1$s</string>
     <string name="demo_group_event_dismissed">Your group %1$s is disbanded.</string>
     <string name="demo_group_event_unknown_group">Unknown group</string>

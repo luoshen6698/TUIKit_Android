@@ -14,6 +14,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -78,6 +79,8 @@ import io.trtc.tuikit.chat.uikit.pages.ConversationsPageView
 import io.trtc.tuikit.chat.uikit.pages.PopupMenuHelper
 import io.trtc.tuikit.chat.uikit.pages.PopupMenuItem
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -160,6 +163,7 @@ class MainActivity : BaseActivity() {
 
     private val themeStore by lazy { ThemeStore.shared(this) }
     private val conversationListStore by lazy { ConversationListStore.create() }
+    private val readAllCoordinator by lazy { createReadAllCoordinator(conversationListStore) }
     private val contactStore by lazy { ContactStore.shared }
     private val groupStore by lazy { GroupStore.shared }
     private val verificationUnreadCount = MutableStateFlow(0)
@@ -617,30 +621,29 @@ class MainActivity : BaseActivity() {
     }
 
     private fun clearAllUnreadByBadgeDrag(badgeView: View) {
-        badgeView.animate().cancel()
-        badgeView.animate()
-            .translationX(0f)
-            .translationY(-BADGE_CLEAR_DRAG_THRESHOLD_DP.dpToPx().toFloat() * 1.5f)
-            .scaleX(0.6f)
-            .scaleY(0.6f)
-            .alpha(0f)
-            .setDuration(180L)
-            .withEndAction {
-                badgeView.visibility = View.INVISIBLE
-                badgeView.translationX = 0f
-                badgeView.translationY = 0f
-                badgeView.scaleX = 1f
-                badgeView.scaleY = 1f
-                badgeView.alpha = 1f
+        resetMessageBadgeDrag(badgeView)
+        markAllConversationsRead()
+    }
+
+    private fun markAllConversationsRead() {
+        mainScope?.launch {
+            try {
+                if (readAllCoordinator.execute()) {
+                    Toast.makeText(this@MainActivity, R.string.xingdun_read_all_success, Toast.LENGTH_SHORT).show()
+                }
+            } catch (_: TimeoutCancellationException) {
+                showReadAllFailure()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                Log.w("XingDunReadAll", failure.message.orEmpty())
+                showReadAllFailure()
             }
-            .start()
-        runCatching {
-            conversationListStore.clearConversationUnreadCount("")
-        }.onSuccess {
-            Toast.makeText(this, R.string.demo_clear_all_unread_success, Toast.LENGTH_SHORT).show()
-        }.onFailure {
-            resetMessageBadgeDrag(badgeView)
         }
+    }
+
+    private fun showReadAllFailure() {
+        Toast.makeText(this, R.string.xingdun_read_all_failed, Toast.LENGTH_LONG).show()
     }
 
     private fun refreshUnreadCounts() {
@@ -909,6 +912,12 @@ class MainActivity : BaseActivity() {
                             )
                         },
                         iconResId = R.drawable.xingdun_ic_mine_qr
+                    ),
+                    PopupMenuItem(
+                        title = getString(R.string.xingdun_read_all),
+                        onClick = { markAllConversationsRead() },
+                        iconResId = R.drawable.xingdun_ic_read_all,
+                        enabled = !readAllCoordinator.isRunning,
                     )
                 )
             )
