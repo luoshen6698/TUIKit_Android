@@ -2,6 +2,8 @@ package io.trtc.tuikit.chat.demo.xingdun.features
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.FieldNamingPolicy
+import com.google.gson.GsonBuilder
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
@@ -11,6 +13,22 @@ import java.io.IOException
 class XingDunFavoriteCreationRecoveryTest {
     private val saved = JsonParser.parseString("""{"favorite_id":7,"conversation_id":"c2c_peer","message":{"message_id":"m1","message_type":"VIDEO","sender":"sender","text":"snapshot","sent_at":1700000000000}}""").asJsonObject
     private val request = XingDunFavoriteMessageRequest("m1", "c2c_peer", 1, "sender", "VIDEO", "snapshot", emptyList<Any>(), 1700000000000)
+
+    @Test fun requestUsesStableServerFieldNames() {
+        val expected = setOf("message_id", "conversation_id", "message_sequence", "sender_id",
+            "message_type", "text", "attachment", "sent_at")
+        for (gson in listOf(GsonBuilder().create(), GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create())) {
+            val body = gson.toJsonTree(request).asJsonObject
+            assertEquals(expected, body.keySet())
+            assertEquals("m1", body.get("message_id").asString)
+            assertEquals("c2c_peer", body.get("conversation_id").asString)
+            assertEquals("sender", body.get("sender_id").asString)
+            assertEquals("VIDEO", body.get("message_type").asString)
+            assertEquals(1700000000000, body.get("sent_at").asLong)
+            assertTrue(body.get("attachment").isJsonArray)
+        }
+    }
 
     @Test fun lostResponseFoundDoesNotRepost() = runBlocking {
         var posts = 0

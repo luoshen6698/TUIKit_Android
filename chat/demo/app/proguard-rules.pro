@@ -44,6 +44,8 @@
 # Gson reads API/session models reflectively, including unannotated JSON field names.
 -keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*
 -keep class io.trtc.tuikit.chat.demo.xingdun.network.** { *; }
+# Favorites are serialized by Gson outside the network model package.
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunFavoriteMessageRequest { *; }
 # Homepage models also use Gson's LOWER_CASE_WITH_UNDERSCORES field mapping.
 -keep class io.trtc.tuikit.chat.demo.xingdun.features.home.XingDunArticle { *; }
 -keep class io.trtc.tuikit.chat.demo.xingdun.features.home.XingDunArticleCategory { *; }

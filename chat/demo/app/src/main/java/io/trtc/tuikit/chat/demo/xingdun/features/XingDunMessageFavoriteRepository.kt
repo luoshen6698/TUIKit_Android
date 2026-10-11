@@ -3,6 +3,7 @@ package io.trtc.tuikit.chat.demo.xingdun.features
 import com.google.gson.JsonElement
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.google.gson.annotations.SerializedName
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantBoundary
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiException
@@ -13,13 +14,21 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 internal data class XingDunFavoriteMessageRequest(
+    @field:SerializedName("message_id")
     val messageId: String,
+    @field:SerializedName("conversation_id")
     val conversationId: String,
+    @field:SerializedName("message_sequence")
     val messageSequence: Long?,
+    @field:SerializedName("sender_id")
     val senderId: String,
+    @field:SerializedName("message_type")
     val messageType: String,
+    @field:SerializedName("text")
     val text: String,
+    @field:SerializedName("attachment")
     val attachment: Any,
+    @field:SerializedName("sent_at")
     val sentAt: Long?,
 )
 

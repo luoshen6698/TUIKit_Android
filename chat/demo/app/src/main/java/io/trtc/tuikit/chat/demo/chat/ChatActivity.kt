@@ -2,6 +2,7 @@ package io.trtc.tuikit.chat.demo.chat
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -71,6 +72,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMessageRecallAuthor
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMemberPolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoritePolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoriteRepository
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiException
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunLocalMessageMarkRepository
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessagePolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessageRepository
@@ -630,16 +632,26 @@ class ChatActivity : BaseActivity() {
             return
         }
         scope.launch {
+            var phase = "request"
             val result = runCatching {
                 if (currentlyFavorite) {
                     XingDunMessageFavoriteRepository.unfavorite(messageID)
                 } else {
-                    XingDunMessageFavoriteRepository.favorite(favoriteRequestWithResolvedMedia(message))
+                    phase = "media"
+                    val request = favoriteRequestWithResolvedMedia(message)
+                    phase = "request"
+                    XingDunMessageFavoriteRepository.favorite(request)
                 }
             }
             activeFavoriteMessageIDs.remove(messageID)
             if (result.exceptionOrNull() is CancellationException) throw result.exceptionOrNull()!!
             if (favoriteContext != XingDunMessageFavoriteRepository.currentContext() || isFinishing || isDestroyed) return@launch
+            result.exceptionOrNull()?.let { error ->
+                val apiError = error as? XingDunApiException
+                // Never log message IDs, content, media URLs, credentials, or exception messages.
+                Log.w("XingDunFavorite", "phase=$phase failure=${error.javaClass.simpleName} " +
+                    "http_status=${apiError?.httpStatus ?: 0} business_code=${apiError?.businessCode ?: 0}")
+            }
             Toast.makeText(
                 this@ChatActivity,
                 result.fold(
