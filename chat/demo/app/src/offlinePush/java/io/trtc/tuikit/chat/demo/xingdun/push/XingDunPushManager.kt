@@ -9,6 +9,7 @@ import com.tencent.qcloud.tim.push.TIMPushManager
 import com.tencent.qcloud.tuicore.TUIConstants
 import com.tencent.qcloud.tuicore.TUICore
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
+import io.trtc.tuikit.chat.demo.xingdun.legal.XingDunPrivacyConsentStore
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.app.BuildConfig
@@ -23,6 +24,7 @@ object XingDunPushManager {
     private lateinit var appContext: Context
 
     fun initialize(context: Context) {
+        check(XingDunPrivacyConsentStore(context.noBackupFilesDir).hasConsent())
         if (::appContext.isInitialized) return
         appContext = context.applicationContext
         TIMPushManager.getInstance().addPushListener(object : TIMPushListener() {

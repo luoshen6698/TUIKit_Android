@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <!-- Preserve the SDK authorities and delay their original initialization until consent. -->
+        <provider android:name="com.tencent.qcloud.tim.push.TIMPushEntry" tools:node="remove" />
+        <provider android:name="com.tencent.timpush.huawei.TIMPushHuaWeiService" tools:node="remove" />
+        <provider android:name="com.tencent.timpush.honor.TIMPushHonorService" tools:node="remove" />
+        <provider android:name="com.tencent.timpush.xiaomi.TIMPushXiaoMiService" tools:node="remove" />
+        <provider android:name="com.tencent.timpush.oppo.TIMPushOPPOService" tools:node="remove" />
+        <provider android:name="com.tencent.timpush.vivo.TIMPushVIVOService" tools:node="remove" />
+        <provider android:name="com.huawei.agconnect.core.provider.AGConnectInitializeProvider" tools:node="remove" />
+        <provider android:name="com.huawei.hms.aaid.InitProvider" tools:node="remove" />
+        <!-- Huawei PushProvider has no automatic initialization and must keep its notification settings contract. -->
+        <provider android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunTIMPushInitializer"
+            android:authorities="${applicationId}.TIMPush.Init" android:exported="false" android:initOrder="8000" />
+        <provider android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunHuaweiPushInitializer"
+            android:authorities="${applicationId}.huaweiPush.Init" android:exported="false" android:initOrder="8001" />
+        <provider android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunHonorPushInitializer"
+            android:authorities="${applicationId}.honorPush.Init" android:exported="false" android:initOrder="8001" />
+        <provider android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunXiaomiPushInitializer"
+            android:authorities="${applicationId}.xiaomiPush.Init" android:exported="false" android:initOrder="8001" />
+        <provider android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunOPPOPushInitializer"
+            android:authorities="${applicationId}.oppoPush.Init" android:exported="false" android:initOrder="8001" />
+        <provider android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunVivoPushInitializer"
+            android:authorities="${applicationId}.vivoPush.Init" android:exported="false" android:initOrder="8001" />
+        <provider android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunAGConnectInitializer"
+            android:authorities="${applicationId}.AGCInitializeProvider" android:exported="false" />
+        <provider android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunHuaweiAAIDInitializer"
+            android:authorities="${applicationId}.aaidinitprovider" android:exported="false" android:initOrder="500" />
+
+        <!-- Historical registration callbacks may start the process before the user accepts privacy. -->
+        <service android:name="com.tencent.timpush.huawei.TIMPushHmsMessageService" tools:node="remove" />
+        <service android:name="com.tencent.timpush.honor.TIMPushHonorMessageService" tools:node="remove" />
+        <receiver android:name="com.tencent.timpush.xiaomi.TIMPushXiaoMiMsgReceiver" tools:node="remove" />
+        <service android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunHuaweiPushMessageService" android:exported="false">
+            <intent-filter><action android:name="com.huawei.push.action.MESSAGING_EVENT" /></intent-filter>
+        </service>
+        <service android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunHonorPushMessageService" android:exported="false">
+            <intent-filter><action android:name="com.hihonor.push.action.MESSAGING_EVENT" /></intent-filter>
+        </service>
+        <receiver android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunXiaomiPushMessageReceiver" android:exported="true">
+            <intent-filter><action android:name="com.xiaomi.mipush.RECEIVE_MESSAGE" /></intent-filter>
+            <intent-filter><action android:name="com.xiaomi.mipush.MESSAGE_ARRIVED" /></intent-filter>
+            <intent-filter><action android:name="com.xiaomi.mipush.ERROR" /></intent-filter>
+        </receiver>
+    </application>
+</manifest>

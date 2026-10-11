@@ -10,6 +10,7 @@ val homeEnabled = (findProperty("XINGDUN_HOME_ENABLED") as String?
     it.toBoolean()
 }
 
+// Offline push test/release builds opt in with -PXINGDUN_OFFLINE_PUSH_ENABLED=true.
 val offlinePushEnabled = (findProperty("XINGDUN_OFFLINE_PUSH_ENABLED") as String?
     ?: System.getenv("XINGDUN_OFFLINE_PUSH_ENABLED") ?: "false").let {
     require(it == "true" || it == "false") { "XINGDUN_OFFLINE_PUSH_ENABLED must be true or false." }
@@ -31,6 +32,10 @@ val apiBaseUrl = (findProperty("XINGDUN_API_BASE_URL") as String?
     ?: System.getenv("XINGDUN_API_BASE_URL")) ?: "https://api.xingdunim.com/prod/im/v1"
 val honorAppId = (findProperty("HONOR_APPID") as String?
     ?: System.getenv("HONOR_APPID")).orEmpty()
+val vivoAppId = (findProperty("VIVO_APPID") as String?
+    ?: System.getenv("VIVO_APPID")).orEmpty()
+val vivoAppKey = (findProperty("VIVO_APPKEY") as String?
+    ?: System.getenv("VIVO_APPKEY")).orEmpty()
 val releaseStorePath = System.getenv("XINGDUN_RELEASE_STORE_FILE").orEmpty()
 val releaseStorePassword = System.getenv("XINGDUN_RELEASE_STORE_PASSWORD").orEmpty()
 val releaseKeyAlias = System.getenv("XINGDUN_RELEASE_KEY_ALIAS").orEmpty()
@@ -41,11 +46,35 @@ val releaseSigningReady = listOf(
     releaseKeyAlias,
     releaseKeyPassword
 ).all(String::isNotBlank)
+val debugUseReleaseSigning = (findProperty("XINGDUN_DEBUG_USE_RELEASE_SIGNING") as String?
+    ?: System.getenv("XINGDUN_DEBUG_USE_RELEASE_SIGNING") ?: "false").let {
+    require(it == "true" || it == "false") { "XINGDUN_DEBUG_USE_RELEASE_SIGNING must be true or false." }
+    it.toBoolean()
+}
+
+// Merge only push declarations into the main manifest; keep the existing debug overlay intact.
+val offlinePushManifest = layout.buildDirectory.file("generated/offlinePush/AndroidManifest.xml")
+val generateOfflinePushManifest by tasks.registering {
+    val mainManifest = file("src/main/AndroidManifest.xml")
+    val pushManifest = file("src/offlinePush/AndroidManifest.xml")
+    inputs.files(mainManifest, pushManifest)
+    outputs.file(offlinePushManifest)
+    doLast {
+        val pushDeclarations = pushManifest.readText()
+            .substringAfter("<application>").substringBefore("</application>")
+        val output = offlinePushManifest.get().asFile
+        output.parentFile.mkdirs()
+        output.writeText(mainManifest.readText().replace("</application>", "$pushDeclarations\n    </application>"))
+    }
+}
 
 android {
     sourceSets.getByName("main").java.srcDir(
         if (offlinePushEnabled) "src/offlinePush/java" else "src/noOfflinePush/java"
     )
+    if (offlinePushEnabled) {
+        sourceSets.getByName("main").manifest.srcFile(offlinePushManifest.get().asFile)
+    }
     namespace = "io.trtc.tuikit.chat.app"
     compileSdk = 36
     buildToolsVersion = "36.0.0"
@@ -59,9 +88,11 @@ android {
         buildConfigField("boolean", "XINGDUN_HOME_ENABLED", homeEnabled.toString())
         buildConfigField("String", "XINGDUN_API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "XINGDUN_ENVIRONMENT", "\"prod\"")
-        // The Honor TIMPush manifest always declares this placeholder. Debug builds intentionally
-        // use a non-routable value; release builds are still blocked by verifyReleaseConfiguration.
+        // Vendor manifests require these placeholders. Unconfigured debug builds use non-routable
+        // values; push-enabled release builds are blocked by verifyReleaseConfiguration.
         manifestPlaceholders["HONOR_APPID"] = honorAppId.ifBlank { "0" }
+        manifestPlaceholders["VIVO_APPID"] = vivoAppId.ifBlank { "0" }
+        manifestPlaceholders["VIVO_APPKEY"] = vivoAppKey.ifBlank { "0" }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -78,6 +109,15 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Authorized push test APKs retain the production application identity and signature.
+            if (debugUseReleaseSigning) {
+                check(releaseSigningReady && file(releaseStorePath).isFile) {
+                    "Signed debug tests require complete XINGDUN_RELEASE signing configuration."
+                }
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -123,11 +163,19 @@ val verifyReleaseConfiguration by tasks.registering {
         check(honorAppId.isNotBlank()) {
             "Release Honor push requires HONOR_APPID."
         }
+        check(vivoAppId.isNotBlank() && vivoAppKey.isNotBlank()) {
+            "Release vivo push requires VIVO_APPID and VIVO_APPKEY."
+        }
     }
 }
 
 tasks.matching { it.name == "preReleaseBuild" }.configureEach {
     dependsOn(verifyReleaseConfiguration)
+}
+if (offlinePushEnabled) {
+    tasks.matching { it.name.startsWith("process") && it.name.contains("Manifest") }.configureEach {
+        dependsOn(generateOfflinePushManifest)
+    }
 }
 
 dependencies {
@@ -143,6 +191,9 @@ dependencies {
         implementation("com.tencent.timpush:timpush:9.0.7652")
         implementation("com.tencent.timpush:huawei:9.0.7652")
         implementation("com.tencent.timpush:honor:9.0.7652")
+        implementation("com.tencent.timpush:xiaomi:9.0.7652")
+        implementation("com.tencent.timpush:oppo:9.0.7652")
+        implementation("com.tencent.timpush:vivo:9.0.7652")
     }
     implementation("com.tencent:mmkv:2.4.0")
     implementation("androidx.core:core-ktx:1.10.1")
