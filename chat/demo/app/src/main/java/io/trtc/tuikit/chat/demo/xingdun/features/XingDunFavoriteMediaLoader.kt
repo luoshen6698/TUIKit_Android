@@ -49,6 +49,9 @@ internal object XingDunFavoriteMediaLoadRecovery {
 internal object XingDunFavoriteMediaLoader {
     const val MAX_BYTES = 100L * 1024 * 1024
 
+    // Keep recovered files inside the existing FileProvider root; do not broaden its permissions.
+    fun cacheDirectory(cacheRoot: File): File = File(cacheRoot, "xingdun-share")
+
     fun normalizedURL(raw: String?): String? = runCatching {
         val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val normalized = if (value.startsWith("//")) "https:$value" else value
@@ -62,9 +65,11 @@ internal object XingDunFavoriteMediaLoader {
         val digest = MessageDigest.getInstance("SHA-256").digest("$accountContext\u0000$url".toByteArray())
             .joinToString("") { "%02x".format(it) }
         val suffix = when (type) { "PICTURE" -> ".jpg"; "VIDEO" -> ".mp4"; "AUDIO" -> ".m4a"; else -> ".bin" }
-        val target = File(context.cacheDir, "xingdun-favorite-$digest$suffix")
+        val cacheDirectory = cacheDirectory(context.cacheDir)
+        if (!cacheDirectory.isDirectory && !cacheDirectory.mkdirs()) throw XingDunFavoriteMediaUnavailable()
+        val target = File(cacheDirectory, "xingdun-favorite-$digest$suffix")
         if (target.isFile && target.length() in 1..MAX_BYTES && validFile(target, type)) return@withContext target
-        val temporary = File.createTempFile("xingdun-favorite-", ".part", context.cacheDir)
+        val temporary = File.createTempFile("xingdun-favorite-", ".part", cacheDirectory)
         var connection: HttpURLConnection? = null
         try {
             var currentURL = url

@@ -5,8 +5,19 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.IOException
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 
 class XingDunFavoriteMediaLoadRecoveryTest {
+    @Test fun recoveredFilesUseTheExistingFileProviderRoot() {
+        val paths = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            .parse(File("src/main/res/xml/xingdun_file_paths.xml"))
+        val providerRoot = paths.getElementsByTagName("cache-path").item(0).attributes.getNamedItem("path").nodeValue
+        val cacheRoot = File(System.getProperty("java.io.tmpdir"), "favorite-cache-path-test")
+        assertEquals(File(cacheRoot, providerRoot).canonicalFile,
+            XingDunFavoriteMediaLoader.cacheDirectory(cacheRoot).canonicalFile)
+        assertNotEquals(cacheRoot.canonicalFile, XingDunFavoriteMediaLoader.cacheDirectory(cacheRoot).canonicalFile)
+    }
     @Test fun savedMediaWorksWithoutReadingDeletedSource() = runBlocking {
         var repairs = 0
         val value = XingDunFavoriteMediaLoadRecovery.load("saved", { "playable" }, { repairs++; throw IOException() })
