@@ -1158,6 +1158,11 @@
     <string name="xingdun_favorite_preview_text">明天下午三点进行 Android 与 iOS 页面验收。</string>
     <string name="xingdun_favorite_preview_file">Android 对标验收清单.pdf</string>
     <string name="xingdun_favorite_media_open_failed">暂时无法打开此媒体。</string>
+    <string name="xingdun_favorite_result_pending">收藏结果待确认，请核对收藏列表。</string>
+    <string name="xingdun_favorite_media_recovering">正在加载或恢复媒体…</string>
+    <string name="xingdun_favorite_media_expired">原文件已失效，无法恢复。</string>
+    <string name="xingdun_favorite_media_unavailable">媒体暂时无法加载，请重新加载。</string>
+    <string name="xingdun_favorite_media_reload">重新加载</string>
     <string name="xingdun_favorite_picture">[图片]</string>
     <string name="xingdun_favorite_audio">[语音]</string>
     <string name="xingdun_favorite_audio_duration">语音 · %1$d″</string>

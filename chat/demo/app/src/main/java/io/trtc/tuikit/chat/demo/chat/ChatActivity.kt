@@ -53,6 +53,7 @@ import io.trtc.tuikit.atomicxcore.api.message.SendMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.AudioMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.ImageMessagePayload
+import io.trtc.tuikit.atomicxcore.api.message.FileMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.TextMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.VideoMessagePayload
 import io.trtc.tuikit.chat.demo.common.BaseActivity
@@ -65,6 +66,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactForwardPickerActi
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFavoriteMessageRequest
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFavoriteResultPending
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMessageRecallAuthorization
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMemberPolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoritePolicy
@@ -622,6 +624,7 @@ class ChatActivity : BaseActivity() {
         val messageID = message.msgID.takeIf(String::isNotBlank) ?: return
         if (!activeFavoriteMessageIDs.add(messageID)) return
         val currentlyFavorite = XingDunMessageFavoriteRepository.isFavorite(messageID)
+        val favoriteContext = XingDunMessageFavoriteRepository.currentContext()
         val scope = activityScope ?: run {
             activeFavoriteMessageIDs.remove(messageID)
             return
@@ -635,6 +638,8 @@ class ChatActivity : BaseActivity() {
                 }
             }
             activeFavoriteMessageIDs.remove(messageID)
+            if (result.exceptionOrNull() is CancellationException) throw result.exceptionOrNull()!!
+            if (favoriteContext != XingDunMessageFavoriteRepository.currentContext() || isFinishing || isDestroyed) return@launch
             Toast.makeText(
                 this@ChatActivity,
                 result.fold(
@@ -642,7 +647,10 @@ class ChatActivity : BaseActivity() {
                         if (currentlyFavorite) R.string.xingdun_favorite_removed
                         else R.string.xingdun_favorite_added
                     },
-                    onFailure = { R.string.xingdun_favorite_update_failed },
+                    onFailure = {
+                        if (it is XingDunFavoriteResultPending) R.string.xingdun_favorite_result_pending
+                        else R.string.xingdun_favorite_update_failed
+                    },
                 ),
                 Toast.LENGTH_SHORT,
             ).show()
@@ -719,9 +727,8 @@ class ChatActivity : BaseActivity() {
             }
             else -> request.attachment
         }
-        check(XingDunMessageFavoritePolicy.hasCompleteMedia(messageType, previewURL, playbackURL)) {
-            "Favorite media is not ready"
-        }
+        // A missing cover or URL is not proof the favorite record cannot be saved.
+        // Media can be recovered later; the POST response determines creation success.
         return request.copy(attachment = attachment)
     }
 
@@ -731,7 +738,11 @@ class ChatActivity : BaseActivity() {
                 listOf(messageID),
                 object : V2TIMValueCallback<List<V2TIMMessage>> {
                     override fun onSuccess(messages: List<V2TIMMessage>?) {
-                        if (continuation.isActive) continuation.resume(messages.orEmpty().firstOrNull { it.msgID == messageID })
+                        if (continuation.isActive) continuation.resume(messages.orEmpty().firstOrNull {
+                            it.msgID == messageID && it.status !in setOf(
+                                V2TIMMessage.V2TIM_MSG_STATUS_HAS_DELETED, V2TIMMessage.V2TIM_MSG_STATUS_LOCAL_REVOKED,
+                            )
+                        })
                     }
 
                     override fun onError(code: Int, desc: String?) {
@@ -777,6 +788,11 @@ class ChatActivity : BaseActivity() {
                 ),
             ),
         )
+        is FileMessagePayload -> listOf(mapOf(
+            "MsgType" to "TIMFileElem", "MsgContent" to mapOf(
+                "FileName" to payload.fileName.orEmpty(), "Url" to payload.fileURL.orEmpty(), "FileSize" to payload.fileSize,
+            ),
+        ))
         else -> emptyList<Map<String, Any>>()
     }
 
