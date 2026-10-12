@@ -115,7 +115,8 @@ class XingDunStartupActivity : AppCompatActivity() {
         lifecycleScope.launch {
             timeoutJob = launch {
                 delay(STARTUP_TIMEOUT_MILLIS)
-                routeToAuthentication(R.string.xingdun_startup_timed_out)
+                // Slow network is not expired authentication. Let the bounded request finish.
+                updateStartupStatus(R.string.xingdun_startup_waiting_network)
             }
             prepareAuthenticatedStartup()
         }
@@ -188,12 +189,13 @@ class XingDunStartupActivity : AppCompatActivity() {
         }
 
         updateStartupStatus(R.string.xingdun_connecting_im)
+        XingDunCredentialRecoveryCoordinator.onAuthenticationStarted()
         val imLoginFailure = loginToIM(restoredSession)
         if (!isStartupActive()) {
-            LoginStore.shared.logout(null)
             return
         }
         if (imLoginFailure != 0) {
+            XingDunCredentialRecoveryCoordinator.onAuthenticationFailed()
             routeToAuthentication(imLoginFailure)
             return
         }
@@ -233,6 +235,7 @@ class XingDunStartupActivity : AppCompatActivity() {
                     }
 
                     override fun onFailure(code: Int, desc: String) {
+                        android.util.Log.w("XingDunLogin", "stage=startup_im code=$code")
                         if (continuation.isActive) {
                             continuation.resume(XingDunAuthenticationErrorPresenter.im(code, desc))
                         }

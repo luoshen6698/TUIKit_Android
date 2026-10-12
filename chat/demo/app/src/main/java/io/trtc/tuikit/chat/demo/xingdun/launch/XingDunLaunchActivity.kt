@@ -24,7 +24,10 @@ import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeRoute
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunAccountDeletionReceiptStore
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import android.util.Log
 
 open class XingDunLaunchActivity : BaseLoginActivity() {
 
@@ -150,16 +153,20 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
             return
         }
         setLoading(true, getString(R.string.xingdun_restoring_session))
+        XingDunCredentialRecoveryCoordinator.onAuthenticationStarted()
         lifecycleScope.launch {
             runCatching { XingDunSessionManager.restore() }
                 .onSuccess { session ->
                     if (session == null) {
+                        XingDunCredentialRecoveryCoordinator.onAuthenticationFailed()
                         setLoading(false, getString(R.string.xingdun_session_expired))
                     } else {
                         loginToIM(session)
                     }
                 }
                 .onFailure { error ->
+                    if (error is CancellationException) throw error
+                    XingDunCredentialRecoveryCoordinator.onAuthenticationFailed()
                     setLoading(false, getString(XingDunAuthenticationErrorPresenter.login(error)))
                 }
         }
@@ -237,9 +244,13 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
             return
         }
         setLoading(true, getString(R.string.xingdun_signing_in))
+        XingDunCredentialRecoveryCoordinator.onAuthenticationStarted()
         lifecycleScope.launch {
             val result = runCatching { XingDunSessionManager.login(company, account, passwordValue) }
             result.onSuccess(::loginToIM).onFailure { error ->
+                if (error is CancellationException) throw error
+                XingDunCredentialRecoveryCoordinator.onAuthenticationFailed()
+                Log.w("XingDunLogin", "stage=business failure=${error.javaClass.simpleName}")
                 setLoading(false, getString(XingDunAuthenticationErrorPresenter.login(error)))
             }
         }
@@ -251,7 +262,10 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
             sdkAppId = session.sdkAppId,
             userId = session.timUserId,
             userSig = session.userSig,
+            retryTransientFailureOnce = true,
             onFailure = { code, description ->
+                XingDunCredentialRecoveryCoordinator.onAuthenticationFailed()
+                Log.w("XingDunLogin", "stage=interactive_im code=$code")
                 setLoading(false, getString(XingDunAuthenticationErrorPresenter.im(code, description)))
             }
         )

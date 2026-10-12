@@ -312,7 +312,8 @@ class MainActivity : BaseActivity() {
         mainScope?.launch {
             XingDunCredentialRecoveryCoordinator.state.collectLatest { recoveryState ->
                 when (recoveryState) {
-                    XingDunCredentialRecoveryState.REFRESHING -> updateIMConnectionNotice(
+                    XingDunCredentialRecoveryState.REFRESHING,
+                    XingDunCredentialRecoveryState.AUTHENTICATING -> updateIMConnectionNotice(
                         IMConnectionNotice(R.string.xingdun_im_credential_refreshing_notice, warning = true),
                     )
                     XingDunCredentialRecoveryState.NORMAL -> {

@@ -23,6 +23,9 @@ import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunVersionCheckResult
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import java.io.IOException
 import java.time.Instant
 import java.util.UUID
@@ -111,6 +114,10 @@ object XingDunSessionManager {
     suspend fun refreshSelectedEnterprise(): XingDunBootstrapConfiguration? {
         val selected = store.loadEnterprise() ?: return null
         val refreshed = discoverEnterprise(selected.companyCode, null)
+        currentCoroutineContext().ensureActive()
+        if (store.loadEnterprise()?.companyCode != selected.companyCode) {
+            throw CancellationException("Enterprise selection changed")
+        }
         val selectedIdentity = XingDunTenantBoundary.identity(selected)
         val refreshedIdentity = XingDunTenantBoundary.identity(refreshed)
         require(selectedIdentity != null && refreshedIdentity != null && selectedIdentity.matches(refreshedIdentity)) {
@@ -121,6 +128,7 @@ object XingDunSessionManager {
     }
 
     fun shouldRetainCachedEnterprise(error: Throwable): Boolean = when (error) {
+        is CancellationException -> true
         is IOException -> true
         is XingDunApiException -> error.httpStatus == 429 || (error.httpStatus ?: 500) >= 500
         else -> false
@@ -284,15 +292,13 @@ object XingDunSessionManager {
         )
     }
 
+    @Suppress("UNUSED_PARAMETER")
     suspend fun restore(
         preferCachedCredentials: Boolean = false,
         retainCachedCredentialsOnFailure: Boolean = true,
     ): XingDunStoredSession? = refreshMutex.withLock {
         val existing = store.loadBoundSession() ?: return null
         val now = System.currentTimeMillis()
-        val accessAndIMAreUsable =
-            existing.accessExpiresAtMillis > now + XingDunSessionRestorePolicy.EXPIRY_SAFETY_MILLIS &&
-                existing.userSigExpiresAtMillis > now + XingDunSessionRestorePolicy.EXPIRY_SAFETY_MILLIS
         when (XingDunSessionRestorePolicy.plan(existing, now, preferCachedCredentials)) {
             XingDunSessionRestorePlan.USE_CACHED -> existing
             XingDunSessionRestorePlan.EXPIRED -> {
@@ -303,6 +309,7 @@ object XingDunSessionManager {
                 refreshIMCredentialLocked(existing)
             } catch (error: XingDunApiException) {
                 if (error.isUnauthorized) {
+                    requireCurrentSession(existing)
                     store.clearSession()
                     null
                 } else {
@@ -313,10 +320,9 @@ object XingDunSessionManager {
                 persist(existing, client.refresh(existing))
             } catch (error: XingDunApiException) {
                 if (error.isUnauthorized) {
+                    requireCurrentSession(existing)
                     store.clearSession()
                     null
-                } else if (retainCachedCredentialsOnFailure && accessAndIMAreUsable) {
-                    existing
                 } else {
                     throw error
                 }
@@ -332,6 +338,8 @@ object XingDunSessionManager {
 
     private suspend fun refreshIMCredentialLocked(existing: XingDunStoredSession): XingDunStoredSession {
         val credential = client.refreshIMCredential(existing)
+        currentCoroutineContext().ensureActive()
+        requireCurrentSession(existing)
         validateIMCredential(credential, existing.sdkAppId)
         require(credential.userId == existing.timUserId) { message(R.string.xingdun_error_company_mismatch) }
         return existing.copy(
@@ -444,6 +452,7 @@ object XingDunSessionManager {
     }
 
     private fun persist(existing: XingDunStoredSession, response: XingDunAuthResponse): XingDunStoredSession {
+        requireCurrentSession(existing)
         val tenantIdentity = requireNotNull(XingDunTenantBoundary.identity(existing)) {
             message(R.string.xingdun_error_company_mismatch)
         }
@@ -467,6 +476,15 @@ object XingDunSessionManager {
             userSigExpiresAtMillis = credentialExpiryMillis(credential),
             nickname = response.user?.nickname?.takeIf(String::isNotBlank) ?: existing.nickname
         ).also(store::save)
+    }
+
+    private fun requireCurrentSession(expected: XingDunStoredSession) {
+        val current = store.loadBoundSession()
+        if (current == null || !XingDunAccessTokenRecoveryCoordinator.sameIdentity(current, expected) ||
+            current.accessToken != expected.accessToken || current.userSig != expected.userSig
+        ) {
+            throw CancellationException("Session replaced while renewing credentials")
+        }
     }
 
     private fun validateIMCredential(credential: XingDunIMCredential, expectedSDKAppId: Int) {

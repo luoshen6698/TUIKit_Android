@@ -2,6 +2,7 @@ package io.trtc.tuikit.chat.demo.xingdun.network
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -10,15 +11,21 @@ import com.google.gson.reflect.TypeToken
 import io.trtc.tuikit.chat.app.BuildConfig
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionStore
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Call
+import okhttp3.EventListener
+import okhttp3.Handshake
+import okhttp3.Response
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.lang.reflect.Type
+import java.io.IOException
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -37,6 +44,35 @@ class XingDunApiClient(
         .writeTimeout(30, TimeUnit.SECONDS)
         .callTimeout(45, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
+        .eventListenerFactory { call ->
+            // Every call owns its phase; never log URLs, addresses, bodies or credentials.
+            val operation = call.request().url.encodedPath.substringAfterLast('/')
+                .takeIf { it in setOf("login", "refreshToken", "imCredential", "bootstrap", "check") }
+                ?: "other"
+            object : EventListener() {
+                private val started = System.nanoTime()
+                private var phase = "created"
+
+                override fun dnsStart(call: Call, domainName: String) { phase = "dns" }
+                override fun dnsEnd(call: Call, domainName: String, inetAddressList: List<InetAddress>) {
+                    phase = "dns_resolved"
+                }
+                override fun connectStart(call: Call, inetSocketAddress: InetSocketAddress, proxy: Proxy) {
+                    phase = "connecting"
+                }
+                override fun secureConnectStart(call: Call) { phase = "tls" }
+                override fun secureConnectEnd(call: Call, handshake: Handshake?) { phase = "tls_ready" }
+                override fun requestHeadersStart(call: Call) { phase = "request_headers" }
+                override fun requestBodyStart(call: Call) { phase = "request_body" }
+                override fun requestBodyEnd(call: Call, byteCount: Long) { phase = "waiting_response" }
+                override fun responseHeadersEnd(call: Call, response: Response) { phase = "response_body" }
+
+                override fun callFailed(call: Call, ioe: IOException) {
+                    val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+                    Log.w("XingDunNetwork", "operation=$operation phase=$phase elapsed_ms=$elapsed failure=${XingDunNetworkFailure.from(ioe)}")
+                }
+            }
+        }
         .build()
     private val authenticatedRequestExecutor = XingDunAuthenticatedRequestExecutor()
 
@@ -70,6 +106,13 @@ class XingDunApiClient(
         baseUrl: String,
         requestBody: XingDunLoginRequest
     ): XingDunAuthResponse = post(baseUrl, "auth/login", requestBody, null, XingDunAuthResponse::class.java)
+
+    suspend fun revokeSession(session: XingDunStoredSession) {
+        val request = requestBuilder(endpointUrl(session.apiBaseUrl, "auth/logout"), session)
+            .post("{}".toRequestBody("application/json".toMediaType())).build()
+        // No authentication recovery: an old SID must never refresh or revoke its replacement.
+        executeOnce<Any?>(request, Any::class.java)
+    }
 
     suspend fun register(
         baseUrl: String,
@@ -258,6 +301,8 @@ class XingDunApiClient(
             .header("Accept", "application/json")
             .header("User-Agent", userAgent())
             .header("X-XingDun-Device-ID", sessionStore.deviceId())
+            .header("X-XingDun-Client-Platform", "android")
+            .header("X-XingDun-Session-Protocol", "2")
             .header("X-XingDun-Trace-ID", UUID.randomUUID().toString())
         if (session != null) {
             builder.header("Authorization", "${session.tokenType} ${session.accessToken}")
@@ -275,8 +320,8 @@ class XingDunApiClient(
         replayRequest = { refreshed -> executeOnce(replayRequest(request, refreshed), responseType) },
     )
 
-    private suspend fun <T> executeOnce(request: Request, responseType: Type): T = withContext(Dispatchers.IO) {
-        httpClient.newCall(request).execute().use { response ->
+    private suspend fun <T> executeOnce(request: Request, responseType: Type): T =
+        httpClient.newCall(request).executeCancellable { response ->
             val payload = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 throw apiException(payload, response.code)
@@ -297,7 +342,6 @@ class XingDunApiClient(
                 envelope.traceId
             )
         }
-    }
 
     private suspend fun <T> executeNullable(
         request: Request,
@@ -309,8 +353,8 @@ class XingDunApiClient(
         replayRequest = { refreshed -> executeNullableOnce(replayRequest(request, refreshed), responseType) },
     )
 
-    private suspend fun <T> executeNullableOnce(request: Request, responseType: Type): T? = withContext(Dispatchers.IO) {
-        httpClient.newCall(request).execute().use { response ->
+    private suspend fun <T> executeNullableOnce(request: Request, responseType: Type): T? =
+        httpClient.newCall(request).executeCancellable { response ->
             val payload = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw apiException(payload, response.code)
             val envelopeType = TypeToken.getParameterized(XingDunEnvelope::class.java, responseType).type
@@ -324,7 +368,6 @@ class XingDunApiClient(
             }
             envelope.data
         }
-    }
 
     private suspend fun executeAllowEmpty(
         request: Request,
@@ -335,8 +378,8 @@ class XingDunApiClient(
         replayRequest = { refreshed -> executeAllowEmptyOnce(replayRequest(request, refreshed)) },
     )
 
-    private suspend fun executeAllowEmptyOnce(request: Request): Unit = withContext(Dispatchers.IO) {
-        httpClient.newCall(request).execute().use { response ->
+    private suspend fun executeAllowEmptyOnce(request: Request): Unit =
+        httpClient.newCall(request).executeCancellable { response ->
             val payload = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw apiException(payload, response.code)
             val envelope = runCatching { gson.fromJson(payload, JsonObject::class.java) }.getOrNull()
@@ -351,7 +394,6 @@ class XingDunApiClient(
                 )
             }
         }
-    }
 
     private fun replayRequest(request: Request, session: XingDunStoredSession): Request {
         if (!sessionStore.isBoundToCurrentEnterprise(session)) {

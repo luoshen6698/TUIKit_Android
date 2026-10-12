@@ -7,9 +7,9 @@ import org.junit.Test
 class XingDunSessionRestorePolicyTest {
 
     @Test
-    fun coldStartUsesCachedCredentialsWhileBothAreUsable() {
+    fun coldStartValidatesServerOwnershipEvenWhileBothCredentialsAreUsable() {
         assertEquals(
-            XingDunSessionRestorePlan.USE_CACHED,
+            XingDunSessionRestorePlan.REFRESH_SESSION,
             XingDunSessionRestorePolicy.plan(session(), NOW, preferCachedCredentials = true),
         )
     }

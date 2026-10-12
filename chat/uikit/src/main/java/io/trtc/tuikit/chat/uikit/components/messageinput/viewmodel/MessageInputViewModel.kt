@@ -36,6 +36,7 @@ import io.trtc.tuikit.chat.uikit.components.messageinput.model.MentionInfo
 import io.trtc.tuikit.chat.uikit.components.messageinput.model.MentionAllPermissionPolicy
 import io.trtc.tuikit.chat.uikit.components.messageinput.ui.GroupMemberPickerDialog
 import io.trtc.tuikit.chat.uikit.components.messageinput.utils.VideoFrameExtractor
+import io.trtc.tuikit.chat.uikit.components.messageinput.utils.VideoSendNormalizer
 import io.trtc.tuikit.chat.uikit.components.videorecorder.RecordMode
 import io.trtc.tuikit.chat.uikit.components.videorecorder.VideoRecordListener
 import io.trtc.tuikit.chat.uikit.components.videorecorder.VideoRecorder
@@ -417,7 +418,14 @@ class MessageInputViewModel(
                 showFileTooLarge(context)
                 return@launch
             }
-            val videoFrameInfo = VideoFrameExtractor.extractVideoFrameInfo(filePath)
+            val compatiblePath = try {
+                VideoSendNormalizer.normalize(filePath, File(context.filesDir, "atomicx_data/video"))
+            } catch (error: Exception) {
+                Log.e(TAG, "Video normalization failed: ${error.javaClass.simpleName}")
+                showSendFailed(context)
+                return@launch
+            }
+            val videoFrameInfo = VideoFrameExtractor.extractVideoFrameInfo(compatiblePath)
             if (videoFrameInfo == null) {
                 Log.e(TAG, "build video message, extract video frame failed.")
                 showSendFailed(context)
@@ -438,7 +446,7 @@ class MessageInputViewModel(
                     return@launch
                 }
                 val payload = SendMessagePayload.VideoSendMessagePayload(
-                    videoFilePath = filePath,
+                    videoFilePath = compatiblePath,
                     videoType = "mp4",
                     duration = (videoFrameInfo.durationMs / 1000f).roundToInt(),
                     snapshotPath = bitmapPath,

@@ -35,6 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.MessageLocalMarkConfig
 
 class Application : Application() {
@@ -158,6 +159,7 @@ class Application : Application() {
         enterpriseRefreshJob = applicationScope.launch {
             runCatching { XingDunSessionManager.refreshSelectedEnterprise() }
                 .onFailure { error ->
+                    if (error is CancellationException) throw error
                     if (!XingDunSessionManager.shouldRetainCachedEnterprise(error)) {
                         redirectToEnterpriseSelection()
                     }

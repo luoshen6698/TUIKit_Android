@@ -15,11 +15,17 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunPinnedMessageRepository
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageFavoriteRepository
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 /** Serializes logout/switch cleanup so no old-tenant state survives into a new enterprise. */
 internal object XingDunTenantSessionCoordinator {
     private val lock = Any()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val logoutScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val completions = mutableListOf<() -> Unit>()
     private var running = false
     private var clearEnterpriseRequested = false
@@ -48,11 +54,19 @@ internal object XingDunTenantSessionCoordinator {
         }
         if (!shouldStart) return
 
-        XingDunPushManager.unregisterDevice {
-            LoginStore.shared.logout(object : CompletionHandler {
-                override fun onSuccess() = finishCleanup()
-                override fun onFailure(code: Int, desc: String) = finishCleanup()
-            })
+        val departingSession = XingDunSessionManager.currentSession()
+        logoutScope.launch {
+            try {
+                if (departingSession != null) withTimeout(5_000) {
+                    XingDunSessionManager.apiClient().revokeSession(departingSession)
+                }
+            } catch (_: Exception) { /* Offline logout still clears the local session. */ }
+            XingDunPushManager.unregisterDevice {
+                LoginStore.shared.logout(object : CompletionHandler {
+                    override fun onSuccess() = finishCleanup()
+                    override fun onFailure(code: Int, desc: String) = finishCleanup()
+                })
+            }
         }
     }
 

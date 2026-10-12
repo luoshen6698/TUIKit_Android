@@ -5,6 +5,7 @@ import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
+import android.util.Log
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -24,6 +25,7 @@ import io.trtc.tuikit.chat.demo.common.AppConstants
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
+import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunInteractiveIMLoginRetryPolicy
 import io.trtc.tuikit.chat.demo.xingdun.main.XingDunMessageFirstFramePreloader
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
@@ -34,6 +36,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -97,6 +100,7 @@ abstract class BaseLoginActivity : BaseActivity() {
         sdkAppId: Int,
         userId: String,
         userSig: String,
+        retryTransientFailureOnce: Boolean = false,
         onSuccess: (() -> Unit)? = null,
         onFailure: ((Int, String) -> Unit)? = null
     ) {
@@ -104,6 +108,24 @@ abstract class BaseLoginActivity : BaseActivity() {
             onFailure?.invoke(-1, getString(R.string.xingdun_error_company_mismatch))
             return
         }
+        performLoginAttempt(
+            sdkAppId = sdkAppId,
+            userId = userId,
+            userSig = userSig,
+            retriesRemaining = if (retryTransientFailureOnce) 1 else 0,
+            onSuccess = onSuccess,
+            onFailure = onFailure,
+        )
+    }
+
+    private fun performLoginAttempt(
+        sdkAppId: Int,
+        userId: String,
+        userSig: String,
+        retriesRemaining: Int,
+        onSuccess: (() -> Unit)?,
+        onFailure: ((Int, String) -> Unit)?,
+    ) {
         LoginStore.shared.login(
             this, sdkAppId, userId, userSig,
             object : CompletionHandler {
@@ -133,6 +155,25 @@ abstract class BaseLoginActivity : BaseActivity() {
                 }
 
                 override fun onFailure(code: Int, desc: String) {
+                    if (XingDunInteractiveIMLoginRetryPolicy.shouldRetry(retriesRemaining, code)) {
+                        Log.w(TAG, "IM login failed with code $code; retrying once")
+                        lifecycleScope.launch {
+                            delay(XingDunInteractiveIMLoginRetryPolicy.RETRY_DELAY_MILLIS)
+                            if (!XingDunSessionManager.matchesCurrentIMIdentity(sdkAppId, userId)) {
+                                onFailure?.invoke(-1, getString(R.string.xingdun_error_company_mismatch))
+                                return@launch
+                            }
+                            performLoginAttempt(
+                                sdkAppId = sdkAppId,
+                                userId = userId,
+                                userSig = userSig,
+                                retriesRemaining = retriesRemaining - 1,
+                                onSuccess = onSuccess,
+                                onFailure = onFailure,
+                            )
+                        }
+                        return
+                    }
                     if (onFailure != null) {
                         onFailure(code, desc)
                     } else {

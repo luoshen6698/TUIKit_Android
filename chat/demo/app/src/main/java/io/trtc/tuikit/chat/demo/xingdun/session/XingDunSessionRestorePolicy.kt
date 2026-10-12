@@ -12,23 +12,18 @@ internal enum class XingDunSessionRestorePlan {
 internal object XingDunSessionRestorePolicy {
     const val EXPIRY_SAFETY_MILLIS = 60_000L
 
+    @Suppress("UNUSED_PARAMETER")
     fun plan(
         session: XingDunStoredSession,
         nowMillis: Long,
         preferCachedCredentials: Boolean,
     ): XingDunSessionRestorePlan {
         val accessIsUsable = session.accessExpiresAtMillis > nowMillis + EXPIRY_SAFETY_MILLIS
-        val imIsUsable = session.userSigExpiresAtMillis > nowMillis + EXPIRY_SAFETY_MILLIS
-        val accessAndIMAreUsable = accessIsUsable && imIsUsable
-        if (preferCachedCredentials && accessAndIMAreUsable) {
-            return XingDunSessionRestorePlan.USE_CACHED
-        }
-
         val canRefreshSession = !session.refreshToken.isNullOrBlank() &&
             (session.refreshExpiresAtMillis ?: 0L) > nowMillis
         return when {
             canRefreshSession -> XingDunSessionRestorePlan.REFRESH_SESSION
-            accessAndIMAreUsable -> XingDunSessionRestorePlan.USE_CACHED
+            // A locally unexpired UserSig does not prove ownership after another phone logs in.
             accessIsUsable -> XingDunSessionRestorePlan.REFRESH_IM_CREDENTIAL
             else -> XingDunSessionRestorePlan.EXPIRED
         }

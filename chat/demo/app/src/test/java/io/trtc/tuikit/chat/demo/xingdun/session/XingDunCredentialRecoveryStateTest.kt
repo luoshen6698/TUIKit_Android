@@ -3,6 +3,8 @@ package io.trtc.tuikit.chat.demo.xingdun.session
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class XingDunCredentialRecoveryStateTest {
@@ -11,22 +13,22 @@ class XingDunCredentialRecoveryStateTest {
     fun duplicateRefreshIsIgnoredUntilCurrentRefreshCompletes() {
         val gate = XingDunCredentialRecoveryGate()
 
-        assertTrue(gate.tryBeginRefresh())
-        assertFalse(gate.tryBeginRefresh())
+        val ticket = gate.tryBeginRefresh()!!
+        assertNull(gate.tryBeginRefresh())
         assertEquals(XingDunCredentialRecoveryState.REFRESHING, gate.current())
 
-        assertTrue(gate.completeRefresh())
-        assertTrue(gate.tryBeginRefresh())
+        assertTrue(gate.completeRefresh(ticket))
+        assertNotNull(gate.tryBeginRefresh())
     }
 
     @Test
     fun redirectWinsOverRefreshAndOnlyRunsOnce() {
         val gate = XingDunCredentialRecoveryGate()
 
-        assertTrue(gate.tryBeginRefresh())
+        val ticket = gate.tryBeginRefresh()!!
         assertTrue(gate.tryBeginRedirect())
         assertFalse(gate.tryBeginRedirect())
-        assertFalse(gate.completeRefresh())
+        assertFalse(gate.completeRefresh(ticket))
         assertEquals(XingDunCredentialRecoveryState.REDIRECTING, gate.current())
     }
 
@@ -38,7 +40,37 @@ class XingDunCredentialRecoveryStateTest {
         gate.markAuthenticated()
 
         assertEquals(XingDunCredentialRecoveryState.NORMAL, gate.current())
-        assertTrue(gate.tryBeginRefresh())
+        assertNotNull(gate.tryBeginRefresh())
+    }
+
+    @Test
+    fun oldRefreshCannotCompleteOrRedirectAfterNewAuthentication() {
+        val gate = XingDunCredentialRecoveryGate()
+        val oldTicket = gate.tryBeginRefresh()!!
+        gate.markAuthenticated()
+        val newTicket = gate.tryBeginRefresh()!!
+        assertFalse(gate.completeRefresh(oldTicket))
+        assertFalse(gate.tryBeginRedirect(oldTicket))
+        assertEquals(XingDunCredentialRecoveryState.REFRESHING, gate.current())
+        assertTrue(gate.completeRefresh(newTicket))
+    }
+
+    @Test fun interactiveLoginSupersedesRefreshBeforeItFinishes() {
+        val gate = XingDunCredentialRecoveryGate()
+        val oldTicket = gate.tryBeginRefresh()!!
+        gate.markAuthenticating()
+        assertFalse(gate.completeRefresh(oldTicket))
+        assertFalse(gate.tryBeginRedirect(oldTicket))
+        assertNull(gate.tryBeginRefresh())
+        gate.markAuthenticated()
+        assertNotNull(gate.tryBeginRefresh())
+    }
+
+    @Test fun missingIMIdentityRecoversOnlyWithAnExistingBusinessSession() {
+        assertTrue(XingDunMissingIMSessionPolicy.canRecover(true, null))
+        assertTrue(XingDunMissingIMSessionPolicy.canRecover(true, ""))
+        assertFalse(XingDunMissingIMSessionPolicy.canRecover(false, null))
+        assertFalse(XingDunMissingIMSessionPolicy.canRecover(true, "another_account"))
     }
 
     @Test

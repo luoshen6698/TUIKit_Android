@@ -14,6 +14,7 @@ import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunMissingIMSessionPolicy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -53,6 +54,11 @@ abstract class BaseActivity : AppCompatActivity() {
             return false
         }
         if (session != null && XingDunCredentialRecoveryCoordinator.isRefreshing()) return false
+        if (XingDunMissingIMSessionPolicy.canRecover(session != null, loginUserID)) {
+            // Temporary IM loss is not a rejected business session. Renew instead of erasing it.
+            XingDunCredentialRecoveryCoordinator.onIMLoginRequiredAfterWakeup()
+            return false
+        }
         XingDunCredentialRecoveryCoordinator.redirectToLogin(R.string.demo_login_expired)
         return true
     }

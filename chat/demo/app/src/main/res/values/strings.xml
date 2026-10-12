@@ -135,6 +135,11 @@
     <string name="xingdun_registration_fields_invalid">Enter a display name and make sure both passwords match.</string>
     <string name="xingdun_consent_required">Accept the User Agreement and Privacy Policy.</string>
     <string name="xingdun_network_error">Network unavailable. Please try again.</string>
+    <string name="xingdun_network_dns_failed">Cannot resolve the service address. Check your network and try again.</string>
+    <string name="xingdun_network_timeout">Connection timed out. Check your network and try again.</string>
+    <string name="xingdun_network_tls_failed">Cannot establish a secure connection. Check your device time and network.</string>
+    <string name="xingdun_network_permission_denied">Network access is blocked. Allow network access for this app in system settings.</string>
+    <string name="xingdun_startup_waiting_network">Connecting is taking longer than expected. Please wait…</string>
     <string name="xingdun_authentication_failed">Authentication failed.</string>
     <string name="xingdun_auth_rate_limited">Too many authentication attempts. Please try again later.</string>
     <string name="xingdun_login_account_not_registered">This account is not registered in the current enterprise.</string>

@@ -58,4 +58,20 @@ class XingDunAuthenticationErrorPresenterTest {
             XingDunAuthenticationErrorPresenter.im(6012, "raw sdk description")
         )
     }
+
+    @Test
+    fun interactiveIMLoginRetriesTransientFailureOnlyOnce() {
+        assertEquals(
+            true,
+            XingDunInteractiveIMLoginRetryPolicy.shouldRetry(retriesRemaining = 1, code = 6012)
+        )
+        assertEquals(
+            false,
+            XingDunInteractiveIMLoginRetryPolicy.shouldRetry(retriesRemaining = 0, code = 6012)
+        )
+        assertEquals(
+            false,
+            XingDunInteractiveIMLoginRetryPolicy.shouldRetry(retriesRemaining = 1, code = 10108)
+        )
+    }
 }

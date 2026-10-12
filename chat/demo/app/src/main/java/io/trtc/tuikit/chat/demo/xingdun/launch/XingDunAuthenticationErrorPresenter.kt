@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiException
 import java.io.IOException
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunNetworkFailure
 
 internal enum class XingDunRegistrationField {
     USERNAME,
@@ -23,7 +24,13 @@ internal data class XingDunAuthenticationErrorPresentation(
 internal object XingDunAuthenticationErrorPresenter {
     @StringRes
     fun login(error: Throwable): Int {
-        if (error is IOException) return R.string.xingdun_network_error
+        if (error is IOException) return when (XingDunNetworkFailure.from(error)) {
+            XingDunNetworkFailure.DNS -> R.string.xingdun_network_dns_failed
+            XingDunNetworkFailure.TIMEOUT -> R.string.xingdun_network_timeout
+            XingDunNetworkFailure.TLS -> R.string.xingdun_network_tls_failed
+            XingDunNetworkFailure.PERMISSION -> R.string.xingdun_network_permission_denied
+            else -> R.string.xingdun_network_error
+        }
         val apiError = error as? XingDunApiException ?: return R.string.xingdun_authentication_failed
         val message = apiError.message.trim()
         return when {
@@ -105,4 +112,11 @@ internal object XingDunAuthenticationErrorPresenter {
         @StringRes message: Int,
         field: XingDunRegistrationField
     ) = XingDunAuthenticationErrorPresentation(message, field)
+}
+
+internal object XingDunInteractiveIMLoginRetryPolicy {
+    const val RETRY_DELAY_MILLIS = 1_200L
+
+    fun shouldRetry(retriesRemaining: Int, code: Int): Boolean =
+        retriesRemaining > 0 && code != 10108
 }

@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.CancellationException
 
 /** Keeps UserSig renewal on the current task and owns the only terminal-login redirect. */
 internal object XingDunCredentialRecoveryCoordinator {
@@ -42,6 +43,7 @@ internal object XingDunCredentialRecoveryCoordinator {
     private lateinit var appContext: Context
     private var foreground = false
     private var scheduledRefreshJob: Job? = null
+    private var recoveryJob: Job? = null
 
     fun initialize(context: Context) {
         if (::appContext.isInitialized) return
@@ -78,15 +80,35 @@ internal object XingDunCredentialRecoveryCoordinator {
     }
 
     fun onAuthenticated() {
+        recoveryJob?.cancel()
+        recoveryJob = null
         gate.markAuthenticated()
         mutableState.value = XingDunCredentialRecoveryState.NORMAL
         scheduleProactiveRefresh()
     }
 
+    fun onAuthenticationStarted() {
+        gate.markAuthenticating()
+        recoveryJob?.cancel()
+        recoveryJob = null
+        scheduledRefreshJob?.cancel()
+        scheduledRefreshJob = null
+        mutableState.value = XingDunCredentialRecoveryState.AUTHENTICATING
+    }
+
+    fun onAuthenticationFailed() {
+        if (gate.current() != XingDunCredentialRecoveryState.AUTHENTICATING) return
+        gate.markAuthenticated()
+        mutableState.value = XingDunCredentialRecoveryState.NORMAL
+    }
+
     fun isRefreshing(): Boolean = gate.current() == XingDunCredentialRecoveryState.REFRESHING
 
-    fun redirectToLogin(@StringRes noticeResId: Int = R.string.demo_login_expired) {
-        if (!gate.tryBeginRedirect()) return
+    fun redirectToLogin(@StringRes noticeResId: Int = R.string.demo_login_expired, ticket: Long? = null) {
+        if (!gate.tryBeginRedirect(ticket)) return
+        Log.w(TAG, "redirect reason=${if (noticeResId == R.string.demo_force_offline) "kicked" else "credential_rejected"}")
+        recoveryJob?.cancel()
+        recoveryJob = null
         mutableState.value = XingDunCredentialRecoveryState.REDIRECTING
         scheduledRefreshJob?.cancel()
         scheduledRefreshJob = null
@@ -100,17 +122,25 @@ internal object XingDunCredentialRecoveryCoordinator {
     }
 
     private fun beginRefresh(reason: String) {
-        if (!::appContext.isInitialized || !gate.tryBeginRefresh()) return
+        if (!::appContext.isInitialized) return
+        val ticket = gate.tryBeginRefresh() ?: return
         scheduledRefreshJob?.cancel()
         scheduledRefreshJob = null
         mutableState.value = XingDunCredentialRecoveryState.REFRESHING
-        scope.launch {
-            when (val outcome = recoverOnCurrentTask()) {
-                is RecoveryOutcome.Success -> completeRefresh(outcome.session)
-                is RecoveryOutcome.Terminal -> redirectToLogin(outcome.noticeResId)
-                is RecoveryOutcome.Transient -> {
-                    Log.w(TAG, "Credential renewal deferred ($reason): ${outcome.error.javaClass.simpleName}")
-                    retryAfterTransientFailure()
+        recoveryJob = scope.launch {
+            try {
+                when (val outcome = recoverOnCurrentTask()) {
+                    is RecoveryOutcome.Success -> completeRefresh(outcome.session, ticket)
+                    is RecoveryOutcome.Terminal -> redirectToLogin(outcome.noticeResId, ticket)
+                    is RecoveryOutcome.Transient -> {
+                        Log.w(TAG, "Credential renewal deferred ($reason): ${outcome.error.javaClass.simpleName}")
+                        retryAfterTransientFailure(ticket)
+                    }
+                }
+            } finally {
+                // A cancelled owner must not leave the UI permanently in REFRESHING.
+                if (gate.completeRefresh(ticket)) {
+                    mutableState.value = XingDunCredentialRecoveryState.NORMAL
                 }
             }
         }
@@ -145,6 +175,7 @@ internal object XingDunCredentialRecoveryCoordinator {
         return try {
             RefreshResult.Success(XingDunSessionManager.refreshIMCredential())
         } catch (error: Throwable) {
+            if (error is CancellationException) throw error
             if (isTransient(error)) return RefreshResult.Transient(error)
             try {
                 val session = XingDunSessionManager.restore(
@@ -153,6 +184,7 @@ internal object XingDunCredentialRecoveryCoordinator {
                 ) ?: return RefreshResult.Terminal(R.string.demo_login_expired)
                 RefreshResult.Success(session)
             } catch (fallbackError: Throwable) {
+                if (fallbackError is CancellationException) throw fallbackError
                 if (isTransient(fallbackError)) {
                     RefreshResult.Transient(fallbackError)
                 } else {
@@ -189,11 +221,8 @@ internal object XingDunCredentialRecoveryCoordinator {
             )
         }
 
-    private fun completeRefresh(session: XingDunStoredSession) {
-        if (!gate.completeRefresh()) {
-            LoginStore.shared.logout(null)
-            return
-        }
+    private fun completeRefresh(session: XingDunStoredSession, ticket: Long) {
+        if (!gate.completeRefresh(ticket)) return
         XingDunCallSessionInitializer.initialize(
             appContext,
             session.sdkAppId,
@@ -207,8 +236,8 @@ internal object XingDunCredentialRecoveryCoordinator {
         scheduleProactiveRefresh()
     }
 
-    private fun retryAfterTransientFailure() {
-        if (!gate.completeRefresh()) return
+    private fun retryAfterTransientFailure(ticket: Long) {
+        if (!gate.completeRefresh(ticket)) return
         mutableState.value = XingDunCredentialRecoveryState.NORMAL
         if (!foreground) return
         scheduledRefreshJob = scope.launch {
