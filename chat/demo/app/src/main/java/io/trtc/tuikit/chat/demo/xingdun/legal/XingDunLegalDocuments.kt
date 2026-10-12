@@ -2,7 +2,8 @@ package io.trtc.tuikit.chat.demo.xingdun.legal
 
 /** Android uses its own public Chinese documents, independently of tenant and iOS URLs. */
 object XingDunLegalDocuments {
-    const val VERSION = "2026.10.01"
+    const val USER_AGREEMENT_VERSION = "2026.10.01"
+    const val PRIVACY_POLICY_VERSION = "2026.10.04"
     const val PRIVACY_FILE = "xingdun-privacy-policy-android.html"
     const val AGREEMENT_FILE = "xingdun-user-agreement-android.html"
     const val BASE_URL = "https://www.xingdunim.com/"

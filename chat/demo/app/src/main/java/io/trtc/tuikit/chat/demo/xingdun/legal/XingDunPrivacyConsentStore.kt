@@ -15,6 +15,6 @@ class XingDunPrivacyConsentStore(directory: File) {
     }
 
     companion object {
-        const val CURRENT_VERSION = "2026.10.04"
+        const val CURRENT_VERSION = XingDunLegalDocuments.PRIVACY_POLICY_VERSION
     }
 }

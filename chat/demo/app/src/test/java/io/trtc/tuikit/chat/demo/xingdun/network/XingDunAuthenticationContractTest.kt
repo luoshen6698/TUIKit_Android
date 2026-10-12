@@ -2,6 +2,7 @@ package io.trtc.tuikit.chat.demo.xingdun.network
 
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -26,15 +27,35 @@ class XingDunAuthenticationContractTest {
                 companyCode = "xc2026",
                 adultDeclaration = true,
                 consent = true,
-                userAgreementVersion = "2026.08.13",
-                privacyPolicyVersion = "2026.08.13",
+                userAgreementVersion = XingDunSessionManager.USER_AGREEMENT_VERSION,
+                privacyPolicyVersion = XingDunSessionManager.PRIVACY_VERSION,
                 consentEvidenceId = "android:test:evidence"
             )
         )
 
         assertTrue(json.contains("\"company_code\":\"xc2026\""))
         assertTrue(json.contains("\"consent_source\":\"android_registration\""))
+        assertTrue(json.contains("\"user_agreement_version\":\"2026.10.01\""))
+        assertTrue(json.contains("\"privacy_policy_version\":\"2026.10.04\""))
         assertFalse(json.contains("\"ios_registration\""))
+    }
+
+    @Test
+    fun accountRegistrationCarriesDistinctPublishedDocumentVersions() {
+        val request = XingDunRegisterRequest(
+            username = "t0010", password = "test-only", confirmPassword = "test-only",
+            nickname = "", inviteCode = null, companyCode = "xc2026",
+            adultDeclaration = true, consent = true,
+            userAgreementVersion = XingDunSessionManager.USER_AGREEMENT_VERSION,
+            privacyPolicyVersion = XingDunSessionManager.PRIVACY_VERSION,
+            consentEvidenceId = "android:test:evidence"
+        )
+        val fields = gson.fromJson(gson.toJson(request), Map::class.java)
+        assertEquals("2026.10.01", fields["user_agreement_version"])
+        assertEquals("2026.10.04", fields["privacy_policy_version"])
+        assertEquals("android_registration", fields["consent_source"])
+        assertEquals("", fields["nickname"])
+        assertFalse(fields.containsKey("invite_code"))
     }
 
     @Test

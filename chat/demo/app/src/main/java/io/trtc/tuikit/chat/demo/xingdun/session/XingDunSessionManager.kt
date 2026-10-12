@@ -29,7 +29,8 @@ import java.util.UUID
 
 object XingDunSessionManager {
 
-    const val PRIVACY_VERSION = io.trtc.tuikit.chat.demo.xingdun.legal.XingDunLegalDocuments.VERSION
+    const val USER_AGREEMENT_VERSION = io.trtc.tuikit.chat.demo.xingdun.legal.XingDunLegalDocuments.USER_AGREEMENT_VERSION
+    const val PRIVACY_VERSION = io.trtc.tuikit.chat.demo.xingdun.legal.XingDunLegalDocuments.PRIVACY_POLICY_VERSION
 
     private lateinit var store: XingDunSessionStore
     private lateinit var client: XingDunApiClient
@@ -202,7 +203,7 @@ object XingDunSessionManager {
                 companyCode = normalizedCompanyCode(companyCode),
                 adultDeclaration = true,
                 consent = true,
-                userAgreementVersion = PRIVACY_VERSION,
+                userAgreementVersion = USER_AGREEMENT_VERSION,
                 privacyPolicyVersion = PRIVACY_VERSION,
                 consentEvidenceId = "android:${store.deviceId()}:${UUID.randomUUID()}".take(64)
             )
@@ -232,7 +233,7 @@ object XingDunSessionManager {
                 companyCode = normalizedCompanyCode(companyCode),
                 adultDeclaration = true,
                 consent = true,
-                userAgreementVersion = PRIVACY_VERSION,
+                userAgreementVersion = USER_AGREEMENT_VERSION,
                 privacyPolicyVersion = PRIVACY_VERSION,
                 consentEvidenceId = "android:${store.deviceId()}:${UUID.randomUUID()}".take(64)
             )

@@ -50,6 +50,15 @@ internal object XingDunAuthenticationErrorPresenter {
         if (apiError.businessCode == 40911) {
             return XingDunAuthenticationErrorPresentation(R.string.xingdun_error_company_mismatch)
         }
+        if (apiError.businessCode == 42208) {
+            return XingDunAuthenticationErrorPresentation(R.string.xingdun_registration_legal_version_changed)
+        }
+        if (apiError.businessCode == 42209) {
+            return XingDunAuthenticationErrorPresentation(R.string.xingdun_registration_consent_invalid)
+        }
+        if (apiError.businessCode == 50020) {
+            return XingDunAuthenticationErrorPresentation(R.string.xingdun_registration_service_unavailable)
+        }
         return when {
             message.contains("用户名") && message.contains("存在") -> presentation(
                 R.string.xingdun_registration_username_exists,

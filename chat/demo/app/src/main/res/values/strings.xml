@@ -141,6 +141,9 @@
     <string name="xingdun_login_account_disabled">This account is disabled. Contact your enterprise administrator.</string>
     <string name="xingdun_login_invalid_credentials">The account or password is incorrect.</string>
     <string name="xingdun_registration_failed_safe">The account could not be created. Check the fields and try again.</string>
+    <string name="xingdun_registration_legal_version_changed">The User Agreement or Privacy Policy has changed. Update the app, then read and accept the documents again.</string>
+    <string name="xingdun_registration_consent_invalid">Please confirm the User Agreement and Privacy Policy again, then retry.</string>
+    <string name="xingdun_registration_service_unavailable">Registration is temporarily unavailable. Please try again later.</string>
     <string name="xingdun_registration_username_exists">This username is already registered.</string>
     <string name="xingdun_registration_phone_exists">This phone number is already registered.</string>
     <string name="xingdun_registration_password_invalid">The password does not meet the registration requirements.</string>

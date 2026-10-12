@@ -10,7 +10,11 @@ class XingDunLegalDocumentsTest {
     fun androidEntryPointsUseSeparateChineseWebsiteDocuments() {
         assertEquals("https://www.xingdunim.com/xingdun-privacy-policy-android.html", XingDunLegalDocuments.url(true))
         assertEquals("https://www.xingdunim.com/xingdun-user-agreement-android.html", XingDunLegalDocuments.url(false))
-        assertEquals(XingDunLegalDocuments.VERSION, XingDunSessionManager.PRIVACY_VERSION)
+        assertEquals("2026.10.01", XingDunSessionManager.USER_AGREEMENT_VERSION)
+        assertEquals("2026.10.04", XingDunSessionManager.PRIVACY_VERSION)
+        assertEquals(XingDunLegalDocuments.USER_AGREEMENT_VERSION, XingDunSessionManager.USER_AGREEMENT_VERSION)
+        assertEquals(XingDunLegalDocuments.PRIVACY_POLICY_VERSION, XingDunSessionManager.PRIVACY_VERSION)
+        assertEquals(XingDunLegalDocuments.PRIVACY_POLICY_VERSION, XingDunPrivacyConsentStore.CURRENT_VERSION)
     }
 
     @Test
