@@ -95,6 +95,7 @@ internal object XingDunTenantSessionCoordinator {
             } else {
                 XingDunSessionManager.clear()
             }
+            XingDunPushManager.onSessionCleared()
             callbacks.forEach { it() }
         }
     }

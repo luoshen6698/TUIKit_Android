@@ -8,6 +8,8 @@ object XingDunPushManager {
 
     fun syncDeviceRegistration() = Unit
 
+    fun onSessionCleared() = Unit
+
     fun unregisterDevice(onComplete: () -> Unit) {
         onComplete()
     }
