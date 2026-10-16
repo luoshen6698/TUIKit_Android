@@ -2,9 +2,11 @@ package io.trtc.tuikit.chat.demo.xingdun.session
 
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.StringRes
 import com.tencent.mmkv.MMKV
+import com.tencent.imsdk.v2.V2TIMManager
 import com.tencent.qcloud.tuicore.TUILogin
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
@@ -26,9 +28,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withContext
 
 /** Keeps UserSig renewal on the current task and owns the only terminal-login redirect. */
 internal object XingDunCredentialRecoveryCoordinator {
@@ -37,6 +41,7 @@ internal object XingDunCredentialRecoveryCoordinator {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val gate = XingDunCredentialRecoveryGate()
+    private val authenticatedWakeupSessionGate = XingDunAuthenticatedWakeupSessionGate()
     private val mutableState = MutableStateFlow(XingDunCredentialRecoveryState.NORMAL)
     val state: StateFlow<XingDunCredentialRecoveryState> = mutableState.asStateFlow()
 
@@ -79,33 +84,64 @@ internal object XingDunCredentialRecoveryCoordinator {
         scheduledRefreshJob = null
     }
 
+    /** Marks a fresh server authentication followed by verified IM login, not proof reuse. */
     fun onAuthenticated() {
         recoveryJob?.cancel()
         recoveryJob = null
         gate.markAuthenticated()
+        recordAuthenticatedWakeupSession(XingDunSessionManager.currentSession())
         mutableState.value = XingDunCredentialRecoveryState.NORMAL
         scheduleProactiveRefresh()
     }
 
-    fun onAuthenticationStarted() {
-        gate.markAuthenticating()
+    fun onAuthenticationStarted(): Long {
+        authenticatedWakeupSessionGate.clear()
+        val ticket = gate.markAuthenticating()
         recoveryJob?.cancel()
         recoveryJob = null
         scheduledRefreshJob?.cancel()
         scheduledRefreshJob = null
         mutableState.value = XingDunCredentialRecoveryState.AUTHENTICATING
+        return ticket
     }
 
-    fun onAuthenticationFailed() {
-        if (gate.current() != XingDunCredentialRecoveryState.AUTHENTICATING) return
-        gate.markAuthenticated()
+    fun onAuthenticationFailed(ticket: Long? = null) {
+        if (!gate.completeAuthenticationFailure(ticket)) return
+        authenticatedWakeupSessionGate.clear()
         mutableState.value = XingDunCredentialRecoveryState.NORMAL
     }
 
     fun isRefreshing(): Boolean = gate.current() == XingDunCredentialRecoveryState.REFRESHING
 
+    /**
+     * Waits for an existing wakeup recovery without starting another authentication request.
+     * A non-null result proves recent authentication in this process, not merely cached credentials.
+     * Call before onAuthenticationStarted(), which intentionally invalidates this proof.
+     */
+    suspend fun awaitAuthenticatedWakeupSession(): XingDunStoredSession? = withContext(Dispatchers.Main.immediate) {
+        mutableState.first { it != XingDunCredentialRecoveryState.REFRESHING }
+        if (gate.current() != XingDunCredentialRecoveryState.NORMAL) return@withContext null
+        authenticatedWakeupSessionGate.authenticatedSession(
+            currentSession = XingDunSessionManager.currentSession(),
+            imSdkAppId = LoginStore.shared.sdkAppID,
+            imUserId = TUILogin.getLoginUser(),
+            imIsLoggedIn = V2TIMManager.getInstance().loginStatus == V2TIMManager.V2TIM_STATUS_LOGINED,
+            nowElapsedMillis = SystemClock.elapsedRealtime(),
+            nowEpochMillis = System.currentTimeMillis(),
+        )
+    }
+
+    fun onSessionLeaving() {
+        authenticatedWakeupSessionGate.beginSessionLeave()
+    }
+
+    fun onSessionCleared() {
+        authenticatedWakeupSessionGate.finishSessionLeave()
+    }
+
     fun redirectToLogin(@StringRes noticeResId: Int = R.string.demo_login_expired, ticket: Long? = null) {
         if (!gate.tryBeginRedirect(ticket)) return
+        authenticatedWakeupSessionGate.clear()
         Log.w(TAG, "redirect reason=${if (noticeResId == R.string.demo_force_offline) "kicked" else "credential_rejected"}")
         recoveryJob?.cancel()
         recoveryJob = null
@@ -124,6 +160,7 @@ internal object XingDunCredentialRecoveryCoordinator {
     private fun beginRefresh(reason: String) {
         if (!::appContext.isInitialized) return
         val ticket = gate.tryBeginRefresh() ?: return
+        authenticatedWakeupSessionGate.clear()
         scheduledRefreshJob?.cancel()
         scheduledRefreshJob = null
         mutableState.value = XingDunCredentialRecoveryState.REFRESHING
@@ -223,6 +260,7 @@ internal object XingDunCredentialRecoveryCoordinator {
 
     private fun completeRefresh(session: XingDunStoredSession, ticket: Long) {
         if (!gate.completeRefresh(ticket)) return
+        recordAuthenticatedWakeupSession(session)
         XingDunCallSessionInitializer.initialize(
             appContext,
             session.sdkAppId,
@@ -234,6 +272,16 @@ internal object XingDunCredentialRecoveryCoordinator {
         mutableState.value = XingDunCredentialRecoveryState.NORMAL
         XingDunRouter.consumePendingRoute()
         scheduleProactiveRefresh()
+    }
+
+    private fun recordAuthenticatedWakeupSession(session: XingDunStoredSession?) {
+        authenticatedWakeupSessionGate.clear()
+        if (session == null || XingDunSessionManager.currentSession() != session || !isLoggedInto(session) ||
+            V2TIMManager.getInstance().loginStatus != V2TIMManager.V2TIM_STATUS_LOGINED
+        ) {
+            return
+        }
+        authenticatedWakeupSessionGate.recordAuthenticated(session, SystemClock.elapsedRealtime())
     }
 
     private fun retryAfterTransientFailure(ticket: Long) {

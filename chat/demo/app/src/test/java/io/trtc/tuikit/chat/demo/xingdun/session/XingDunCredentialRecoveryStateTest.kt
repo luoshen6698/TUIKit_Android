@@ -66,6 +66,45 @@ class XingDunCredentialRecoveryStateTest {
         assertNotNull(gate.tryBeginRefresh())
     }
 
+    @Test
+    fun staleAuthenticationFailureCannotResetANewerAuthentication() {
+        val gate = XingDunCredentialRecoveryGate()
+        val previousTicket = gate.markAuthenticating()
+        val currentTicket = gate.markAuthenticating()
+
+        assertFalse(gate.ownsAuthentication(previousTicket))
+        assertTrue(gate.ownsAuthentication(currentTicket))
+        assertFalse(gate.completeAuthenticationFailure(previousTicket))
+        assertEquals(XingDunCredentialRecoveryState.AUTHENTICATING, gate.current())
+        assertTrue(gate.ownsAuthentication(currentTicket))
+        assertTrue(gate.completeAuthenticationFailure(currentTicket))
+        assertEquals(XingDunCredentialRecoveryState.NORMAL, gate.current())
+        assertNotNull(gate.tryBeginRefresh())
+    }
+
+    @Test
+    fun authenticationSuccessInvalidatesItsLateFailure() {
+        val gate = XingDunCredentialRecoveryGate()
+        val ticket = gate.markAuthenticating()
+        gate.markAuthenticated()
+
+        assertFalse(gate.ownsAuthentication(ticket))
+        assertFalse(gate.completeAuthenticationFailure(ticket))
+        assertEquals(XingDunCredentialRecoveryState.NORMAL, gate.current())
+    }
+
+    @Test
+    fun legacyAuthenticationFailureOnlyResetsAnAuthenticatingState() {
+        val gate = XingDunCredentialRecoveryGate()
+        assertFalse(gate.completeAuthenticationFailure())
+        gate.markAuthenticating()
+        assertTrue(gate.completeAuthenticationFailure())
+        val refreshTicket = gate.tryBeginRefresh()!!
+
+        assertFalse(gate.completeAuthenticationFailure())
+        assertTrue(gate.ownsRefresh(refreshTicket))
+    }
+
     @Test fun missingIMIdentityRecoversOnlyWithAnExistingBusinessSession() {
         assertTrue(XingDunMissingIMSessionPolicy.canRecover(true, null))
         assertTrue(XingDunMissingIMSessionPolicy.canRecover(true, ""))

@@ -44,6 +44,7 @@ internal object XingDunTenantSessionCoordinator {
     }
 
     private fun leaveTenant(clearEnterprise: Boolean, onComplete: () -> Unit) {
+        XingDunCredentialRecoveryCoordinator.onSessionLeaving()
         val shouldStart = synchronized(lock) {
             completions += onComplete
             clearEnterpriseRequested = clearEnterpriseRequested || clearEnterprise
@@ -96,6 +97,7 @@ internal object XingDunTenantSessionCoordinator {
                 XingDunSessionManager.clear()
             }
             XingDunPushManager.onSessionCleared()
+            XingDunCredentialRecoveryCoordinator.onSessionCleared()
             callbacks.forEach { it() }
         }
     }

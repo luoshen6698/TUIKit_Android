@@ -41,9 +41,25 @@ internal class XingDunCredentialRecoveryGate {
     }
 
     @Synchronized
-    fun markAuthenticating() {
-        generation++
+    fun markAuthenticating(): Long {
         state = XingDunCredentialRecoveryState.AUTHENTICATING
+        return ++generation
+    }
+
+    @Synchronized
+    fun ownsAuthentication(ticket: Long): Boolean =
+        state == XingDunCredentialRecoveryState.AUTHENTICATING && ticket == generation
+
+    @Synchronized
+    fun completeAuthenticationFailure(ticket: Long? = null): Boolean {
+        if (state != XingDunCredentialRecoveryState.AUTHENTICATING ||
+            (ticket != null && !ownsAuthentication(ticket))
+        ) {
+            return false
+        }
+        generation++
+        state = XingDunCredentialRecoveryState.NORMAL
+        return true
     }
 
     @Synchronized
