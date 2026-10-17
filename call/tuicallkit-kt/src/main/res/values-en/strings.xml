@@ -1,4 +1,9 @@
 <resources>
+    <string name="callkit_incoming_call_channel">Incoming calls</string>
+    <string name="callkit_ongoing_call_channel">Ongoing calls</string>
+    <string name="callkit_notification_caller_fallback">Incoming call</string>
+    <string name="callkit_notification_ongoing">Call in progress</string>
+    <string name="callkit_end_call_retry">The call is still active. Please try again.</string>
     <string name="callkit_enter_pip_mode_fail_hint">Failed to enter Picture-in-Picture mode, Please check if the permission is enabled.</string>
     <string name="callkit_invite_audio_call">invites you to a voice call</string>
     <string name="callkit_invite_video_call">invites you to a video call</string>

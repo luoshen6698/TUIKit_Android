@@ -1,27 +1,29 @@
 package com.tencent.qcloud.tuikit.tuicallkit.view.callview.public.controls
 
 import android.content.Context
-import android.widget.RelativeLayout
 import androidx.constraintlayout.widget.ConstraintLayout
-import com.tencent.qcloud.tuikit.tuicallkit.view.callview.core.common.utils.CallUtils
+import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.NativeCallIdentity
+import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.NativeCallPhase
+import io.trtc.tuikit.atomicxcore.api.call.CallMediaType
 import io.trtc.tuikit.atomicxcore.api.call.CallStore
 import io.trtc.tuikit.atomicxcore.api.call.CallParticipantStatus
+import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.supervisorScope
 
 class MultiCallControlsView(context: Context) : ConstraintLayout(context) {
     private var subscribeStateJob: Job? = null
-    private var functionLayout: RelativeLayout? = null
-    private var callStatus = CallParticipantStatus.None
+    private val renderPolicy = CallControlsRenderPolicy()
 
     var enableVirtualBackground: Boolean = true
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        updateLayout()
+        renderPolicy.reset()
         registerObserver()
     }
 
@@ -32,49 +34,33 @@ class MultiCallControlsView(context: Context) : ConstraintLayout(context) {
 
     private fun registerObserver() {
         subscribeStateJob = CoroutineScope(Dispatchers.Main).launch {
-            supervisorScope {
-                launch { observeSelfInfo() }
-                launch { observeAllParticipants() }
-            }
+            val state = CallStore.shared.observerState
+            combine(state.selfInfo, state.activeCall) { self, call ->
+                CallControlsRenderKey(
+                    NativeCallIdentity(call.callId, LoginStore.shared.sdkAppID, self.id),
+                    when (self.status) {
+                        CallParticipantStatus.Waiting -> NativeCallPhase.Waiting
+                        CallParticipantStatus.Accept -> NativeCallPhase.Accepted
+                        else -> NativeCallPhase.None
+                    },
+                    call.mediaType?.let { it == CallMediaType.Video },
+                    self.id == call.inviterId,
+                )
+            }.distinctUntilChanged().collect { updateLayout(it) }
         }
     }
 
-    private suspend fun observeSelfInfo() {
-        CallStore.shared.observerState.selfInfo.collect { selfInfo ->
-            if (callStatus != selfInfo.status && selfInfo.status == CallParticipantStatus.Accept) {
-                callStatus = selfInfo.status
-                updateLayout()
-            }
-        }
-    }
-
-    private suspend fun observeAllParticipants() {
-        CallStore.shared.observerState.allParticipants.collect { participants ->
-            if (participants.size > 2) {
-                if (functionLayout is VideoCallerAndCalleeAcceptedView) {
-                    return@collect
-                }
-                updateLayout()
-            }
-        }
-    }
-
-    private fun updateLayout() {
-        val selfInfo = CallStore.shared.observerState.selfInfo.value
-        val newLayout = if (selfInfo.status == CallParticipantStatus.Waiting && !CallUtils.isCaller(selfInfo.id)) {
-                AudioAndVideoCalleeWaitingView(context)
-            } else {
-                VideoCallerAndCalleeAcceptedView(context).apply {
-                    this.enableVirtualBackground = this@MultiCallControlsView.enableVirtualBackground
-                }
-            }
-
-        functionLayout?.takeIf { it.javaClass == newLayout.javaClass }?.let {
-            return
-        }
-
-        functionLayout = newLayout
+    private fun updateLayout(key: CallControlsRenderKey) {
+        if (!renderPolicy.update(key)) return
         removeAllViews()
-        addView(functionLayout)
+        if (key.phase == NativeCallPhase.None) return
+        val newLayout = if (key.phase == NativeCallPhase.Waiting && !key.isCaller) {
+            AudioAndVideoCalleeWaitingView(context)
+        } else {
+            VideoCallerAndCalleeAcceptedView(context).apply {
+                this.enableVirtualBackground = this@MultiCallControlsView.enableVirtualBackground
+            }
+        }
+        addView(newLayout)
     }
 }

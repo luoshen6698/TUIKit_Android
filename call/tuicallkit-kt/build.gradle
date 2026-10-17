@@ -42,6 +42,8 @@ android {
 }
 
 dependencies {
+    implementation 'androidx.core:core-ktx:1.13.0'
+    testImplementation 'junit:junit:4.13.2'
    // api fileTree(include: ['*.jar', '*.aar'], dir: 'libs')
     api project(':atomic_x')
 

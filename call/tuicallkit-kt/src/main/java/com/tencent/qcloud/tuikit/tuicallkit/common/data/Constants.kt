@@ -7,6 +7,7 @@ object Constants {
 
     const val REJECT_CALL_ACTION = "reject_call_action"
     const val ACCEPT_CALL_ACTION = "accept_call_action"
+    const val HANGUP_CALL_ACTION = "hangup_call_action"
 
     const val KEY_TUI_CALLKIT = "keyTUICallKit"
     const val SUB_KEY_SHOW_FLOAT_WINDOW = "subKeyShowFloatWindow"

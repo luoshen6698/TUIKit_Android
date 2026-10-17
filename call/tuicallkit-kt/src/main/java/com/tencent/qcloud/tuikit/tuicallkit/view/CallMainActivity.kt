@@ -41,6 +41,9 @@ import com.tencent.qcloud.tuikit.tuicallkit.state.GlobalState
 import com.tencent.qcloud.tuikit.tuicallkit.state.ViewState
 import com.tencent.qcloud.tuikit.tuicallkit.view.callview.CallView
 import com.tencent.qcloud.tuikit.tuicallkit.view.callview.Feature
+import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.IncomingNotificationBanner
+import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.NativeCallIdentity
+import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.NativeCallUiLifecyclePolicy
 import com.tencent.qcloud.tuikit.tuicallkit.view.component.inviteuser.InviteUserButton
 import com.trtc.tuikit.common.FullScreenActivity
 import com.trtc.tuikit.common.imageloader.ImageLoader
@@ -55,10 +58,13 @@ import io.trtc.tuikit.atomicxcore.api.call.CallMediaType
 import io.trtc.tuikit.atomicxcore.api.call.CallParticipantStatus
 import io.trtc.tuikit.atomicxcore.api.call.CallStore
 import io.trtc.tuikit.atomicxcore.api.device.DeviceStore
+import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.atomicxcore.api.view.CallLayoutTemplate
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 class CallMainActivity : FullScreenActivity(), ITUINotification {
@@ -68,10 +74,22 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
     private var inviteUserButton: FrameLayout? = null
     private var callEndHintView: TextView? = null
     private var finishActivityJob: Job? = null
+    private var idleFinishJob: Job? = null
+    private var callLifecycleAttached = false
+    private var permissionRequestInFlight = false
+    private var permissionRequestGeneration = 0L
+    private var mediaPermissionsGranted = false
+    private var grantedMediaIdentity: NativeCallIdentity? = null
+    private var grantedMediaType: CallMediaType? = null
+    private var preparedMediaIdentity: NativeCallIdentity? = null
+    private var displayedCallIdentity: NativeCallIdentity? = null
     private val callStatusObserver = object : CallListener() {
         override fun onCallEnded(callId: String, mediaType: CallMediaType, reason: CallEndReason, userId: String) {
             runOnUiThread {
-                handleCallEnded(reason, userId)
+                val endingIdentity = displayedCallIdentity?.takeIf { it.callId == callId }
+                    ?: return@runOnUiThread
+                if (hasDifferentSdkCall(endingIdentity)) return@runOnUiThread
+                handleCallEnded(endingIdentity, reason, userId)
             }
         }
     }
@@ -79,6 +97,10 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        if (isStaleNotificationIntent(intent)) {
+            finish()
+            return
+        }
         DeviceUtils.setScreenLockParams(window)
         if (TUIBuild.getVersionInt() >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
@@ -92,29 +114,46 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
             else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
         callEndHintView = findViewById(R.id.tv_call_end_hint)
+        bindDisplayedCall(currentCallIdentity())
+        callLifecycleAttached = true
         CallStore.shared.addListener(callStatusObserver)
         lifecycleScope.launchWhenStarted {
-            CallStore.shared.observerState.selfInfo.first {
-                if (it.status == CallParticipantStatus.Accept) {
-                    Log.i(TAG, "CallStore.shared.observerState.selfInfo accept")
+            val state = CallStore.shared.observerState
+            combine(state.selfInfo, state.activeCall) { self, call ->
+                Triple(self.status, currentCallIdentity(), call.mediaType)
+            }.distinctUntilChanged().collect { (status, identity, _) ->
+                if (status == CallParticipantStatus.None) {
+                    scheduleIdleCallFinish()
+                    return@collect
+                }
+                idleFinishJob?.cancel()
+                idleFinishJob = null
+                // Outgoing calls may receive their call ID after Activity creation.
+                bindDisplayedCall(identity)
+                if (status == CallParticipantStatus.Accept) {
+                    Log.i(TAG, "Call accepted")
+                    if (isCallUiVisible() && prepareMediaIfNeeded(currentCallIdentity())) {
+                        CallManager.instance.startForegroundService()
+                    }
                     val groupId = CallStore.shared.observerState.activeCall.value.chatGroupId
                     val inviteeSize = CallStore.shared.observerState.activeCall.value.inviteeIds.size
                     val mediaType = CallStore.shared.observerState.activeCall.value.mediaType
                     if (mediaType == CallMediaType.Video && groupId.isEmpty() && inviteeSize == 1) {
                         addBeautyView()
                     }
-                    true
                 }
-                false
             }
         }
-        val mediaType = CallStore.shared.observerState.activeCall.value.mediaType
-        if (mediaType != null) {
-            setAudioDeviceRoute(mediaType)
-            openDeviceMediaForMediaType(mediaType)
-        }
         TUICore.registerEvent(KEY_EXTENSION_NAME, NOTIFY_START_ACTIVITY, this)
-        CallManager.instance.startForegroundService()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (isStaleNotificationIntent(intent)) return
+        setIntent(intent)
+        if (IncomingNotificationBanner.isNotificationIntent(intent)) clearPendingCallFinish()
+        bindDisplayedCall(currentCallIdentity())
+        requestCallPermissions()
     }
 
     private fun applyWindowInsets() {
@@ -140,6 +179,7 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
         addInviteButton()
         FloatWindowManager.sharedInstance().dismiss()
         CallManager.instance.viewState.router.set(ViewState.ViewRouter.FullView)
+        CallManager.instance.startForegroundService()
         handleCallAcceptAction()
     }
 
@@ -147,6 +187,10 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
         if (isFinishing || isDestroyed) {
             return
         }
+        invalidatePendingMediaRequest()
+        idleFinishJob?.cancel()
+        idleFinishJob = null
+        Log.i(TAG, "stage=native_call event=call_ui_finished")
         callView?.removeAllViews()
         if (TUIBuild.getVersionInt() >= Build.VERSION_CODES.LOLLIPOP && isTaskRoot) {
             finishAndRemoveTask()
@@ -223,40 +267,169 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
     }
 
     private fun handleCallAcceptAction() {
-        val selfStatus = CallStore.shared.observerState.selfInfo.value.status
-        if (selfStatus == CallParticipantStatus.Accept) {
-            return
-        }
         if (intent.action == Constants.ACCEPT_CALL_ACTION) {
-            Logger.i(TAG, "IncomingView -> handleCallAcceptAction")
-            CallStore.shared.accept(null)
+            val actionIntent = Intent(intent)
+            intent.action = null
+            IncomingNotificationBanner.handleNotificationAction(this, actionIntent)
         }
     }
 
     override fun onResume() {
         super.onResume()
+        requestCallPermissions()
+    }
+
+    private fun requestCallPermissions() {
+        if (!callLifecycleAttached || isFinishing || isDestroyed) return
+        // Expired notification bindings prohibit actions, not terminal-state cleanup.
+        if (CallStore.shared.observerState.selfInfo.value.status == CallParticipantStatus.None) {
+            finishCallMainActivity()
+            return
+        }
+        if (permissionRequestInFlight || !isCallUiVisible() || isStaleNotificationIntent(intent)) return
+        val requestedIdentity = currentCallIdentity()
+        bindDisplayedCall(requestedIdentity)
         val mediaType = CallStore.shared.observerState.activeCall.value.mediaType
+        permissionRequestInFlight = true
+        val requestGeneration = ++permissionRequestGeneration
+        mediaPermissionsGranted = false
+        grantedMediaIdentity = null
+        grantedMediaType = null
         PermissionRequest.requestPermissions(
             application, mediaType,
             object : PermissionCallback() {
                 override fun onGranted() {
-                    initView()
+                    runOnUiThread {
+                        if (!permissionRequestInFlight || requestGeneration != permissionRequestGeneration) {
+                            return@runOnUiThread
+                        }
+                        permissionRequestInFlight = false
+                        if (isFinishing || isDestroyed || !isCallUiVisible() ||
+                            isStaleNotificationIntent(intent)
+                        ) return@runOnUiThread
+                        if (requestedIdentity != currentCallIdentity() ||
+                            mediaType != CallStore.shared.observerState.activeCall.value.mediaType
+                        ) {
+                            requestCallPermissions()
+                            return@runOnUiThread
+                        }
+                        if (CallStore.shared.observerState.selfInfo.value.status == CallParticipantStatus.None) {
+                            finishCallMainActivity()
+                            return@runOnUiThread
+                        }
+                        mediaPermissionsGranted = true
+                        grantedMediaIdentity = requestedIdentity
+                        grantedMediaType = mediaType
+                        prepareMediaIfNeeded(requestedIdentity)
+                        initView()
+                    }
                 }
 
                 override fun onDenied() {
-                    val self = CallStore.shared.observerState.selfInfo.value
-                    if (!isCaller(self.id)) {
-                        CallManager.instance.reject(null)
+                    runOnUiThread {
+                        if (!permissionRequestInFlight || requestGeneration != permissionRequestGeneration) {
+                            return@runOnUiThread
+                        }
+                        permissionRequestInFlight = false
+                        mediaPermissionsGranted = false
+                        grantedMediaIdentity = null
+                        grantedMediaType = null
+                        if (isFinishing || isDestroyed || !isCallUiVisible() || isStaleNotificationIntent(intent) ||
+                            requestedIdentity != currentCallIdentity()
+                        ) return@runOnUiThread
+                        val self = CallStore.shared.observerState.selfInfo.value
+                        if (self.status != CallParticipantStatus.None && !isCaller(self.id)) {
+                            CallManager.instance.reject(null)
+                        }
+                        finishCallMainActivity()
                     }
-                    finishCallMainActivity()
                 }
             })
     }
 
+    private fun currentCallIdentity(): NativeCallIdentity = NativeCallIdentity(
+        CallStore.shared.observerState.activeCall.value.callId,
+        LoginStore.shared.sdkAppID,
+        CallStore.shared.observerState.selfInfo.value.id,
+    )
+
+    private fun prepareMediaIfNeeded(identity: NativeCallIdentity): Boolean {
+        if (!mediaPermissionsGranted || grantedMediaIdentity != identity || identity != currentCallIdentity() ||
+            isFinishing || isDestroyed || !isCallUiVisible() || isStaleNotificationIntent(intent)
+        ) return false
+        val self = CallStore.shared.observerState.selfInfo.value
+        if (self.status == CallParticipantStatus.None ||
+            (!isCaller(self.id) && self.status != CallParticipantStatus.Accept)
+        ) return false
+        val mediaType = CallStore.shared.observerState.activeCall.value.mediaType ?: return false
+        if (grantedMediaType != mediaType) return false
+        if (preparedMediaIdentity != identity) {
+            setAudioDeviceRoute(mediaType)
+            openDeviceMediaForMediaType(mediaType)
+            preparedMediaIdentity = identity
+        }
+        return true
+    }
+
+    private fun isStaleNotificationIntent(intent: Intent?): Boolean =
+        IncomingNotificationBanner.isNotificationIntent(intent) &&
+            !IncomingNotificationBanner.isCurrentNotificationIntent(intent)
+
+    private fun isCallUiVisible(): Boolean =
+        lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) || isInPipModeSafe()
+
+    private fun bindDisplayedCall(identity: NativeCallIdentity) {
+        if (identity.callId.isBlank() || displayedCallIdentity == identity) return
+        clearPendingCallFinish()
+        displayedCallIdentity = identity
+    }
+
+    private fun clearPendingCallFinish() {
+        finishActivityJob?.cancel()
+        finishActivityJob = null
+        callEndHintView?.apply {
+            visibility = View.GONE
+            text = ""
+        }
+    }
+
+    private fun hasDifferentSdkCall(identity: NativeCallIdentity): Boolean {
+        return NativeCallUiLifecyclePolicy.hasDifferentActiveCall(identity, currentCallIdentity(),
+            CallStore.shared.observerState.selfInfo.value.status == CallParticipantStatus.None)
+    }
+
+    private fun scheduleIdleCallFinish() {
+        if (idleFinishJob?.isActive == true) return
+        val endingIdentity = displayedCallIdentity
+        invalidatePendingMediaRequest()
+        idleFinishJob = lifecycleScope.launch {
+            // Let the ordinary end callback show its one-second reason first.
+            delay(CALL_END_HINT_DURATION_MS + 100L)
+            if (NativeCallUiLifecyclePolicy.shouldFinishIdleCall(endingIdentity, displayedCallIdentity,
+                    CallStore.shared.observerState.selfInfo.value.status == CallParticipantStatus.None)) {
+                Log.i(TAG, "stage=native_call event=idle_call_ui_cleanup")
+                finishCallMainActivity()
+            }
+        }
+    }
+
+    private fun invalidatePendingMediaRequest() {
+        permissionRequestInFlight = false
+        permissionRequestGeneration++
+        mediaPermissionsGranted = false
+        grantedMediaIdentity = null
+        grantedMediaType = null
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        if (!callLifecycleAttached) return
+        mediaPermissionsGranted = false
+        grantedMediaIdentity = null
+        grantedMediaType = null
         TUICore.unRegisterEvent(this)
         finishActivityJob?.cancel()
+        idleFinishJob?.cancel()
         CallStore.shared.removeListener(callStatusObserver)
         CallManager.instance.stopForegroundService()
         BeautyIntegration.resetBeauty()
@@ -297,7 +470,7 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
         val callerId = CallStore.shared.observerState.activeCall.value.inviterId
         val selfId = CallStore.shared.observerState.selfInfo.value.id
         val selfStatus = CallStore.shared.observerState.selfInfo.value.status
-        Logger.i(TAG, "user close pip window , callerId = $callerId , selfId = $selfId , selfStatus=$selfStatus")
+        Logger.i(TAG, "PiP window closed")
         if (selfId == callerId) {
             CallManager.instance.hangup(null)
             return
@@ -367,16 +540,16 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
         }
     }
 
-    private fun handleCallEnded(reason: CallEndReason, userId: String) {
+    private fun handleCallEnded(identity: NativeCallIdentity, reason: CallEndReason, userId: String) {
         val endHintText = getEndCallHintText(reason, userId)
         if (endHintText.isNullOrEmpty()) {
             finishCallMainActivity()
             return
         }
-        showEndCallHint(endHintText)
+        showEndCallHint(endHintText, identity)
     }
 
-    private fun showEndCallHint(text: String) {
+    private fun showEndCallHint(text: String, identity: NativeCallIdentity) {
         finishActivityJob?.cancel()
         callEndHintView?.apply {
             alpha = 1f
@@ -385,7 +558,9 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
         }
         finishActivityJob = lifecycleScope.launch {
             delay(CALL_END_HINT_DURATION_MS)
-            finishCallMainActivity()
+            if (displayedCallIdentity == identity && !hasDifferentSdkCall(identity)) {
+                finishCallMainActivity()
+            }
         }
     }
 

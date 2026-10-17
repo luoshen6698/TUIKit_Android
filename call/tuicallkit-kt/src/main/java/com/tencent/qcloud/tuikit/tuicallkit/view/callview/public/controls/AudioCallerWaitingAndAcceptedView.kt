@@ -3,11 +3,8 @@ package com.tencent.qcloud.tuikit.tuicallkit.view.callview.public.controls
 import android.content.Context
 import android.view.LayoutInflater
 import android.widget.RelativeLayout
-import androidx.core.content.ContextCompat
 import com.tencent.qcloud.tuikit.tuicallkit.R
 import com.tencent.qcloud.tuikit.tuicallkit.view.callview.core.common.widget.ControlButton
-import io.trtc.tuikit.atomicx.common.imageloader.ImageLoader
-import io.trtc.tuikit.atomicxcore.api.call.CallStore
 import io.trtc.tuikit.atomicxcore.api.device.AudioRoute
 import io.trtc.tuikit.atomicxcore.api.device.DeviceStatus
 import io.trtc.tuikit.atomicxcore.api.device.DeviceStore
@@ -18,6 +15,7 @@ import kotlinx.coroutines.launch
 
 class AudioCallerWaitingAndAcceptedView(context: Context) : RelativeLayout(context) {
     private var subscribeStateJob: Job? = null
+    private val endCallAction = CallEndActionController(this)
 
     private lateinit var buttonMicrophone: ControlButton
     private lateinit var buttonAudioDevice: ControlButton
@@ -27,11 +25,13 @@ class AudioCallerWaitingAndAcceptedView(context: Context) : RelativeLayout(conte
         super.onAttachedToWindow()
         this.layoutParams?.width = LayoutParams.MATCH_PARENT
         this.layoutParams?.height = LayoutParams.MATCH_PARENT
+        endCallAction.attach()
         initView()
         registerObserver()
     }
 
     override fun onDetachedFromWindow() {
+        endCallAction.detach()
         super.onDetachedFromWindow()
         subscribeStateJob?.cancel()
     }
@@ -90,12 +90,7 @@ class AudioCallerWaitingAndAcceptedView(context: Context) : RelativeLayout(conte
             }
         }
         buttonHangup.setOnClickListener {
-            buttonHangup.imageView.roundPercent = 1.0f
-            buttonHangup.imageView.setBackgroundColor(ContextCompat.getColor(context, R.color.callview_button_bg_red))
-            ImageLoader.loadGif(context, buttonHangup.imageView, R.drawable.callview_hangup_loading)
-            disableButton(buttonMicrophone)
-            disableButton(buttonAudioDevice)
-            CallStore.shared.hangup(null)
+            endCallAction.run(false, buttonHangup, buttonHangup.imageView, buttonMicrophone, buttonAudioDevice)
         }
         buttonAudioDevice.setOnClickListener {
             val currentAudioRoute = DeviceStore.shared().deviceState.currentAudioRoute.value
@@ -105,11 +100,6 @@ class AudioCallerWaitingAndAcceptedView(context: Context) : RelativeLayout(conte
                 DeviceStore.shared().setAudioRoute(AudioRoute.SPEAKERPHONE)
             }
         }
-    }
-
-    private fun disableButton(button: ControlButton) {
-        button.isEnabled = false
-        button.alpha = 0.8f
     }
 
     private fun updateMicrophoneButtonView() {

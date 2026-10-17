@@ -35,6 +35,8 @@ internal object XingDunTenantSessionCoordinator {
         appContext = context.applicationContext
     }
 
+    fun isLeaving(): Boolean = synchronized(lock) { running }
+
     fun logout(onComplete: () -> Unit = {}) {
         leaveTenant(clearEnterprise = false, onComplete)
     }
@@ -54,6 +56,9 @@ internal object XingDunTenantSessionCoordinator {
             }
         }
         if (!shouldStart) return
+
+        // Remove actionable call alerts as soon as this identity starts leaving, before network cleanup.
+        XingDunCallSessionInitializer.reset()
 
         val departingSession = XingDunSessionManager.currentSession()
         logoutScope.launch {

@@ -2,9 +2,7 @@ package com.tencent.qcloud.tuikit.tuicallkit.view.callview.public.controls
 
 import android.content.Context
 import android.view.LayoutInflater
-import android.view.View
 import android.widget.RelativeLayout
-import androidx.core.content.ContextCompat
 import com.tencent.cloud.tuikit.engine.call.TUICallEngine
 import com.tencent.cloud.tuikit.engine.common.TUICommonDefine
 import com.tencent.qcloud.tuicore.permission.PermissionCallback
@@ -14,8 +12,6 @@ import com.tencent.qcloud.tuikit.tuicallkit.view.callview.core.common.Constants.
 import com.tencent.qcloud.tuikit.tuicallkit.view.callview.core.common.utils.Logger
 import com.tencent.qcloud.tuikit.tuicallkit.view.callview.core.common.utils.PermissionRequest
 import com.tencent.qcloud.tuikit.tuicallkit.view.callview.core.common.widget.ControlButton
-import io.trtc.tuikit.atomicx.common.imageloader.ImageLoader
-import io.trtc.tuikit.atomicxcore.api.call.CallStore
 import io.trtc.tuikit.atomicxcore.api.device.DeviceStatus
 import io.trtc.tuikit.atomicxcore.api.device.DeviceStore
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +21,7 @@ import kotlinx.coroutines.launch
 
 class VideoCallerWaitingView(context: Context) : RelativeLayout(context) {
     private var subscribeStateJob: Job? = null
+    private val endCallAction = CallEndActionController(this)
 
     private lateinit var buttonCancel: ControlButton
     private lateinit var buttonSwitchCamera: ControlButton
@@ -39,11 +36,13 @@ class VideoCallerWaitingView(context: Context) : RelativeLayout(context) {
         super.onAttachedToWindow()
         this.layoutParams?.width = LayoutParams.MATCH_PARENT
         this.layoutParams?.height = LayoutParams.MATCH_PARENT
+        endCallAction.attach()
         initView()
         registerCameraObserver()
     }
 
     override fun onDetachedFromWindow() {
+        endCallAction.detach()
         super.onDetachedFromWindow()
         subscribeStateJob?.cancel()
     }
@@ -75,13 +74,8 @@ class VideoCallerWaitingView(context: Context) : RelativeLayout(context) {
 
     private fun initViewListener() {
         buttonCancel.setOnClickListener {
-            buttonCancel.imageView.roundPercent = 1.0f
-            buttonCancel.imageView.setBackgroundColor(ContextCompat.getColor(context, R.color.callview_button_bg_red))
-            ImageLoader.loadGif(context, buttonCancel.imageView, R.drawable.callview_hangup_loading)
-            disableButton(buttonCamera)
-            disableButton(buttonSwitchCamera)
-            disableButton(buttonBlurBackground)
-            CallStore.shared.hangup(null)
+            endCallAction.run(false, buttonCancel, buttonCancel.imageView,
+                buttonCamera, buttonSwitchCamera, buttonBlurBackground)
         }
         buttonSwitchCamera.setOnClickListener {
             if (!buttonSwitchCamera.isEnabled) {
@@ -112,11 +106,6 @@ class VideoCallerWaitingView(context: Context) : RelativeLayout(context) {
             }
             enableBlurBackground(!isEnableBlurBackground)
         }
-    }
-
-    private fun disableButton(button: View) {
-        button.isEnabled = false
-        button.alpha = 0.8f
     }
 
     private fun enableBlurBackground(enable: Boolean) {

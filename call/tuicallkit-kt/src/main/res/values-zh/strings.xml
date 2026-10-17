@@ -1,4 +1,9 @@
 <resources>
+    <string name="callkit_incoming_call_channel">来电铃声和提醒</string>
+    <string name="callkit_ongoing_call_channel">正在通话</string>
+    <string name="callkit_notification_caller_fallback">来电</string>
+    <string name="callkit_notification_ongoing">通话中</string>
+    <string name="callkit_end_call_retry">通话尚未结束，请重试。</string>
     <string name="callkit_enter_pip_mode_fail_hint">进入画中画失败，请检查是否开启权限</string>
     <string name="callkit_invite_audio_call">邀请你语音通话</string>
     <string name="callkit_invite_video_call">邀请你视频通话</string>

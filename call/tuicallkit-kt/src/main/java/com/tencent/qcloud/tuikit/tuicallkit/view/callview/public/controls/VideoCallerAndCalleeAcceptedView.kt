@@ -23,7 +23,6 @@ import com.tencent.qcloud.tuikit.tuicallkit.view.callview.core.common.Constants.
 import com.tencent.qcloud.tuikit.tuicallkit.view.callview.core.common.utils.Logger
 import com.tencent.qcloud.tuikit.tuicallkit.view.callview.core.common.utils.PermissionRequest
 import com.tencent.qcloud.tuikit.tuicallkit.view.callview.core.common.widget.ControlButton
-import io.trtc.tuikit.atomicx.common.imageloader.ImageLoader
 import io.trtc.tuikit.atomicx.common.util.ScreenUtil
 import io.trtc.tuikit.atomicxcore.api.call.CallStore
 import io.trtc.tuikit.atomicxcore.api.call.CallParticipantStatus
@@ -39,6 +38,7 @@ import java.util.concurrent.CopyOnWriteArraySet
 
 class VideoCallerAndCalleeAcceptedView(context: Context) : RelativeLayout(context) {
     private var subscribeStateJob: Job? = null
+    private val endCallAction = CallEndActionController(this)
 
     private lateinit var rootView: ConstraintLayout
     private lateinit var imageHangup: ImageFilterView
@@ -66,12 +66,14 @@ class VideoCallerAndCalleeAcceptedView(context: Context) : RelativeLayout(contex
         super.onAttachedToWindow()
         this.layoutParams?.width = LayoutParams.MATCH_PARENT
         this.layoutParams?.height = LayoutParams.MATCH_PARENT
+        endCallAction.attach()
         enableTransition = true
         initView()
         registerObserver()
     }
 
     override fun onDetachedFromWindow() {
+        endCallAction.detach()
         super.onDetachedFromWindow()
         subscribeStateJob?.cancel()
     }
@@ -191,17 +193,8 @@ class VideoCallerAndCalleeAcceptedView(context: Context) : RelativeLayout(contex
         }
 
         imageHangup.setOnClickListener {
-            imageHangup.roundPercent = 1.0f
-            imageHangup.setBackgroundColor(ContextCompat.getColor(context, R.color.callview_button_bg_red))
-            ImageLoader.loadGif(context, imageHangup, R.drawable.callview_hangup_loading)
-
-            disableButton(buttonMicrophone)
-            disableButton(buttonAudioDevice)
-            disableButton(buttonCamera)
-            disableButton(imageSwitchCamera)
-            disableButton(imageBlurBackground)
-
-            CallStore.shared.hangup(null)
+            endCallAction.run(false, imageHangup, imageHangup, buttonMicrophone, buttonAudioDevice,
+                buttonCamera, imageSwitchCamera, imageBlurBackground)
         }
 
         imageExpandView.setOnClickListener() {
@@ -222,11 +215,6 @@ class VideoCallerAndCalleeAcceptedView(context: Context) : RelativeLayout(contex
             val isFront = DeviceStore.shared().deviceState.isFrontCamera.value
             DeviceStore.shared().switchCamera(!isFront)
         }
-    }
-
-    private fun disableButton(button: View) {
-        button.isEnabled = false
-        button.alpha = 0.8f
     }
 
     private fun startAnimation(isExpand: Boolean) {

@@ -1,6 +1,7 @@
 package com.tencent.qcloud.tuikit.tuicallkit.manager.feature
 
 import android.content.Context
+import android.app.NotificationManager
 import android.content.res.AssetFileDescriptor
 import android.media.AudioAttributes
 import android.media.AudioManager
@@ -22,10 +23,13 @@ import com.tencent.qcloud.tuikit.tuicallkit.common.utils.DeviceUtils
 import com.tencent.qcloud.tuikit.tuicallkit.common.utils.PermissionRequest
 import com.tencent.qcloud.tuikit.tuicallkit.manager.PushManager
 import com.tencent.qcloud.tuikit.tuicallkit.state.GlobalState
+import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.IncomingNotificationBanner
 import io.trtc.tuikit.atomicxcore.api.call.CallStore
 import io.trtc.tuikit.atomicxcore.api.call.CallParticipantStatus
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
 import java.io.File
 import java.io.FileOutputStream
 
@@ -38,60 +42,57 @@ class CallingBellFeature(context: Context) {
     private var bellResourcePath: String = ""
     private var dialPath: String? = null
     private var isMusicPlaying = false
+    private var playingCallerTone = false
+    @Volatile private var ringingGeneration = 0L
 
     init {
         bellResourceId = -1
         bellResourcePath = ""
         isMusicPlaying = false
-        registerObserver()
+        val ownsObserver = synchronized(CallingBellFeature::class.java) {
+            if (observerOwner == null) { observerOwner = this; true } else false
+        }
+        if (ownsObserver) registerObserver() else scope.cancel()
     }
 
     private fun registerObserver() {
         scope.launch {
-            CallStore.shared.observerState.selfInfo.collect { selfInfo ->
+            val state = CallStore.shared.observerState
+            combine(state.selfInfo, state.activeCall, IncomingNotificationBanner.incomingPresentation) {
+                    self, _, _ -> self
+            }.collect { selfInfo ->
                 if (selfInfo.status != CallParticipantStatus.Waiting) {
                     stopMusic()
                     return@collect
                 }
                 val self = CallStore.shared.observerState.selfInfo.value.copy()
                 if (isCaller(self.id)) {
-                    startDialingMusic()
+                    if (!isMusicPlaying || !playingCallerTone) startDialingMusic()
                     return@collect
                 }
                 if (isLocalRingtonePlaybackNeeded()) {
                     startRinging()
+                } else {
+                    stopCalleeRinging()
                 }
             }
         }
     }
 
     private fun isLocalRingtonePlaybackNeeded(): Boolean {
-        if (DeviceUtils.isAppRunningForeground(TUIConfig.getAppContext())) {
-            Logger.i(TAG, "isLocalRingtonePlaybackNeeded, appRunningForeground, play local ringtone")
-            return true
-        }
-        val notificationPermission = PermissionRequest.isNotificationEnabled()
-        if (!notificationPermission) {
-            Logger.w(TAG, "isLocalRingtonePlaybackNeeded, call has no notification permission, play local ringtone")
-            return true
-        }
-        val pushData = PushManager.getPushData()
-        val isFCMDataChannel = pushData.channelId == TUIConstants.DeviceInfo.BRAND_GOOGLE_ELSE
-        val isPushRegisterSuccess = pushData.status == PushManager.PUSH_REGISTER_SUCCESS
-
-        val hint = if (isFCMDataChannel || !isPushRegisterSuccess) "local" else "push"
-        Logger.i(
-            TAG, "isLocalRingtonePlaybackNeeded, pushData:$pushData, play $hint ringtone" +
-                    "(only when channel is Google or register failed, play local ringtone)"
-        )
-
-        return isFCMDataChannel || !isPushRegisterSuccess
+        return IncomingNotificationBanner.needsLocalIncomingRinging(context)
     }
 
     private fun startRinging() {
         if (GlobalState.instance.enableMuteMode) {
             return
         }
+        if (!NotificationFeature.allowsLocalIncomingSound(context)) return
+        val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (audio.ringerMode != AudioManager.RINGER_MODE_NORMAL) return
+        if (Build.VERSION.SDK_INT >= 23 && (context.getSystemService(Context.NOTIFICATION_SERVICE)
+                as NotificationManager).currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL) return
+        playingCallerTone = false
         val path = SPUtils.getInstance(PROFILE_TUICALLKIT).getString(PROFILE_CALL_BELL, "")
         if (TextUtils.isEmpty(path)) {
             start("", R.raw.phone_ringing)
@@ -105,8 +106,7 @@ class CallingBellFeature(context: Context) {
             return
         }
         isMusicPlaying = false
-        val self = CallStore.shared.observerState.selfInfo.value.copy()
-        if (isCaller(self.id)) {
+        if (playingCallerTone) {
             TUICallEngine.createInstance(context).trtcCloudInstance.audioEffectManager.stopPlayMusic(AUDIO_DIAL_ID)
         } else {
             stopRinging()
@@ -126,6 +126,7 @@ class CallingBellFeature(context: Context) {
         val param = AudioMusicParam(AUDIO_DIAL_ID, dialPath)
         param.isShortFile = true
         isMusicPlaying = true
+        playingCallerTone = true
         TUICallEngine.createInstance(context).trtcCloudInstance.audioEffectManager.startPlayMusic(param)
     }
 
@@ -154,7 +155,13 @@ class CallingBellFeature(context: Context) {
         }
 
         val afd = assetFileDescriptor
+        val playbackPath = bellResourcePath
+        val generation = ++ringingGeneration
         handler?.post(Runnable {
+            if (generation != ringingGeneration || !isMusicPlaying || playingCallerTone) {
+                afd?.close()
+                return@Runnable
+            }
             if (mediaPlayer == null) {
                 mediaPlayer = MediaPlayer()
             }
@@ -166,27 +173,29 @@ class CallingBellFeature(context: Context) {
             if (TUIBuild.getVersionInt() >= Build.VERSION_CODES.LOLLIPOP) {
                 val attrs = AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build()
                 mediaPlayer?.setAudioAttributes(attrs)
             }
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager?
-            audioManager?.mode = AudioManager.MODE_RINGTONE
-            mediaPlayer?.setAudioStreamType(AudioManager.STREAM_VOICE_CALL)
+            mediaPlayer?.setAudioStreamType(AudioManager.STREAM_RING)
 
             try {
                 if (null != afd) {
                     mediaPlayer?.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                } else if (!TextUtils.isEmpty(bellResourcePath)) {
-                    mediaPlayer?.setDataSource(bellResourcePath)
+                } else if (!TextUtils.isEmpty(playbackPath)) {
+                    mediaPlayer?.setDataSource(playbackPath)
                 } else {
                     return@Runnable
                 }
                 mediaPlayer?.isLooping = true
                 mediaPlayer?.prepare()
+                if (generation != ringingGeneration || !isMusicPlaying || playingCallerTone) return@Runnable
                 mediaPlayer?.start()
+                Logger.i(TAG, "stage=native_call event=local_ringtone_started")
             } catch (e: java.lang.Exception) {
-                e.printStackTrace()
+                Logger.w(TAG, "stage=native_call event=local_ringtone_failed type=${e.javaClass.simpleName}")
+            } finally {
+                afd?.close()
             }
         })
     }
@@ -208,12 +217,15 @@ class CallingBellFeature(context: Context) {
         if (-1 == bellResourceId && TextUtils.isEmpty(bellResourcePath)) {
             return
         }
+        val generation = ++ringingGeneration
+        bellResourceId = -1
+        bellResourcePath = ""
         handler?.post {
+            if (generation != ringingGeneration) return@post
             if (mediaPlayer?.isPlaying == true) {
                 mediaPlayer?.stop()
+                Logger.i(TAG, "stage=native_call event=local_ringtone_stopped")
             }
-            bellResourceId = -1
-            bellResourcePath = ""
         }
     }
 
@@ -268,5 +280,15 @@ class CallingBellFeature(context: Context) {
         const val PROFILE_CALL_BELL = "per_call_bell"
         const val PROFILE_MUTE_MODE = "per_mute_mode"
         const val AUDIO_DIAL_ID = 48
+        private var observerOwner: CallingBellFeature? = null
+
+        fun stopCalleeRinging() {
+            observerOwner?.let { owner ->
+                if (!owner.playingCallerTone) {
+                    owner.isMusicPlaying = false
+                    owner.stopRinging()
+                }
+            }
+        }
     }
 }

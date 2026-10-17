@@ -5,17 +5,23 @@ import android.view.LayoutInflater
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import androidx.constraintlayout.utils.widget.ImageFilterView
-import androidx.core.content.ContextCompat
 import com.tencent.qcloud.tuikit.tuicallkit.R
-import io.trtc.tuikit.atomicx.common.imageloader.ImageLoader
 import io.trtc.tuikit.atomicxcore.api.call.CallStore
 
 class AudioAndVideoCalleeWaitingView(context: Context) : RelativeLayout(context) {
+    private val endCallAction = CallEndActionController(this)
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         this.layoutParams?.width = LayoutParams.MATCH_PARENT
         this.layoutParams?.height = LayoutParams.MATCH_PARENT
+        endCallAction.attach()
         initView()
+    }
+
+    override fun onDetachedFromWindow() {
+        endCallAction.detach()
+        super.onDetachedFromWindow()
     }
 
     private fun initView() {
@@ -26,12 +32,7 @@ class AudioAndVideoCalleeWaitingView(context: Context) : RelativeLayout(context)
         layoutDialing.isEnabled = true
 
         layoutReject.setOnClickListener {
-            imageViewReject.roundPercent = 1.0f
-            imageViewReject.setBackgroundColor(ContextCompat.getColor(context, R.color.callview_button_bg_red))
-            ImageLoader.loadGif(context, imageViewReject, R.drawable.callview_hangup_loading)
-            layoutDialing.isEnabled = false
-            layoutDialing.alpha = 0.8f
-            CallStore.shared.reject(null)
+            endCallAction.run(true, layoutReject, imageViewReject, layoutDialing)
         }
         layoutDialing.setOnClickListener {
             if (!layoutDialing.isEnabled) {

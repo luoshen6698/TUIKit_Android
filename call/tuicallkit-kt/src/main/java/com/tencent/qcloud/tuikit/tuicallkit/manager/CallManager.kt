@@ -17,6 +17,8 @@ import com.tencent.qcloud.tuikit.tuicallkit.R
 import com.tencent.qcloud.tuikit.tuicallkit.common.data.Constants
 import com.tencent.qcloud.tuikit.tuicallkit.common.data.Logger
 import com.tencent.qcloud.tuikit.tuicallkit.manager.feature.CallingBellFeature
+import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.IncomingNotificationBanner
+import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.NativeCallForegroundService
 import com.tencent.qcloud.tuikit.tuicallkit.state.GlobalState
 import com.tencent.qcloud.tuikit.tuicallkit.state.ViewState
 import com.tencent.trtc.TRTCCloud
@@ -363,6 +365,13 @@ class CallManager private constructor(context: Context) {
     }
 
     fun startForegroundService() {
+        if (IncomingNotificationBanner.usesNativeNotification(context) || NativeCallForegroundService.isProtectingCurrentCall()) {
+            // Waiting calls use the ringing notification. Media service starts only after acceptance.
+            AudioForegroundService.stop(context)
+            VideoForegroundService.stop(context)
+            NativeCallForegroundService.start(context)
+            return
+        }
         val inviteeIdsSize = CallStore.shared.observerState.activeCall.value.inviteeIds.size
         val scene: TUICallDefine.Scene = if (inviteeIdsSize == 0) {
             TUICallDefine.Scene.NONE
@@ -382,6 +391,7 @@ class CallManager private constructor(context: Context) {
     }
 
     fun stopForegroundService() {
+        if (!IncomingNotificationBanner.isAcceptedCallCurrent()) NativeCallForegroundService.stop(context)
         VideoForegroundService.stop(TUIConfig.getAppContext())
         AudioForegroundService.stop(TUIConfig.getAppContext())
     }

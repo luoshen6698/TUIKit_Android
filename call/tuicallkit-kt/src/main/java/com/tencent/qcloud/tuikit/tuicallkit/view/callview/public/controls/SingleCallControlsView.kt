@@ -1,27 +1,29 @@
 package com.tencent.qcloud.tuikit.tuicallkit.view.callview.public.controls
 
 import android.content.Context
-import android.widget.RelativeLayout
 import androidx.constraintlayout.widget.ConstraintLayout
-import com.tencent.qcloud.tuikit.tuicallkit.view.callview.core.common.utils.Logger
+import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.NativeCallIdentity
+import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.NativeCallPhase
 import io.trtc.tuikit.atomicxcore.api.call.CallMediaType
 import io.trtc.tuikit.atomicxcore.api.call.CallStore
 import io.trtc.tuikit.atomicxcore.api.call.CallParticipantStatus
+import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 class SingleCallControlsView(context: Context) : ConstraintLayout(context) {
     private var subscribeStateJob: Job? = null
-    private var functionLayout: RelativeLayout? = null
-    private var callStatus = CallParticipantStatus.None
+    private val renderPolicy = CallControlsRenderPolicy()
 
     var enableVirtualBackground: Boolean = true
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        updateLayout()
+        renderPolicy.reset()
         registerSelfObserver()
     }
 
@@ -32,54 +34,44 @@ class SingleCallControlsView(context: Context) : ConstraintLayout(context) {
 
     private fun registerSelfObserver() {
         subscribeStateJob = CoroutineScope(Dispatchers.Main).launch {
-            CallStore.shared.observerState.selfInfo.collect { selfInfo ->
-                if (callStatus != selfInfo.status && selfInfo.status == CallParticipantStatus.Accept) {
-                    callStatus = selfInfo.status
-                    updateLayout()
-                }
-            }
+            val state = CallStore.shared.observerState
+            combine(state.selfInfo, state.activeCall) { self, call ->
+                CallControlsRenderKey(
+                    NativeCallIdentity(call.callId, LoginStore.shared.sdkAppID, self.id),
+                    when (self.status) {
+                        CallParticipantStatus.Waiting -> NativeCallPhase.Waiting
+                        CallParticipantStatus.Accept -> NativeCallPhase.Accepted
+                        else -> NativeCallPhase.None
+                    },
+                    call.mediaType?.let { it == CallMediaType.Video },
+                    self.id == call.inviterId,
+                )
+            }.distinctUntilChanged().collect { updateLayout(it) }
         }
     }
 
-    private fun updateLayout() {
-        val mediaType = CallStore.shared.observerState.activeCall.value.mediaType
-        val selfStatus = CallStore.shared.observerState.selfInfo.value.status
-
-        when {
-            selfStatus == CallParticipantStatus.Waiting && !selfIsCaller() -> {
-                functionLayout = AudioAndVideoCalleeWaitingView(context)
+    private fun updateLayout(key: CallControlsRenderKey) {
+        if (!renderPolicy.update(key)) return
+        // A late outgoing call ID must create a newly bound helper, not rebind an old action.
+        removeAllViews()
+        val functionLayout = when {
+            key.phase == NativeCallPhase.Waiting && !key.isCaller -> {
+                AudioAndVideoCalleeWaitingView(context)
             }
 
-            selfStatus == CallParticipantStatus.Waiting && selfIsCaller() -> {
-                functionLayout = when (mediaType) {
-                    CallMediaType.Video -> VideoCallerWaitingView(context).apply {
-                        this.enableVirtualBackground = this@SingleCallControlsView.enableVirtualBackground
-                    }
-                    else -> AudioCallerWaitingAndAcceptedView(context)
-                }
+            key.phase == NativeCallPhase.Waiting && key.isCaller -> {
+                if (key.isVideo == true) VideoCallerWaitingView(context).apply {
+                    this.enableVirtualBackground = this@SingleCallControlsView.enableVirtualBackground
+                } else AudioCallerWaitingAndAcceptedView(context)
             }
 
-            selfStatus == CallParticipantStatus.Accept -> {
-                functionLayout = when (mediaType) {
-                    CallMediaType.Video -> VideoCallerAndCalleeAcceptedView(context).apply {
-                        this.enableVirtualBackground = this@SingleCallControlsView.enableVirtualBackground
-                    }
-                    else -> AudioCallerWaitingAndAcceptedView(context)
-                }
+            key.phase == NativeCallPhase.Accepted -> {
+                if (key.isVideo == true) VideoCallerAndCalleeAcceptedView(context).apply {
+                    this.enableVirtualBackground = this@SingleCallControlsView.enableVirtualBackground
+                } else AudioCallerWaitingAndAcceptedView(context)
             }
+            else -> return
         }
-
-        if (functionLayout == null) {
-            Logger.e("functionLayout == null")
-        } else {
-            removeAllViews()
-            addView(functionLayout)
-        }
-    }
-
-    private fun selfIsCaller(): Boolean {
-        val selfId = CallStore.shared.observerState.selfInfo.value.id
-        val callerId = CallStore.shared.observerState.activeCall.value.inviterId
-        return selfId == callerId
+        addView(functionLayout)
     }
 }

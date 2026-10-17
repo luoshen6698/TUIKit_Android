@@ -10,12 +10,14 @@ import com.tencent.qcloud.tuikit.tuicallkit.TUICallKit
 import com.tencent.qcloud.tuikit.tuicallkit.manager.feature.CallingBellFeature
 import com.tencent.qcloud.tuikit.tuicallkit.manager.feature.CallingVibratorFeature
 import com.tencent.qcloud.tuikit.tuicallkit.manager.feature.NotificationFeature
+import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.IncomingNotificationBanner
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.call.CallParticipantStatus
 import io.trtc.tuikit.atomicxcore.api.call.CallStore
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantBoundary
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +39,7 @@ object XingDunCallSessionInitializer {
     private val gate = XingDunCallInitializationGate()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var pending: Pending? = null
+    private var appContext: Context? = null
 
     fun initialize(context: Context, sdkAppId: Int, userId: String, userSig: String) {
         scope.launch { awaitReady(context.applicationContext, sdkAppId, userId, userSig) }
@@ -45,6 +48,7 @@ object XingDunCallSessionInitializer {
     /** Caller cancellation stops waiting without cancelling another caller's shared initialization. */
     suspend fun awaitReady(context: Context, sdkAppId: Int, userId: String, userSig: String): Boolean =
         withContext(Dispatchers.Main.immediate) {
+            appContext = context.applicationContext
             if (sdkAppId <= 0 || userId.isBlank() || userSig.isBlank()) return@withContext false
             val identity = currentIdentity(sdkAppId, userId) ?: return@withContext false
             val imMatches = matchesIM(sdkAppId, userId)
@@ -141,6 +145,7 @@ object XingDunCallSessionInitializer {
                             return@launch
                         }
                         try {
+                            IncomingNotificationBanner.resumeNotifications(context)
                             NotificationFeature(context).registerNotificationBannerChannel()
                             CallingBellFeature(context)
                             CallingVibratorFeature(context)
@@ -171,6 +176,7 @@ object XingDunCallSessionInitializer {
     }
 
     fun reset() {
+        appContext?.let { IncomingNotificationBanner.suspendNotifications(it) }
         val displaced = synchronized(lock) {
             gate.reset()
             pending.also { pending = null }
@@ -194,6 +200,7 @@ object XingDunCallSessionInitializer {
         gate.isCurrent(attempt) && currentIdentity(sdkAppId, userId) == attempt.identity
 
     private fun currentIdentity(sdkAppId: Int, userId: String): String? {
+        if (XingDunTenantSessionCoordinator.isLeaving()) return null
         val session = XingDunSessionManager.currentSession() ?: return null
         if (session.sdkAppId != sdkAppId || session.timUserId != userId) return null
         val tenant = XingDunTenantBoundary.identity(session) ?: return null

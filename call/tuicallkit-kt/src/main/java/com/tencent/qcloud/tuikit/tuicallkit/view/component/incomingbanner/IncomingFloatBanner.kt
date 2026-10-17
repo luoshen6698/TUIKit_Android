@@ -103,37 +103,33 @@ class IncomingFloatBanner(context: Context) : RelativeLayout(context) {
 
         val mediaType = CallStore.shared.observerState.activeCall.value.mediaType
         textFloatDescription.text = getTextDescription()
+        val rejectIntent = IncomingNotificationBanner.createActionIntent(context, Constants.REJECT_CALL_ACTION)
+        val acceptIntent = IncomingNotificationBanner.createActionIntent(context, Constants.ACCEPT_CALL_ACTION)
+        val openIntent = IncomingNotificationBanner.createActionIntent(context, "open_call_action")
 
         imageReject.setOnClickListener {
-            CallManager.instance.reject(null)
+            IncomingNotificationBanner.handleNotificationAction(context, rejectIntent)
             cancelIncomingView()
         }
 
         layoutView.setOnClickListener {
             cancelIncomingView()
-            val intent = Intent(context, CallMainActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            context.startActivity(intent)
+            if (IncomingNotificationBanner.isCurrentNotificationIntent(openIntent)) context.startActivity(openIntent)
         }
 
         when (mediaType) {
             CallMediaType.Video -> imageAccept.setBackgroundResource(R.drawable.tuicallkit_ic_dialing_video)
             else -> imageAccept.setBackgroundResource(R.drawable.tuicallkit_bg_dialing)
         }
-        val callStatus = CallStore.shared.observerState.selfInfo.value.status
         imageAccept.setOnClickListener {
-            if (callStatus == CallParticipantStatus.None) {
+            if (!IncomingNotificationBanner.isCurrentNotificationIntent(acceptIntent)) {
                 Logger.w(TAG, "current status is None, ignore")
                 cancelIncomingView()
                 return@setOnClickListener
             }
 
             Logger.i(TAG, "accept the call")
-            CallStore.shared.accept(null)
-            val intent = Intent(context, CallMainActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            intent.action = Constants.ACCEPT_CALL_ACTION
-            context.startActivity(intent)
+            context.startActivity(acceptIntent)
             cancelIncomingView()
         }
 
