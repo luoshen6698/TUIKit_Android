@@ -70,6 +70,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspacePageV
 import io.trtc.tuikit.chat.demo.xingdun.features.home.XingDunHomePageView
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMinePageView
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
+import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunNotificationIntentReader
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryState
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
@@ -276,6 +277,8 @@ class MainActivity : BaseActivity() {
         applyColors(themeStore.themeState.value.currentTheme.tokens.color)
         refreshUnreadCounts()
         selectRequestedTab(intent)
+        XingDunNotificationIntentReader.readAndStage(intent, "main_create")
+        XingDunRouter.markMainReady()
         XingDunRouter.consumePendingRoute()
         V2TIMManager.getInstance().addIMSDKListener(imSDKListener)
     }
@@ -289,6 +292,9 @@ class MainActivity : BaseActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         selectRequestedTab(intent)
+        XingDunNotificationIntentReader.readAndStage(intent, "main_intent")
+        XingDunRouter.markMainReady()
+        XingDunRouter.consumePendingRoute()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

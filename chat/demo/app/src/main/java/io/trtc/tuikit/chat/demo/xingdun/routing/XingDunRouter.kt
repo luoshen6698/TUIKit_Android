@@ -2,82 +2,101 @@ package io.trtc.tuikit.chat.demo.xingdun.routing
 
 import android.content.Context
 import android.content.Intent
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import com.tencent.mmkv.MMKV
+import com.tencent.imsdk.v2.V2TIMManager
+import com.tencent.qcloud.tuicore.TUILogin
+import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
-import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryState
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantBoundary
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 
 object XingDunRouter {
 
     private lateinit var appContext: Context
+    private var navigationReadyScope: String? = null
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
     }
 
-    fun routeNotification(extension: String?) {
-        val payload = extension?.trim().orEmpty()
-        if (payload.isEmpty() || payload.toByteArray().size > MAX_PAYLOAD_BYTES) return
-        val session = XingDunSessionManager.currentSession()
-        if (session == null) {
-            clearPendingRoute()
-            launch(XingDunLaunchActivity::class.java)
-            return
-        }
-        MMKV.defaultMMKV().encode(KEY_PENDING_PUSH_ROUTE, payload)
-        val tenantKey = XingDunTenantBoundary.identity(session)?.key ?: return
-        MMKV.defaultMMKV().encode(KEY_PENDING_PUSH_TENANT, tenantKey)
-        consumePendingRoute()
+    /** Startup may replace the task after authentication; no chat may be opened before Main is ready. */
+    @Synchronized
+    fun markStartupPending() {
+        navigationReadyScope = null
     }
 
+    @Synchronized
+    fun markMainReady() {
+        navigationReadyScope = currentScope()?.key
+    }
+
+    fun routeNotification(extension: String?) {
+        if (stageNotification(extension)) consumePendingRoute()
+    }
+
+    /** Launcher intents stage only; authentication/Main owns the subsequent safe consumption. */
+    @Synchronized
+    fun stageNotification(extension: String?): Boolean {
+        val destination = XingDunNotificationPayloadParser.parse(extension) ?: return false
+        val scope = currentScope()
+        if (scope == null || XingDunTenantSessionCoordinator.isLeaving()) {
+            clearPendingRoute()
+            return false
+        }
+        if (!scope.allows(destination)) return false
+        val store = MMKV.defaultMMKV()
+        if (!store.encode(KEY_PENDING_PUSH_ROUTE, XingDunNotificationPayloadParser.encode(destination)) ||
+            !store.encode(KEY_PENDING_PUSH_SCOPE, scope.key)) {
+            clearPendingRoute()
+            return false
+        }
+        return true
+    }
+
+    @Synchronized
     fun consumePendingRoute() {
         if (!::appContext.isInitialized) return
-        val session = XingDunSessionManager.currentSession() ?: return
         val raw = MMKV.defaultMMKV().decodeString(KEY_PENDING_PUSH_ROUTE, "").orEmpty()
         if (raw.isEmpty()) return
-        val pendingTenant = MMKV.defaultMMKV().decodeString(KEY_PENDING_PUSH_TENANT, "").orEmpty()
-        if (pendingTenant != XingDunTenantBoundary.identity(session)?.key) {
+        val scope = currentScope()
+        val recovery = XingDunCredentialRecoveryCoordinator.state.value
+        if (XingDunTenantSessionCoordinator.isLeaving() || recovery == XingDunCredentialRecoveryState.REDIRECTING) {
             clearPendingRoute()
             return
         }
-        val json = runCatching { JsonParser.parseString(raw).asJsonObject }.getOrNull() ?: run {
-            clearPendingRoute()
-            return
+        when (XingDunNotificationConsumptionPolicy.decide(
+            MMKV.defaultMMKV().decodeString(KEY_PENDING_PUSH_SCOPE, "").orEmpty(),
+            scope, LoginStore.shared.sdkAppID, TUILogin.getLoginUser(),
+            authenticationReady = recovery == XingDunCredentialRecoveryState.NORMAL &&
+                V2TIMManager.getInstance().loginStatus == V2TIMManager.V2TIM_STATUS_LOGINED,
+            navigationReady = scope != null && navigationReadyScope == scope.key,
+        )) {
+            XingDunNotificationConsumption.WAIT -> return
+            XingDunNotificationConsumption.DISCARD -> { clearPendingRoute(); return }
+            XingDunNotificationConsumption.OPEN -> Unit
         }
+        val destination = XingDunNotificationPayloadParser.parse(raw)
         clearPendingRoute()
-
-        val route = json.string("route")?.lowercase()
-        val pushVersion = json.int("xd_push_version")
-        val voipVersion = json.int("xd_voip_version")
-        val conversationType = json.string("conversation_type")?.lowercase()
-        val target = json.string("target")
-        when {
-            voipVersion == VOIP_PAYLOAD_VERSION -> {
-                val conversationID = json.string("conversation_id")
-                if (conversationID?.startsWith("c2c_") == true || conversationID?.startsWith("group_") == true) {
-                    ChatActivity.start(appContext, conversationID)
-                } else {
-                    launchMain(MainActivity.TAB_MESSAGES)
-                }
-            }
-            pushVersion != PUSH_PAYLOAD_VERSION && route == null -> Unit
-            target != null && conversationType in setOf("c2c", "direct", "single") ->
-                ChatActivity.start(appContext, "c2c_$target")
-            target != null && conversationType == "customer_service" ->
-                ChatActivity.start(appContext, "c2c_$target")
-            target != null && conversationType in setOf("group", "team") ->
-                ChatActivity.start(appContext, "group_$target")
-            route in setOf("friend_application", "group_application", "contacts") ->
-                launchMain(MainActivity.TAB_CONTACTS)
-            route in setOf("workspace", "customer_service") ->
-                launchMain(MainActivity.TAB_WORKSPACE)
-            route == "profile" -> launchMain(MainActivity.TAB_PROFILE)
-            else -> launchMain(MainActivity.TAB_MESSAGES)
+        if (destination == null || scope?.allows(destination) != true) return
+        when (destination) {
+            is XingDunNotificationDestination.Conversation -> ChatActivity.start(appContext, destination.conversationID)
+            XingDunNotificationDestination.Tab.MESSAGES -> launchMain(MainActivity.TAB_MESSAGES)
+            XingDunNotificationDestination.Tab.CONTACTS -> launchMain(MainActivity.TAB_CONTACTS)
+            XingDunNotificationDestination.Tab.WORKSPACE -> launchMain(MainActivity.TAB_WORKSPACE)
+            XingDunNotificationDestination.Tab.PROFILE -> launchMain(MainActivity.TAB_PROFILE)
         }
+    }
+
+    private fun currentScope(): XingDunNotificationScope? {
+        val session = XingDunSessionManager.currentSession() ?: return null
+        val tenant = XingDunTenantBoundary.identity(session) ?: return null
+        if (session.apiBaseUrl.isBlank() || session.timUserId.isBlank()) return null
+        return XingDunNotificationScope(tenant.companyId, tenant.companyCode, tenant.sdkAppId,
+            session.apiBaseUrl, session.timUserId)
     }
 
     private fun launchMain(tab: String) {
@@ -87,26 +106,15 @@ object XingDunRouter {
         })
     }
 
-    private fun launch(activity: Class<*>) {
-        appContext.startActivity(Intent(appContext, activity).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        })
-    }
-
+    @Synchronized
     fun clearPendingRoute() {
         MMKV.defaultMMKV().removeValueForKey(KEY_PENDING_PUSH_ROUTE)
+        MMKV.defaultMMKV().removeValueForKey(KEY_PENDING_PUSH_SCOPE)
+        // Drop the older tenant-only binding; it cannot safely authorize another account.
         MMKV.defaultMMKV().removeValueForKey(KEY_PENDING_PUSH_TENANT)
     }
 
-    private fun JsonObject.string(name: String): String? =
-        get(name)?.takeUnless { it.isJsonNull }?.asString?.trim()?.takeIf(String::isNotEmpty)
-
-    private fun JsonObject.int(name: String): Int? =
-        get(name)?.takeUnless { it.isJsonNull }?.asInt
-
     private const val KEY_PENDING_PUSH_ROUTE = "xingdun.pending.push.route"
     private const val KEY_PENDING_PUSH_TENANT = "xingdun.pending.push.tenant"
-    private const val PUSH_PAYLOAD_VERSION = 1
-    private const val VOIP_PAYLOAD_VERSION = 1
-    private const val MAX_PAYLOAD_BYTES = 1024
+    private const val KEY_PENDING_PUSH_SCOPE = "xingdun.pending.push.scope.v2"
 }

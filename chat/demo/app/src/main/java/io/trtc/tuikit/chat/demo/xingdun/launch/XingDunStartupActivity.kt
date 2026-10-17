@@ -34,6 +34,8 @@ import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.main.XingDunMessageFirstFramePreloader
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
+import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunNotificationIntentReader
+import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryState
@@ -67,6 +69,7 @@ class XingDunStartupActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        XingDunRouter.markStartupPending()
         setContentView(R.layout.xingdun_activity_startup_loading)
         startupStatusView = findViewById(R.id.xingdun_startup_status)
         splashScreen.setKeepOnScreenCondition { false }
@@ -128,6 +131,9 @@ class XingDunStartupActivity : AppCompatActivity() {
             routeToEnterpriseAccess()
             return
         }
+
+        // Keep the destination account-scoped while the existing authenticated startup runs.
+        XingDunNotificationIntentReader.readAndStage(intent, "startup")
 
         incomingCallLaunch = XingDunIncomingCallLaunchPolicy.hasCallHint(intent?.getStringExtra("ext")) ||
             XingDunSessionManager.currentSession()?.let(::hasIncomingCall) == true
