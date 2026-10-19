@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="xingdun_call_history_channel">Call history</string>
+    <string name="xingdun_call_history_caller">Call</string>
+    <string name="xingdun_call_history_audio">Voice call</string>
+    <string name="xingdun_call_history_video">Video call</string>
+    <string name="xingdun_call_history_ended">Ended</string>
+    <string name="xingdun_call_history_rejected">Declined</string>
+    <string name="xingdun_call_history_missed">Missed</string>
+    <string name="xingdun_call_history_canceled">Canceled by caller</string>
+    <string name="xingdun_call_history_summary">%1$s · %2$s</string>
+</resources>

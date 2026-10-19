@@ -13,6 +13,11 @@ internal object XingDunNotificationIntentReader {
 
     fun readAndStage(intent: Intent?, source: String) {
         if (intent == null) return
+        if (intent.hasExtra(XingDunLocalNotificationRoutes.EXTRA_ACCOUNT) &&
+            intent.getStringExtra(XingDunLocalNotificationRoutes.EXTRA_ACCOUNT) != XingDunLocalNotificationRoutes.accountKey()) {
+            Log.i("XingDunPush", "notification_entry source=$source account_mismatch=true")
+            return
+        }
         val values = payloadKeys.associateWith { key ->
             runCatching { intent.getStringExtra(key) }.getOrNull()
         }

@@ -91,6 +91,8 @@ object XingDunRouter {
         }
     }
 
+    internal fun currentAccountKey(): String? = currentScope()?.key
+
     private fun currentScope(): XingDunNotificationScope? {
         val session = XingDunSessionManager.currentSession() ?: return null
         val tenant = XingDunTenantBoundary.identity(session) ?: return null

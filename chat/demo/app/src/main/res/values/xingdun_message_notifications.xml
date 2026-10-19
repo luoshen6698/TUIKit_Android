@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="xingdun_chat_notification_channel">Chat messages</string>
+    <string name="xingdun_chat_notification_channel_silent">Chat messages · silent</string>
+    <string name="xingdun_chat_notification_channel_sound">Chat messages · sound</string>
+    <string name="xingdun_chat_notification_channel_vibration">Chat messages · vibration</string>
+    <string name="xingdun_chat_notification_new">You have a new message</string>
+    <string name="xingdun_chat_notification_image">[Image]</string>
+    <string name="xingdun_chat_notification_video">[Video]</string>
+    <string name="xingdun_chat_notification_audio">[Voice message]</string>
+    <string name="xingdun_chat_notification_file">[File]</string>
+    <string name="xingdun_chat_notification_face">[Sticker]</string>
+</resources>

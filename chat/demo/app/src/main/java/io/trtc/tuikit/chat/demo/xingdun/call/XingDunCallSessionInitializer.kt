@@ -152,6 +152,7 @@ object XingDunCallSessionInitializer {
                             engine.enableMultiDeviceAbility(true, null)
                             // Its StateFlow observer must exist before the explicit offline query.
                             TUICallKit.createInstance(context).enableIncomingBanner(true)
+                            XingDunCallHistoryNotificationManager.initialize(context)
                             if (callStore.observerState.selfInfo.value.status == CallParticipantStatus.None) {
                                 runCatching { engine.queryOfflineCall() }.onFailure { error ->
                                     Log.w(TAG, "Offline call query could not start: ${error.javaClass.simpleName}")
@@ -176,6 +177,7 @@ object XingDunCallSessionInitializer {
     }
 
     fun reset() {
+        XingDunCallHistoryNotificationManager.clear()
         appContext?.let { IncomingNotificationBanner.suspendNotifications(it) }
         val displaced = synchronized(lock) {
             gate.reset()

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="xingdun_call_history_channel">通话记录</string>
+    <string name="xingdun_call_history_caller">通话</string>
+    <string name="xingdun_call_history_audio">语音通话</string>
+    <string name="xingdun_call_history_video">视频通话</string>
+    <string name="xingdun_call_history_ended">已结束</string>
+    <string name="xingdun_call_history_rejected">已拒绝</string>
+    <string name="xingdun_call_history_missed">未接听</string>
+    <string name="xingdun_call_history_canceled">对方已取消</string>
+    <string name="xingdun_call_history_summary">%1$s · %2$s</string>
+</resources>

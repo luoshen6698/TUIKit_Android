@@ -5,26 +5,39 @@ import org.junit.Test
 
 class XingDunForegroundNotificationPolicyTest {
     @Test
-    fun activeMutedBackgroundAndUnsupportedMessagesAreSilent() {
+    fun activeMutedAndUnsupportedMessagesAreSilent() {
         listOf(
-            XingDunForegroundNotificationPolicy.decide(false, false, false, true, true, true),
             XingDunForegroundNotificationPolicy.decide(true, true, false, true, true, true),
             XingDunForegroundNotificationPolicy.decide(true, false, true, true, true, true),
             XingDunForegroundNotificationPolicy.decide(true, false, false, false, true, true),
         ).forEach { decision ->
-            assertEquals(XingDunForegroundNotificationDecision(false, false), decision)
+            assertEquals(XingDunForegroundNotificationDecision(false, false, false), decision)
         }
     }
 
     @Test
     fun differentForegroundConversationHonorsIndependentPreferences() {
         assertEquals(
-            XingDunForegroundNotificationDecision(false, true),
+            XingDunForegroundNotificationDecision(true, false, true),
             XingDunForegroundNotificationPolicy.decide(true, false, false, true, false, true),
         )
         assertEquals(
-            XingDunForegroundNotificationDecision(true, false),
+            XingDunForegroundNotificationDecision(true, true, false),
             XingDunForegroundNotificationPolicy.decide(true, false, false, true, true, false),
         )
+    }
+
+    @Test
+    fun backgroundDeliveryAndSilentPreferenceStillProduceVisibleNotifications() {
+        assertEquals(XingDunForegroundNotificationDecision(true, true, true),
+            XingDunForegroundNotificationPolicy.decide(false, false, false, true, true, true))
+        assertEquals(XingDunForegroundNotificationDecision(true, false, false),
+            XingDunForegroundNotificationPolicy.decide(true, false, false, true, false, false))
+    }
+
+    @Test
+    fun staleActiveChatDoesNotSuppressBackgroundMessages() {
+        assertEquals(XingDunForegroundNotificationDecision(true, true, true),
+            XingDunForegroundNotificationPolicy.decide(false, true, false, true, true, true))
     }
 }
