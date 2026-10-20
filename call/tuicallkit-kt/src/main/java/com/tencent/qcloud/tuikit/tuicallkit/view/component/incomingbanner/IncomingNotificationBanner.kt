@@ -10,6 +10,7 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
@@ -24,6 +25,8 @@ import com.tencent.qcloud.tuikit.tuicallkit.manager.feature.NotificationFeature
 import com.tencent.qcloud.tuikit.tuicallkit.state.GlobalState
 import com.tencent.qcloud.tuikit.tuicallkit.view.CallMainActivity
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
+import io.trtc.tuikit.atomicxcore.api.call.CallEndReason
+import io.trtc.tuikit.atomicxcore.api.call.CallListener
 import io.trtc.tuikit.atomicxcore.api.call.CallMediaType
 import io.trtc.tuikit.atomicxcore.api.call.CallParticipantInfo
 import io.trtc.tuikit.atomicxcore.api.call.CallParticipantStatus
@@ -62,13 +65,15 @@ class IncomingNotificationBanner(context: Context) {
         @Volatile private var notificationsSuspended = false
         @Volatile private var lifecycleEpoch = 0L
         @Volatile private var sharedController: Controller? = null
+        private val terminationGate = NativeCallTerminationGate()
         private val incomingPresentationState = MutableStateFlow<NativeCallNotificationPolicy.IncomingPresentation?>(null)
         internal val incomingPresentation = incomingPresentationState.asStateFlow()
 
         internal fun needsLocalIncomingRinging(context: Context): Boolean {
             val call = currentCall() ?: return false
             return NativeCallNotificationPolicy.needsLocalRinging(call.identity, incomingPresentation.value,
-                NotificationFeature.canShowIncomingCall(context), DeviceUtils.isAppRunningForeground(context),
+                NotificationFeature.canShowIncomingCall(context), DeviceUtils.isAppRunningForeground(context) ||
+                    sharedController?.persistentBanner?.isShowing == true,
                 call.phase == NativeCallPhase.Waiting, notificationsSuspended,
                 sharedController?.compatibleIncoming == true)
         }
@@ -103,6 +108,14 @@ class IncomingNotificationBanner(context: Context) {
 
         fun areNotificationsSuspended(): Boolean = notificationsSuspended
 
+        internal fun onCallJoined(context: Context, callId: String) {
+            val state = CallStore.shared.observerState
+            if (callId.isBlank() || state.activeCall.value.callId != callId) return
+            terminationGate.allowJoinedCall(NativeCallIdentity(callId, LoginStore.shared.sdkAppID,
+                V2TIMManager.getInstance().loginUser.orEmpty()))
+            controller(context).scope.launch { controller(context).refresh() }
+        }
+
         fun isNotificationIntent(intent: Intent?): Boolean = intent?.hasExtra(EXTRA_BINDING) == true
 
         fun isCurrentNotificationIntent(intent: Intent?): Boolean =
@@ -112,7 +125,9 @@ class IncomingNotificationBanner(context: Context) {
             controller(context).execute(intent, onFinished)
 
         fun createActionIntent(context: Context, action: String): Intent? = controller(context).let { owner ->
-            owner.refresh()
+            // The overlay is built inside refresh, after the binding is installed. Do not
+            // recursively publish before it is attached (its visibility owns audio fallback).
+            if (!owner.presentingPersistentBanner) owner.refresh()
             val binding = owner.binding ?: return@let null
             val intent = owner.actionIntent(binding, action, false)
             intent.takeIf { owner.matches(it) }
@@ -161,8 +176,10 @@ class IncomingNotificationBanner(context: Context) {
                 CallParticipantStatus.Accept -> NativeCallPhase.Accepted
                 else -> return null
             }
+            val identity = NativeCallIdentity(call.callId, sdkAppId, self.id)
+            if (!terminationGate.canPresent(identity)) return null
             val caller = state.allParticipants.value.firstOrNull { it.id == call.inviterId }
-            return Snapshot(NativeCallIdentity(call.callId, sdkAppId, self.id), phase,
+            return Snapshot(identity, phase,
                 caller?.name?.takeIf { it.isNotBlank() }.orEmpty(), call.mediaType == CallMediaType.Video)
         }
 
@@ -175,16 +192,37 @@ class IncomingNotificationBanner(context: Context) {
             var binding: Binding? = null
                 private set
             private var lastRendered: Snapshot? = null
+            private var lastRenderedLocalAlert: Boolean? = null
             private var expired = false
             private var expiryJob: Job? = null
             private val actionJobs = mutableMapOf<NativeCallActionGate.Attempt, Job>()
             private val actionReleases = mutableMapOf<NativeCallActionGate.Attempt, () -> Unit>()
             private var failureFallback: (() -> Unit)? = null
             private var fallbackShownFor: NativeCallIdentity? = null
+            var persistentBanner: IncomingFloatBanner? = null
+                private set
+            var presentingPersistentBanner = false
+                private set
+            private var persistentBannerFailedFor: NativeCallIdentity? = null
             // Some OEM Android 13 systems strip FSI eligibility before validating CallStyle.
             // Retain the same channel, identity-bound actions and timeout without that style.
             var compatibleIncoming = false
                 private set
+            private val callEndListener = object : CallListener() {
+                override fun onCallEnded(callId: String, mediaType: CallMediaType,
+                                         reason: CallEndReason, userId: String) {
+                    val identity = NativeCallIdentity(callId, LoginStore.shared.sdkAppID,
+                        V2TIMManager.getInstance().loginUser.orEmpty())
+                    // The terminal event can precede the SDK's Waiting -> None StateFlow update.
+                    // Remember it before dispatching UI cleanup so no queued refresh can re-ring.
+                    if (!terminationGate.recordEnded(identity)) return
+                    scope.launch {
+                        val matches = terminationGate.shouldClear(identity, binding?.identity)
+                        Log.i(TAG, "stage=native_call event=terminal_received reason=${reason.name} current=$matches")
+                        if (matches) clear()
+                    }
+                }
+            }
 
             fun showIncoming(onFailure: (() -> Unit)?) {
                 refresh()
@@ -194,6 +232,7 @@ class IncomingNotificationBanner(context: Context) {
 
             init {
                 NotificationFeature(context).registerNotificationBannerChannel()
+                CallStore.shared.addListener(callEndListener)
                 scope.launch {
                     val state = CallStore.shared.observerState
                     combine(state.selfInfo, state.activeCall, state.allParticipants,
@@ -202,6 +241,8 @@ class IncomingNotificationBanner(context: Context) {
             }
 
             fun clear() {
+                dismissPersistentBanner()
+                persistentBannerFailedFor = null
                 expiryJob?.cancel()
                 expiryJob = null
                 actionJobs.values.forEach { it.cancel() }
@@ -212,6 +253,7 @@ class IncomingNotificationBanner(context: Context) {
                 if (binding != null) Log.i(TAG, "stage=native_call event=ended")
                 binding = null
                 lastRendered = null
+                lastRenderedLocalAlert = null
                 expired = false
                 failureFallback = null
                 fallbackShownFor = null
@@ -230,12 +272,24 @@ class IncomingNotificationBanner(context: Context) {
                 }
                 if (binding?.identity != call.identity) {
                     clear()
-                    binding = Binding(call.identity, UUID.randomUUID().toString(), SystemClock.elapsedRealtime())
-                    val expected = binding
+                    val expected = Binding(call.identity, UUID.randomUUID().toString(), SystemClock.elapsedRealtime())
+                    binding = expected
                     expiryJob = scope.launch {
-                        delay(Constants.CALL_WAITING_MAX_TIME * 1_000L)
+                        val deadline = expected.createdAt + Constants.CALL_WAITING_MAX_TIME * 1_000L
+                        while (binding == expected && SystemClock.elapsedRealtime() < deadline) {
+                            delay(minOf(500L, (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(1L)))
+                            if (binding != expected) return@launch
+                            if (currentCall()?.phase != NativeCallPhase.Waiting) {
+                                refresh()
+                                return@launch
+                            }
+                            // Keep the desktop surface in sync when the app is opened or backgrounded.
+                            // Profile-only refreshes below do not republish the system notification.
+                            if (SystemClock.elapsedRealtime() < deadline) refresh()
+                        }
                         if (binding == expected && currentCall()?.phase == NativeCallPhase.Waiting) {
                             expired = true
+                            dismissPersistentBanner()
                             incomingPresentationState.value = NativeCallNotificationPolicy.IncomingPresentation(
                                 call.identity, NativeCallNotificationPolicy.IncomingDelivery.Expired)
                             CallingBellFeature.stopCalleeRinging()
@@ -249,10 +303,13 @@ class IncomingNotificationBanner(context: Context) {
                 if (!NotificationFeature.canShowIncomingCall(context) ||
                     (expired && call.phase == NativeCallPhase.Waiting)
                 ) {
+                    dismissPersistentBanner()
                     manager.cancel(NOTIFICATION_ID)
                     lastRendered = null
                     return
                 }
+                syncPersistentBanner(call)
+                val localAlert = usesLocalAudio(call)
                 if (call.phase == NativeCallPhase.Accepted) {
                     incomingPresentationState.value = null
                     CallingBellFeature.stopCalleeRinging()
@@ -267,9 +324,10 @@ class IncomingNotificationBanner(context: Context) {
                 // Profile-only updates must not interrupt an insistent incoming ringtone or
                 // request another fullscreen presentation. The initial cached name is sufficient.
                 if (call.phase == NativeCallPhase.Waiting && lastRendered?.let {
-                        it.identity == call.identity && it.phase == call.phase && it.isVideo == call.isVideo
+                        it.identity == call.identity && it.phase == call.phase && it.isVideo == call.isVideo &&
+                            lastRenderedLocalAlert == localAlert
                     } == true) return
-                if (lastRendered == call) return
+                if (lastRendered == call && lastRenderedLocalAlert == localAlert) return
                 val currentBinding = binding ?: return
                 if (call.phase == NativeCallPhase.Waiting && incomingPresentation.value?.let {
                         it.identity == call.identity && it.delivery == NativeCallNotificationPolicy.IncomingDelivery.Failed
@@ -287,6 +345,10 @@ class IncomingNotificationBanner(context: Context) {
                 var builtNotification: Notification? = null
                 try {
                     var notification = buildNotification(call, currentBinding)
+                    if (!terminationGate.canPresent(call.identity)) {
+                        if (binding?.identity == call.identity) clear()
+                        return
+                    }
                     builtNotification = notification
                     stage = "publish"
                     when (plan.delivery) {
@@ -309,9 +371,11 @@ class IncomingNotificationBanner(context: Context) {
                         NativeCallNotificationPolicy.Delivery.Defer -> return
                     }
                     lastRendered = call
+                    lastRenderedLocalAlert = usesLocalAudio(call)
                     if (call.phase == NativeCallPhase.Waiting) {
                         incomingPresentationState.value = NativeCallNotificationPolicy.IncomingPresentation(
-                            call.identity, NativeCallNotificationPolicy.IncomingDelivery.Published)
+                            call.identity, NativeCallNotificationPolicy.IncomingDelivery.Published,
+                            localAudio = usesLocalAudio(call))
                         if (!needsLocalIncomingRinging(context)) {
                             CallingBellFeature.stopCalleeRinging()
                             CallingVibratorFeature.stopCalleeVibration()
@@ -350,10 +414,55 @@ class IncomingNotificationBanner(context: Context) {
                 fallback()
             }
 
+            private fun syncPersistentBanner(call: Snapshot) {
+                if (presentingPersistentBanner) return
+                val canOverlay = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
+                if (!NativeCallNotificationPolicy.needsPersistentAnswerBanner(
+                        call.phase == NativeCallPhase.Waiting, DeviceUtils.isAppRunningForeground(context),
+                        DeviceUtils.isScreenLocked(context), canOverlay, NotificationFeature.canShowIncomingCall(context),
+                        notificationsSuspended, expired)) {
+                    dismissPersistentBanner()
+                    return
+                }
+                if (persistentBanner?.isShowing == true || persistentBannerFailedFor == call.identity) return
+                presentingPersistentBanner = true
+                try {
+                    val state = CallStore.shared.observerState
+                    val caller = state.allParticipants.value.firstOrNull { it.id == state.activeCall.value.inviterId }
+                        ?: CallParticipantInfo()
+                    val banner = IncomingFloatBanner(context)
+                    persistentBanner = banner
+                    if (banner.showIncomingView(caller)) {
+                        Log.i(TAG, "stage=native_call event=persistent_banner_shown")
+                    } else {
+                        persistentBannerFailedFor = call.identity
+                        dismissPersistentBanner()
+                    }
+                } catch (error: RuntimeException) {
+                    persistentBannerFailedFor = call.identity
+                    dismissPersistentBanner()
+                    Log.w(TAG, "stage=native_call event=persistent_banner_failed type=${error.javaClass.simpleName}")
+                } finally {
+                    presentingPersistentBanner = false
+                }
+            }
+
+            private fun dismissPersistentBanner() {
+                val banner = persistentBanner ?: return
+                persistentBanner = null
+                banner.dismiss()
+                if (!needsLocalIncomingRinging(context)) {
+                    CallingBellFeature.stopCalleeRinging()
+                    CallingVibratorFeature.stopCalleeVibration()
+                }
+                Log.i(TAG, "stage=native_call event=persistent_banner_hidden")
+            }
+
             fun markForegroundPosted(intent: Intent) {
                 if (!matches(intent)) return
                 val call = currentCall()?.takeIf { it.phase == NativeCallPhase.Accepted } ?: return
                 lastRendered = call
+                lastRenderedLocalAlert = false
                 Log.i(TAG, "stage=native_call event=ongoing_posted")
             }
 
@@ -434,7 +543,7 @@ class IncomingNotificationBanner(context: Context) {
 
             fun buildNotification(call: Snapshot, binding: Binding): Notification {
                 val waiting = call.phase == NativeCallPhase.Waiting
-                val localAlert = waiting && compatibleIncoming && DeviceUtils.isAppRunningForeground(context)
+                val localAlert = usesLocalAudio(call)
                 val plan = NativeCallNotificationPolicy.plan(call.phase,
                     NativeCallForegroundService.isProtectingCurrentCall())
                 val open = pendingIntent(binding, OPEN_CALL_ACTION, false)
@@ -485,6 +594,10 @@ class IncomingNotificationBanner(context: Context) {
                     if (waiting && !GlobalState.instance.enableMuteMode && !localAlert) flags = flags or Notification.FLAG_INSISTENT
                 }
             }
+
+            private fun usesLocalAudio(call: Snapshot): Boolean = NativeCallNotificationPolicy.usesLocalAudio(
+                call.phase == NativeCallPhase.Waiting, compatibleIncoming,
+                DeviceUtils.isAppRunningForeground(context), persistentBanner?.isShowing == true)
 
             private fun pendingIntent(binding: Binding, action: String, broadcast: Boolean): PendingIntent {
                 val intent = actionIntent(binding, action, broadcast)

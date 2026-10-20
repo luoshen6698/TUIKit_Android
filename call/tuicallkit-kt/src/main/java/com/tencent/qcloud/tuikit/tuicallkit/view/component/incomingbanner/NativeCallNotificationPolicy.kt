@@ -4,7 +4,18 @@ package com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner
 internal object NativeCallNotificationPolicy {
     enum class IncomingDelivery { Pending, Published, Failed, Expired }
 
-    data class IncomingPresentation(val identity: NativeCallIdentity, val delivery: IncomingDelivery)
+    data class IncomingPresentation(val identity: NativeCallIdentity, val delivery: IncomingDelivery,
+                                    val localAudio: Boolean = false)
+
+    fun needsPersistentAnswerBanner(isWaiting: Boolean, isForeground: Boolean, isLocked: Boolean,
+                                    overlaysAllowed: Boolean, notificationsAllowed: Boolean,
+                                    isSuspended: Boolean, isExpired: Boolean): Boolean =
+        isWaiting && !isForeground && !isLocked && overlaysAllowed && notificationsAllowed &&
+            !isSuspended && !isExpired
+
+    fun usesLocalAudio(isWaiting: Boolean, compatible: Boolean, isForeground: Boolean,
+                       persistentBannerVisible: Boolean): Boolean =
+        isWaiting && compatible && (isForeground || persistentBannerVisible)
 
     fun needsLocalRinging(
         identity: NativeCallIdentity,

@@ -132,6 +132,7 @@ class TUICallKitImpl private constructor(context: Context) : TUICallKit() {
             override fun onGranted() {
                 CallManager.instance.join(callId, object : Callback {
                     override fun onSuccess() {
+                        IncomingNotificationBanner.onCallJoined(context, callId.orEmpty())
                         startCallActivity()
                         completion?.onSuccess()
                     }
