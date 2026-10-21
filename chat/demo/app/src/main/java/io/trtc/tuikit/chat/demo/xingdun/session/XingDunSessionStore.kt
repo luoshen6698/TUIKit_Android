@@ -28,17 +28,18 @@ class XingDunSessionStore(context: Context) {
     fun load(): XingDunStoredSession? =
         loadEncrypted(KEY_SESSION_IV, KEY_SESSION_DATA, XingDunStoredSession::class.java)
 
-    fun loadBoundSession(): XingDunStoredSession? {
-        val session = load() ?: return null
-        if (!XingDunTenantBoundary.matches(session, loadEnterprise())) {
-            clearSession()
-            return null
-        }
-        return session
-    }
+    /** Presence is separate from readability, including partially written encrypted records. */
+    fun hasStoredSession(): Boolean =
+        securePreferences.contains(KEY_SESSION_IV) || securePreferences.contains(KEY_SESSION_DATA)
+
+    fun loadBoundSession(): XingDunStoredSession? = XingDunSessionBindingPolicy.resolve(
+        session = load(),
+        enterprise = loadEnterprise(),
+        clearMismatchedSession = ::clearSession,
+    )
 
     fun isBoundToCurrentEnterprise(session: XingDunStoredSession): Boolean =
-        XingDunTenantBoundary.matches(session, loadEnterprise())
+        runCatching { XingDunTenantBoundary.matches(session, loadEnterprise()) }.getOrDefault(false)
 
     fun saveEnterprise(configuration: XingDunBootstrapConfiguration) {
         saveEncrypted(KEY_ENTERPRISE_IV, KEY_ENTERPRISE_DATA, configuration)
@@ -84,26 +85,27 @@ class XingDunSessionStore(context: Context) {
     }
 
     private fun <T> loadEncrypted(ivKey: String, dataKey: String, type: Class<T>): T? {
-        val encodedIv = securePreferences.getString(ivKey, null) ?: return null
-        val encodedData = securePreferences.getString(dataKey, null) ?: return null
         return try {
+            val encodedIv = securePreferences.getString(ivKey, null) ?: return null
+            val encodedData = securePreferences.getString(dataKey, null) ?: return null
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(
                 Cipher.DECRYPT_MODE,
-                secretKey(),
+                secretKey(createIfMissing = false),
                 GCMParameterSpec(GCM_TAG_LENGTH_BITS, Base64.decode(encodedIv, Base64.NO_WRAP))
             )
             val json = cipher.doFinal(Base64.decode(encodedData, Base64.NO_WRAP)).toString(Charsets.UTF_8)
             gson.fromJson(json, type)
         } catch (_: Exception) {
-            securePreferences.edit().remove(ivKey).remove(dataKey).apply()
+            // Keystore or decoding failures are not proof that the server revoked this session.
             null
         }
     }
 
-    private fun secretKey(): SecretKey {
+    private fun secretKey(createIfMissing: Boolean = true): SecretKey {
         val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
         (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        check(createIfMissing) { "Stored session key is unavailable" }
 
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE_PROVIDER).run {
             init(
@@ -132,5 +134,22 @@ class XingDunSessionStore(context: Context) {
         private const val KEY_ALIAS = "xingdun.session.aes.v1"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val GCM_TAG_LENGTH_BITS = 128
+    }
+}
+
+/** Unavailable or malformed snapshots must not be treated as a confirmed enterprise switch. */
+internal object XingDunSessionBindingPolicy {
+    fun resolve(
+        session: XingDunStoredSession?,
+        enterprise: XingDunBootstrapConfiguration?,
+        clearMismatchedSession: () -> Unit,
+    ): XingDunStoredSession? {
+        val sessionIdentity = runCatching { XingDunTenantBoundary.identity(session) }.getOrNull() ?: return null
+        val enterpriseIdentity = runCatching { XingDunTenantBoundary.identity(enterprise) }.getOrNull() ?: return null
+        if (!sessionIdentity.matches(enterpriseIdentity)) {
+            clearMismatchedSession()
+            return null
+        }
+        return session
     }
 }

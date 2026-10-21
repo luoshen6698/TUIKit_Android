@@ -39,6 +39,7 @@ object XingDunSessionManager {
     private lateinit var client: XingDunApiClient
     private lateinit var appContext: Context
     private val refreshMutex = Mutex()
+    private val authenticationCommitGate = XingDunAuthenticationCommitGate()
     private lateinit var accessTokenRecoveryCoordinator: XingDunAccessTokenRecoveryCoordinator
 
     fun initialize(context: Context) {
@@ -59,14 +60,16 @@ object XingDunSessionManager {
 
     fun currentSession(): XingDunStoredSession? = if (::store.isInitialized) store.loadBoundSession() else null
 
+    fun hasStoredSession(): Boolean = ::store.isInitialized && store.hasStoredSession()
+
     fun currentEnterprise(): XingDunBootstrapConfiguration? {
         if (!::store.isInitialized) return null
         val enterprise = store.loadEnterprise() ?: return null
         val hasPushSnapshot = runCatching { enterprise.push }.getOrNull() != null
-        if (XingDunTenantBoundary.identity(enterprise) == null || !hasPushSnapshot) {
-            store.clearEnterprise()
-            store.clearSession()
-            XingDunReadReceiptFeatureSynchronizer.reset()
+        val tenantIdentity = runCatching { XingDunTenantBoundary.identity(enterprise) }.getOrNull()
+        if (tenantIdentity == null || !hasPushSnapshot) {
+            // An unreadable/incomplete cached bootstrap is not a confirmed tenant change.
+            // Keep encrypted records for recovery, but do not expose an unbound session.
             return null
         }
         return enterprise
@@ -101,7 +104,14 @@ object XingDunSessionManager {
 
     fun selectEnterprise(bootstrap: XingDunBootstrapConfiguration) {
         validateBootstrap(bootstrap, bootstrap.companyCode)
-        storeEnterprise(bootstrap)
+        val selectedIdentity = requireNotNull(XingDunTenantBoundary.identity(bootstrap))
+        authenticationCommitGate.updateContext(
+            isSameContext = {
+                runCatching { XingDunTenantBoundary.identity(store.loadEnterprise())?.matches(selectedIdentity) }
+                    .getOrDefault(false) == true
+            },
+            action = { storeEnterprise(bootstrap) },
+        )
     }
 
     suspend fun attemptSimpleEnterprise(): XingDunBootstrapConfiguration? {
@@ -163,13 +173,7 @@ object XingDunSessionManager {
     private fun storeEnterprise(bootstrap: XingDunBootstrapConfiguration) {
         store.saveEnterprise(bootstrap)
         XingDunReadReceiptFeatureSynchronizer.apply(bootstrap)
-        val session = store.load() ?: return
-        val sessionIdentity = XingDunTenantBoundary.identity(session)
-        val enterpriseIdentity = XingDunTenantBoundary.identity(bootstrap)
-        if (sessionIdentity == null || enterpriseIdentity == null || !sessionIdentity.matches(enterpriseIdentity)) {
-            store.clearSession()
-            return
-        }
+        val session = XingDunSessionBindingPolicy.resolve(store.load(), bootstrap, store::clearSession) ?: return
         store.save(
             session.copy(
                 companyName = bootstrap.company?.name?.takeIf(String::isNotBlank) ?: session.companyName,
@@ -183,12 +187,13 @@ object XingDunSessionManager {
     }
 
     suspend fun login(companyCode: String, username: String, password: String): XingDunStoredSession {
-        val bootstrap = bootstrap(companyCode)
+        val ticket = authenticationCommitGate.begin()
+        val bootstrap = authenticationBootstrap(companyCode, ticket)
         val response = client.login(
             resolveApiBaseUrl(bootstrap),
             XingDunLoginRequest(username.trim(), password, normalizedCompanyCode(companyCode))
         )
-        return persist(bootstrap, response)
+        return persistAuthentication(ticket, bootstrap, response)
     }
 
     suspend fun register(
@@ -199,7 +204,8 @@ object XingDunSessionManager {
         nickname: String,
         inviteCode: String?
     ): XingDunStoredSession {
-        val bootstrap = bootstrap(companyCode)
+        val ticket = authenticationCommitGate.begin()
+        val bootstrap = authenticationBootstrap(companyCode, ticket)
         val response = client.register(
             resolveApiBaseUrl(bootstrap),
             XingDunRegisterRequest(
@@ -216,7 +222,7 @@ object XingDunSessionManager {
                 consentEvidenceId = "android:${store.deviceId()}:${UUID.randomUUID()}".take(64)
             )
         )
-        return persist(bootstrap, response)
+        return persistAuthentication(ticket, bootstrap, response)
     }
 
     suspend fun registerByPhone(
@@ -228,7 +234,8 @@ object XingDunSessionManager {
         nickname: String,
         inviteCode: String?
     ): XingDunStoredSession {
-        val bootstrap = bootstrap(companyCode)
+        val ticket = authenticationCommitGate.begin()
+        val bootstrap = authenticationBootstrap(companyCode, ticket)
         val response = client.registerByPhone(
             resolveApiBaseUrl(bootstrap),
             XingDunPhoneRegisterRequest(
@@ -246,7 +253,32 @@ object XingDunSessionManager {
                 consentEvidenceId = "android:${store.deviceId()}:${UUID.randomUUID()}".take(64)
             )
         )
-        return persist(bootstrap, response)
+        return persistAuthentication(ticket, bootstrap, response)
+    }
+
+    private suspend fun authenticationBootstrap(companyCode: String, ticket: Long): XingDunBootstrapConfiguration {
+        val code = normalizedCompanyCode(companyCode)
+        // Discovery for an old attempt must not change the enterprise before its commit is checked.
+        val bootstrap = store.loadEnterprise()?.takeIf { it.companyCode.equals(code, ignoreCase = true) }
+            ?: discoverEnterprise(code, null)
+        val coroutineContext = currentCoroutineContext()
+        return authenticationCommitGate.commit(ticket) {
+            coroutineContext.ensureActive()
+            validateBootstrap(bootstrap, code)
+            bootstrap
+        }
+    }
+
+    private suspend fun persistAuthentication(
+        ticket: Long,
+        bootstrap: XingDunBootstrapConfiguration,
+        response: XingDunAuthResponse,
+    ): XingDunStoredSession {
+        val coroutineContext = currentCoroutineContext()
+        return authenticationCommitGate.commit(ticket) {
+            coroutineContext.ensureActive()
+            persist(bootstrap, response)
+        }
     }
 
     suspend fun deletionStatus(deletionReceipt: String): XingDunAccountDeletionStatus {
@@ -350,9 +382,7 @@ object XingDunSessionManager {
     }
 
     private suspend fun refreshSessionAfterUnauthorized(existing: XingDunStoredSession): XingDunStoredSession? {
-        val now = System.currentTimeMillis()
-        val canRefresh = !existing.refreshToken.isNullOrBlank() &&
-            (existing.refreshExpiresAtMillis ?: 0L) > now
+        val canRefresh = !existing.refreshToken.isNullOrBlank()
         if (!canRefresh) return null
         return try {
             persist(existing, client.refresh(existing))
@@ -362,15 +392,11 @@ object XingDunSessionManager {
     }
 
     private fun rejectSessionIfCurrent(rejected: XingDunStoredSession) {
-        val current = store.loadBoundSession() ?: return
-        if (!XingDunAccessTokenRecoveryCoordinator.sameIdentity(current, rejected) ||
-            current.accessToken != rejected.accessToken
-        ) {
-            return
-        }
-        store.clearSession()
         Handler(Looper.getMainLooper()).post {
-            XingDunCredentialRecoveryCoordinator.redirectToLogin()
+            XingDunSessionRejectionPolicy.rejectIfCurrent(rejected, store::loadBoundSession) {
+                store.clearSession()
+                XingDunCredentialRecoveryCoordinator.redirectToLogin()
+            }
         }
     }
 
@@ -386,14 +412,19 @@ object XingDunSessionManager {
     )
 
     fun clear() {
-        if (::store.isInitialized) store.clearSession()
+        authenticationCommitGate.invalidateAndRun {
+            if (::store.isInitialized) store.clearSession()
+        }
     }
 
     fun clearEnterpriseSelection() {
-        if (!::store.isInitialized) return
-        store.clearSession()
-        store.clearEnterprise()
-        XingDunReadReceiptFeatureSynchronizer.reset()
+        authenticationCommitGate.invalidateAndRun {
+            if (::store.isInitialized) {
+                store.clearSession()
+                store.clearEnterprise()
+                XingDunReadReceiptFeatureSynchronizer.reset()
+            }
+        }
     }
 
     private fun persist(
@@ -533,4 +564,20 @@ object XingDunSessionManager {
 
     private fun message(@StringRes id: Int): String = appContext.getString(id)
 
+}
+
+/** Re-evaluate ownership when a queued rejection runs, not before posting it to the UI thread. */
+internal object XingDunSessionRejectionPolicy {
+    fun rejectIfCurrent(
+        rejected: XingDunStoredSession,
+        loadCurrentSession: () -> XingDunStoredSession?,
+        reject: () -> Unit,
+    ) {
+        val current = loadCurrentSession() ?: return
+        if (XingDunAccessTokenRecoveryCoordinator.sameIdentity(current, rejected) &&
+            current.accessToken == rejected.accessToken
+        ) {
+            reject()
+        }
+    }
 }

@@ -137,6 +137,7 @@
     <string name="xingdun_network_tls_failed">无法建立安全连接，请检查手机时间和网络。</string>
     <string name="xingdun_network_permission_denied">联网权限被阻止，请在系统设置中允许本应用联网。</string>
     <string name="xingdun_startup_waiting_network">连接时间较长，请稍候…</string>
+    <string name="xingdun_startup_recovering_session">暂时无法重新连接，账号状态已保留，网络恢复后将自动重试。</string>
     <string name="xingdun_authentication_failed">登录或注册失败。</string>
     <string name="xingdun_auth_rate_limited">认证尝试过于频繁，请稍后再试。</string>
     <string name="xingdun_login_account_not_registered">该账号未在当前企业注册。</string>

@@ -28,11 +28,13 @@ import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunInteractiveIMLoginRetryPolicy
 import io.trtc.tuikit.chat.demo.xingdun.main.XingDunMessageFirstFramePreloader
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunAuthenticationCallbackPolicy
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.ActionItem
 import io.trtc.tuikit.chat.uikit.components.widgets.ActionSheet
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -46,6 +48,7 @@ abstract class BaseLoginActivity : BaseActivity() {
 
     protected val themeStore by lazy { ThemeStore.shared(this) }
     private var loginScope: CoroutineScope? = null
+    private var activeAuthenticationTicket: Long? = null
     protected var contentReady = false
 
     private lateinit var themeSwitcher: LinearLayout
@@ -96,19 +99,44 @@ abstract class BaseLoginActivity : BaseActivity() {
 
     abstract fun applyThemeColors(colors: ColorTokens)
 
+    protected fun beginAuthenticationAttempt(): Long =
+        XingDunCredentialRecoveryCoordinator.onAuthenticationStarted().also { activeAuthenticationTicket = it }
+
+    protected fun ownsAuthenticationAttempt(ticket: Long): Boolean = XingDunAuthenticationCallbackPolicy.canApply(
+        expectedTicket = ticket,
+        activityTicket = activeAuthenticationTicket,
+        authenticationOwned = XingDunCredentialRecoveryCoordinator.ownsAuthentication(ticket),
+        activityActive = !isFinishing && !isDestroyed,
+    )
+
+    protected fun failAuthenticationAttempt(ticket: Long) {
+        if (activeAuthenticationTicket == ticket) activeAuthenticationTicket = null
+        XingDunCredentialRecoveryCoordinator.onAuthenticationFailed(ticket)
+    }
+
+    override fun onDestroy() {
+        activeAuthenticationTicket?.let(::failAuthenticationAttempt)
+        super.onDestroy()
+    }
+
     protected fun performLogin(
         sdkAppId: Int,
         userId: String,
         userSig: String,
         retryTransientFailureOnce: Boolean = false,
         onSuccess: (() -> Unit)? = null,
-        onFailure: ((Int, String) -> Unit)? = null
+        onFailure: ((Int, String) -> Unit)? = null,
+        authenticationTicket: Long? = null,
     ) {
-        if (!XingDunSessionManager.matchesCurrentIMIdentity(sdkAppId, userId)) {
+        val ticket = authenticationTicket ?: beginAuthenticationAttempt()
+        if (!ownsAuthenticationAttempt(ticket)) return
+        if (!matchesBusinessIdentity(sdkAppId, userId)) {
+            failAuthenticationAttempt(ticket)
             onFailure?.invoke(-1, getString(R.string.xingdun_error_company_mismatch))
             return
         }
         performLoginAttempt(
+            ticket = ticket,
             sdkAppId = sdkAppId,
             userId = userId,
             userSig = userSig,
@@ -119,6 +147,7 @@ abstract class BaseLoginActivity : BaseActivity() {
     }
 
     private fun performLoginAttempt(
+        ticket: Long,
         sdkAppId: Int,
         userId: String,
         userSig: String,
@@ -126,66 +155,101 @@ abstract class BaseLoginActivity : BaseActivity() {
         onSuccess: (() -> Unit)?,
         onFailure: ((Int, String) -> Unit)?,
     ) {
-        LoginStore.shared.login(
-            this, sdkAppId, userId, userSig,
-            object : CompletionHandler {
-                override fun onSuccess() {
-                    if (LoginStore.shared.sdkAppID != sdkAppId ||
-                        TUILogin.getLoginUser() != userId
-                    ) {
-                        LoginStore.shared.logout(null)
-                        onFailure?.invoke(-1, getString(R.string.xingdun_error_company_mismatch))
-                        return
-                    }
-                    XingDunCallSessionInitializer.initialize(this@BaseLoginActivity, sdkAppId, userId, userSig)
-                    XingDunPushManager.syncDeviceRegistration()
-                    MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, userId)
-                    XingDunCredentialRecoveryCoordinator.onAuthenticated()
-                    val session = XingDunSessionManager.currentSession()
-                    lifecycleScope.launch {
-                        if (session != null) {
-                            XingDunMessageFirstFramePreloader.preload(this@BaseLoginActivity, session)
-                        }
-                        onSuccess?.invoke()
-                        startActivity(Intent(this@BaseLoginActivity, MainActivity::class.java).apply {
-                            putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HOME)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                        })
-                    }
-                }
-
-                override fun onFailure(code: Int, desc: String) {
-                    if (XingDunInteractiveIMLoginRetryPolicy.shouldRetry(retriesRemaining, code)) {
-                        Log.w(TAG, "IM login failed with code $code; retrying once")
-                        lifecycleScope.launch {
-                            delay(XingDunInteractiveIMLoginRetryPolicy.RETRY_DELAY_MILLIS)
-                            if (!XingDunSessionManager.matchesCurrentIMIdentity(sdkAppId, userId)) {
-                                onFailure?.invoke(-1, getString(R.string.xingdun_error_company_mismatch))
-                                return@launch
+        try {
+            LoginStore.shared.login(
+                this, sdkAppId, userId, userSig,
+                object : CompletionHandler {
+                    override fun onSuccess() {
+                        runOnUiThread {
+                            if (!ownsAuthenticationAttempt(ticket)) return@runOnUiThread
+                            if (!matchesAuthenticatedIdentity(sdkAppId, userId)) {
+                                completeLoginFailure(ticket, -1, getString(R.string.xingdun_error_company_mismatch), onFailure)
+                                return@runOnUiThread
                             }
-                            performLoginAttempt(
-                                sdkAppId = sdkAppId,
-                                userId = userId,
-                                userSig = userSig,
-                                retriesRemaining = retriesRemaining - 1,
-                                onSuccess = onSuccess,
-                                onFailure = onFailure,
-                            )
+                            val session = runCatching { XingDunSessionManager.currentSession() }.getOrNull()
+                            if (session == null) {
+                                completeLoginFailure(ticket, -1, getString(R.string.xingdun_im_connection_failed), onFailure)
+                                return@runOnUiThread
+                            }
+                            lifecycleScope.launch {
+                                try {
+                                    XingDunCallSessionInitializer.initialize(this@BaseLoginActivity, sdkAppId, userId, userSig)
+                                    XingDunPushManager.syncDeviceRegistration()
+                                    XingDunMessageFirstFramePreloader.preload(this@BaseLoginActivity, session)
+                                } catch (error: CancellationException) {
+                                    throw error
+                                } catch (_: Exception) {
+                                    completeLoginFailure(ticket, -1, getString(R.string.xingdun_im_connection_failed), onFailure)
+                                    return@launch
+                                }
+                                // A new login may take ownership while first-frame data is being loaded.
+                                if (!ownsAuthenticationAttempt(ticket)) return@launch
+                                if (!matchesAuthenticatedIdentity(sdkAppId, userId)) {
+                                    completeLoginFailure(ticket, -1, getString(R.string.xingdun_error_company_mismatch), onFailure)
+                                    return@launch
+                                }
+                                MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, userId)
+                                XingDunCredentialRecoveryCoordinator.onAuthenticated()
+                                activeAuthenticationTicket = null
+                                onSuccess?.invoke()
+                                startActivity(Intent(this@BaseLoginActivity, MainActivity::class.java).apply {
+                                    putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HOME)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                                })
+                            }
                         }
-                        return
                     }
-                    if (onFailure != null) {
-                        onFailure(code, desc)
-                    } else {
-                        Toast.makeText(
-                            this@BaseLoginActivity,
-                            getString(R.string.demo_login_failed, desc),
-                            Toast.LENGTH_SHORT
-                        ).show()
+
+                    override fun onFailure(code: Int, desc: String) {
+                        runOnUiThread {
+                            if (!ownsAuthenticationAttempt(ticket)) return@runOnUiThread
+                            if (XingDunInteractiveIMLoginRetryPolicy.shouldRetry(retriesRemaining, code)) {
+                                Log.w(TAG, "IM login failed with code $code; retrying once")
+                                lifecycleScope.launch {
+                                    delay(XingDunInteractiveIMLoginRetryPolicy.RETRY_DELAY_MILLIS)
+                                    if (!ownsAuthenticationAttempt(ticket)) return@launch
+                                    if (!matchesBusinessIdentity(sdkAppId, userId)) {
+                                        completeLoginFailure(ticket, -1, getString(R.string.xingdun_error_company_mismatch), onFailure)
+                                        return@launch
+                                    }
+                                    performLoginAttempt(
+                                        ticket = ticket,
+                                        sdkAppId = sdkAppId,
+                                        userId = userId,
+                                        userSig = userSig,
+                                        retriesRemaining = retriesRemaining - 1,
+                                        onSuccess = onSuccess,
+                                        onFailure = onFailure,
+                                    )
+                                }
+                                return@runOnUiThread
+                            }
+                            completeLoginFailure(ticket, code, desc, onFailure)
+                        }
                     }
                 }
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            runOnUiThread {
+                completeLoginFailure(ticket, -1, getString(R.string.xingdun_im_connection_failed), onFailure)
             }
-        )
+        }
+    }
+
+    private fun matchesBusinessIdentity(sdkAppId: Int, userId: String): Boolean =
+        runCatching { XingDunSessionManager.matchesCurrentIMIdentity(sdkAppId, userId) }.getOrDefault(false)
+
+    private fun matchesAuthenticatedIdentity(sdkAppId: Int, userId: String): Boolean =
+        matchesBusinessIdentity(sdkAppId, userId) &&
+            LoginStore.shared.sdkAppID == sdkAppId && TUILogin.getLoginUser() == userId
+
+    private fun completeLoginFailure(ticket: Long, code: Int, description: String, onFailure: ((Int, String) -> Unit)?) {
+        if (!ownsAuthenticationAttempt(ticket)) return
+        failAuthenticationAttempt(ticket)
+        if (onFailure != null) onFailure(code, description)
+        else Toast.makeText(this, getString(R.string.demo_login_failed, description), Toast.LENGTH_SHORT).show()
     }
 
     protected fun createButtonBackground(colors: ColorTokens): StateListDrawable {

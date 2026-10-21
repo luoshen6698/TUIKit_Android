@@ -140,6 +140,7 @@
     <string name="xingdun_network_tls_failed">Cannot establish a secure connection. Check your device time and network.</string>
     <string name="xingdun_network_permission_denied">Network access is blocked. Allow network access for this app in system settings.</string>
     <string name="xingdun_startup_waiting_network">Connecting is taking longer than expected. Please wait…</string>
+    <string name="xingdun_startup_recovering_session">Unable to reconnect for now. Your account is saved; we will retry automatically when the network is available.</string>
     <string name="xingdun_authentication_failed">Authentication failed.</string>
     <string name="xingdun_auth_rate_limited">Too many authentication attempts. Please try again later.</string>
     <string name="xingdun_login_account_not_registered">This account is not registered in the current enterprise.</string>

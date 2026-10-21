@@ -2,19 +2,24 @@ package io.trtc.tuikit.chat.demo.common
 
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.tencent.qcloud.tuicore.TUILogin
+import com.tencent.imsdk.v2.V2TIMManager
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
-import io.trtc.tuikit.chat.demo.xingdun.session.XingDunMissingIMSessionPolicy
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryState
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunProtectedSessionDestination
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunProtectedSessionPolicy
+import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunStartupActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,22 +50,37 @@ abstract class BaseActivity : AppCompatActivity() {
         if (!requiresLogin) {
             return false
         }
-        val session = XingDunSessionManager.currentSession()
+        val hasStoredSession = XingDunSessionManager.hasStoredSession()
+        val session = runCatching { XingDunSessionManager.currentSession() }.getOrNull()
         val loginUserID = TUILogin.getLoginUser().orEmpty().takeIf(String::isNotBlank)
             ?: LoginStore.shared.loginState.loginUserInfo.value?.userID
         val sdkMatches = session != null && LoginStore.shared.sdkAppID == session.sdkAppId
         val userMatches = session != null && loginUserID == session.timUserId
-        if (!loginUserID.isNullOrBlank() && sdkMatches && userMatches) {
-            return false
+        val recoveryState = XingDunCredentialRecoveryCoordinator.state.value
+        return when (XingDunProtectedSessionPolicy.destination(
+            hasBusinessSession = session != null,
+            hasStoredSession = hasStoredSession,
+            recoveryState = recoveryState,
+            sdkIdentityMatches = sdkMatches && userMatches,
+            imIsLoggedIn = V2TIMManager.getInstance().loginStatus == V2TIMManager.V2TIM_STATUS_LOGINED,
+        )) {
+            XingDunProtectedSessionDestination.CONTENT -> false
+            XingDunProtectedSessionDestination.RECOVERY -> {
+                startActivity(Intent(this, XingDunStartupActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                })
+                // Subclasses check isFinishing immediately after super.onCreate().
+                finish()
+                true
+            }
+            XingDunProtectedSessionDestination.LOGIN -> {
+                finish()
+                if (recoveryState != XingDunCredentialRecoveryState.REDIRECTING) {
+                    XingDunCredentialRecoveryCoordinator.redirectToLogin(R.string.demo_login_expired)
+                }
+                true
+            }
         }
-        if (session != null && XingDunCredentialRecoveryCoordinator.isRefreshing()) return false
-        if (XingDunMissingIMSessionPolicy.canRecover(session != null, loginUserID)) {
-            // Temporary IM loss is not a rejected business session. Renew instead of erasing it.
-            XingDunCredentialRecoveryCoordinator.onIMLoginRequiredAfterWakeup()
-            return false
-        }
-        XingDunCredentialRecoveryCoordinator.redirectToLogin(R.string.demo_login_expired)
-        return true
     }
 
     override fun onStart() {

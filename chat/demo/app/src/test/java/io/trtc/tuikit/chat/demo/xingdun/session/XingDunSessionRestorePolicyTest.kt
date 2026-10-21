@@ -43,7 +43,7 @@ class XingDunSessionRestorePolicyTest {
     }
 
     @Test
-    fun refreshTokenAtExpiryBoundaryIsRejected() {
+    fun refreshTokenAtLocalExpiryBoundaryStillRequiresServerValidation() {
         val expired = session(
             accessExpiresAtMillis = NOW,
             userSigExpiresAtMillis = NOW,
@@ -51,8 +51,40 @@ class XingDunSessionRestorePolicyTest {
         )
 
         assertEquals(
-            XingDunSessionRestorePlan.EXPIRED,
+            XingDunSessionRestorePlan.REFRESH_SESSION,
             XingDunSessionRestorePolicy.plan(expired, NOW, preferCachedCredentials = true),
+        )
+    }
+
+    @Test
+    fun locallyExpiredRefreshCredentialIsNotDiscardedWhenDeviceClockMovesForward() {
+        val locallyExpired = session(
+            accessExpiresAtMillis = NOW,
+            userSigExpiresAtMillis = NOW,
+            refreshExpiresAtMillis = NOW - 1,
+        )
+        assertEquals(
+            XingDunSessionRestorePlan.REFRESH_SESSION,
+            XingDunSessionRestorePolicy.plan(locallyExpired, NOW + 365L * 24 * 60 * 60 * 1000,
+                preferCachedCredentials = false),
+        )
+    }
+
+    @Test
+    fun retainedRefreshCredentialWithoutCachedExpiryStillRequiresServerValidation() {
+        assertEquals(
+            XingDunSessionRestorePlan.REFRESH_SESSION,
+            XingDunSessionRestorePolicy.plan(session(refreshExpiresAtMillis = null), NOW,
+                preferCachedCredentials = true),
+        )
+    }
+
+    @Test
+    fun blankRefreshCredentialCannotRestoreAnExpiredAccessToken() {
+        assertEquals(
+            XingDunSessionRestorePlan.EXPIRED,
+            XingDunSessionRestorePolicy.plan(session(accessExpiresAtMillis = NOW, refreshToken = " "),
+                NOW, preferCachedCredentials = true),
         )
     }
 

@@ -123,4 +123,81 @@ class XingDunCredentialRecoveryStateTest {
         assertEquals(1L, XingDunCredentialRefreshPolicy.delayUntilRefresh(now + lead + 1, now))
         assertEquals(0L, XingDunCredentialRefreshPolicy.delayUntilRefresh(now + lead, now))
     }
+
+    @Test fun verifiedActiveIdentityCanEnterProtectedContent() {
+        assertEquals(XingDunProtectedSessionDestination.CONTENT, protectedDestination())
+    }
+
+    @Test fun cachedIdentityWhileSDKIsNotLoggedInMustRecoverWithoutShowingContent() {
+        assertEquals(XingDunProtectedSessionDestination.RECOVERY, protectedDestination(imIsLoggedIn = false))
+    }
+
+    @Test fun sdkIdentityMismatchWithBusinessSessionRequiresRecoveryNotLogout() {
+        assertEquals(XingDunProtectedSessionDestination.RECOVERY, protectedDestination(sdkIdentityMatches = false))
+    }
+
+    @Test fun authenticationOrRenewalBlocksProtectedContentEvenWhenCachedIdentityMatches() {
+        listOf(XingDunCredentialRecoveryState.AUTHENTICATING, XingDunCredentialRecoveryState.REFRESHING).forEach { state ->
+            assertEquals(XingDunProtectedSessionDestination.RECOVERY, protectedDestination(recoveryState = state))
+            assertEquals(XingDunProtectedSessionDestination.RECOVERY,
+                protectedDestination(hasBusinessSession = false, hasStoredSession = false, recoveryState = state))
+        }
+    }
+
+    @Test fun unreadableStoredSessionGoesToRecoveryWithoutBeingTreatedAsMissing() {
+        assertEquals(XingDunProtectedSessionDestination.RECOVERY,
+            protectedDestination(hasBusinessSession = false, hasStoredSession = true))
+    }
+
+    @Test fun onlyMissingCredentialsOrTerminalRedirectSelectLogin() {
+        assertEquals(XingDunProtectedSessionDestination.LOGIN,
+            protectedDestination(hasBusinessSession = false, hasStoredSession = false))
+        assertEquals(XingDunProtectedSessionDestination.LOGIN,
+            protectedDestination(recoveryState = XingDunCredentialRecoveryState.REDIRECTING))
+    }
+
+    @Test fun oldSDKCallbackCannotApplyAfterAnotherLoginTakesOwnership() {
+        val gate = XingDunCredentialRecoveryGate()
+        val previous = gate.markAuthenticating()
+        val current = gate.markAuthenticating()
+
+        assertFalse(XingDunAuthenticationCallbackPolicy.canApply(previous, previous,
+            authenticationOwned = gate.ownsAuthentication(previous), activityActive = true))
+        assertFalse(XingDunAuthenticationCallbackPolicy.canApply(previous, current,
+            authenticationOwned = true, activityActive = true))
+        assertTrue(gate.ownsAuthentication(current))
+    }
+
+    @Test fun destroyedActivityOrCompletedAuthenticationRejectsLateSDKCallbacks() {
+        val gate = XingDunCredentialRecoveryGate()
+        val ticket = gate.markAuthenticating()
+        assertFalse(XingDunAuthenticationCallbackPolicy.canApply(ticket, ticket,
+            authenticationOwned = gate.ownsAuthentication(ticket), activityActive = false))
+        gate.markAuthenticated()
+        assertFalse(XingDunAuthenticationCallbackPolicy.canApply(ticket, ticket,
+            authenticationOwned = gate.ownsAuthentication(ticket), activityActive = true))
+    }
+
+    @Test fun currentActiveSDKCallbackCanApply() {
+        val gate = XingDunCredentialRecoveryGate()
+        val ticket = gate.markAuthenticating()
+        assertTrue(XingDunAuthenticationCallbackPolicy.canApply(ticket, ticket,
+            authenticationOwned = gate.ownsAuthentication(ticket), activityActive = true))
+    }
+
+    @Test fun loginPageHandsRecoverableCredentialsToStartupExceptExplicitSignOut() {
+        assertTrue(XingDunLaunchRecoveryPolicy.shouldRecover(true, true, false))
+        assertTrue(XingDunLaunchRecoveryPolicy.shouldRecover(true, false, true))
+        assertFalse(XingDunLaunchRecoveryPolicy.shouldRecover(true, false, false))
+        assertFalse(XingDunLaunchRecoveryPolicy.shouldRecover(false, true, true))
+    }
+
+    private fun protectedDestination(
+        hasBusinessSession: Boolean = true,
+        hasStoredSession: Boolean = true,
+        recoveryState: XingDunCredentialRecoveryState = XingDunCredentialRecoveryState.NORMAL,
+        sdkIdentityMatches: Boolean = true,
+        imIsLoggedIn: Boolean = true,
+    ) = XingDunProtectedSessionPolicy.destination(hasBusinessSession, hasStoredSession,
+        recoveryState, sdkIdentityMatches, imIsLoggedIn)
 }

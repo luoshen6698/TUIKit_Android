@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Keeps UserSig renewal on the current task and owns the only terminal-login redirect. */
 internal object XingDunCredentialRecoveryCoordinator {
@@ -111,6 +112,8 @@ internal object XingDunCredentialRecoveryCoordinator {
         mutableState.value = XingDunCredentialRecoveryState.NORMAL
     }
 
+    fun ownsAuthentication(ticket: Long): Boolean = gate.ownsAuthentication(ticket)
+
     fun isRefreshing(): Boolean = gate.current() == XingDunCredentialRecoveryState.REFRESHING
 
     /**
@@ -185,7 +188,11 @@ internal object XingDunCredentialRecoveryCoordinator {
 
     private suspend fun recoverOnCurrentTask(): RecoveryOutcome {
         val previous = XingDunSessionManager.currentSession()
-            ?: return RecoveryOutcome.Terminal(R.string.demo_login_expired)
+            ?: return if (XingDunSessionManager.hasStoredSession()) {
+                RecoveryOutcome.Transient(IOException("Stored session is temporarily unavailable"))
+            } else {
+                RecoveryOutcome.Terminal(R.string.demo_login_expired)
+            }
         val refreshed = when (val result = refreshCredentialWithFallback()) {
             is RefreshResult.Success -> result.session
             is RefreshResult.Terminal -> return RecoveryOutcome.Terminal(result.noticeResId)
@@ -195,7 +202,9 @@ internal object XingDunCredentialRecoveryCoordinator {
             return RecoveryOutcome.Terminal(R.string.xingdun_error_company_mismatch)
         }
 
-        val loginFailure = loginToIM(refreshed)
+        val loginResult = withTimeoutOrNull(30_000L) { loginToIM(refreshed) to Unit }
+            ?: return RecoveryOutcome.Transient(IOException("IM recovery timed out"))
+        val loginFailure = loginResult.first
         if (loginFailure != null) {
             return RecoveryOutcome.Transient(loginFailure)
         }
@@ -210,30 +219,22 @@ internal object XingDunCredentialRecoveryCoordinator {
 
     private suspend fun refreshCredentialWithFallback(): RefreshResult {
         return try {
-            RefreshResult.Success(XingDunSessionManager.refreshIMCredential())
+            // Renew the complete session, not just the one-hour UserSig. This also rolls
+            // the refresh credential while active, without re-authenticating with a password.
+            val session = XingDunSessionManager.restore(
+                preferCachedCredentials = false,
+                retainCachedCredentialsOnFailure = false,
+            ) ?: return if (XingDunSessionManager.hasStoredSession()) {
+                RefreshResult.Transient(IOException("Stored session is temporarily unavailable"))
+            } else {
+                RefreshResult.Terminal(R.string.demo_login_expired)
+            }
+            RefreshResult.Success(session)
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
-            if (isTransient(error)) return RefreshResult.Transient(error)
-            try {
-                val session = XingDunSessionManager.restore(
-                    preferCachedCredentials = false,
-                    retainCachedCredentialsOnFailure = false,
-                ) ?: return RefreshResult.Terminal(R.string.demo_login_expired)
-                RefreshResult.Success(session)
-            } catch (fallbackError: Throwable) {
-                if (fallbackError is CancellationException) throw fallbackError
-                if (isTransient(fallbackError)) {
-                    RefreshResult.Transient(fallbackError)
-                } else {
-                    RefreshResult.Terminal(
-                        if (fallbackError is IllegalArgumentException) {
-                            R.string.xingdun_error_company_mismatch
-                        } else {
-                            R.string.demo_login_expired
-                        }
-                    )
-                }
-            }
+            // Only restore's explicit rejection clears a session. A malformed or
+            // temporarily unavailable response must not revoke local authentication.
+            RefreshResult.Transient(error)
         }
     }
 

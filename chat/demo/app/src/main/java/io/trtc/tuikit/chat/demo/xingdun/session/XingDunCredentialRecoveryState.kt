@@ -84,3 +84,38 @@ internal object XingDunMissingIMSessionPolicy {
     fun canRecover(hasBusinessSession: Boolean, loginUserId: String?): Boolean =
         hasBusinessSession && loginUserId.isNullOrBlank()
 }
+
+internal enum class XingDunProtectedSessionDestination { CONTENT, RECOVERY, LOGIN }
+
+/** An unfinished SDK login must never expose a protected Activity or erase recoverable credentials. */
+internal object XingDunProtectedSessionPolicy {
+    fun destination(
+        hasBusinessSession: Boolean,
+        hasStoredSession: Boolean,
+        recoveryState: XingDunCredentialRecoveryState,
+        sdkIdentityMatches: Boolean,
+        imIsLoggedIn: Boolean,
+    ): XingDunProtectedSessionDestination = when {
+        recoveryState == XingDunCredentialRecoveryState.REDIRECTING -> XingDunProtectedSessionDestination.LOGIN
+        recoveryState == XingDunCredentialRecoveryState.AUTHENTICATING ||
+            recoveryState == XingDunCredentialRecoveryState.REFRESHING -> XingDunProtectedSessionDestination.RECOVERY
+        !hasBusinessSession && !hasStoredSession -> XingDunProtectedSessionDestination.LOGIN
+        hasBusinessSession && sdkIdentityMatches && imIsLoggedIn -> XingDunProtectedSessionDestination.CONTENT
+        else -> XingDunProtectedSessionDestination.RECOVERY
+    }
+}
+
+/** Callback ownership is checked on the main thread before any global login or navigation effect. */
+internal object XingDunAuthenticationCallbackPolicy {
+    fun canApply(
+        expectedTicket: Long,
+        activityTicket: Long?,
+        authenticationOwned: Boolean,
+        activityActive: Boolean,
+    ): Boolean = activityActive && expectedTicket == activityTicket && authenticationOwned
+}
+
+internal object XingDunLaunchRecoveryPolicy {
+    fun shouldRecover(autoRestoreAllowed: Boolean, hasBusinessSession: Boolean, hasStoredSession: Boolean): Boolean =
+        autoRestoreAllowed && (hasBusinessSession || hasStoredSession)
+}

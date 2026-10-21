@@ -1,6 +1,11 @@
 package io.trtc.tuikit.chat.demo.xingdun.launch
 
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
@@ -33,6 +38,7 @@ import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.main.XingDunMessageFirstFramePreloader
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunVersionCheckResult
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunNotificationIntentReader
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
@@ -40,6 +46,7 @@ import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordin
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -62,6 +69,15 @@ class XingDunStartupActivity : AppCompatActivity() {
     private var hasRouted = false
     private var timeoutJob: Job? = null
     private lateinit var startupStatusView: TextView
+    private lateinit var retryButton: Button
+    private val retrySignals = Channel<Unit>(Channel.CONFLATED)
+    private var waitingToRetry = false
+    private var networkCallbackRegistered = false
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            runOnUiThread { if (waitingToRetry) retrySignals.trySend(Unit) }
+        }
+    }
     private var incomingCallLaunch = false
     private var authenticationTicket: Long? = null
     private val startupStartedAt = SystemClock.elapsedRealtime()
@@ -72,6 +88,9 @@ class XingDunStartupActivity : AppCompatActivity() {
         XingDunRouter.markStartupPending()
         setContentView(R.layout.xingdun_activity_startup_loading)
         startupStatusView = findViewById(R.id.xingdun_startup_status)
+        retryButton = findViewById<Button>(R.id.xingdun_startup_retry).apply {
+            setOnClickListener { retrySignals.trySend(Unit) }
+        }
         splashScreen.setKeepOnScreenCondition { false }
 
         if (!XingDunPrivacyConsentStore(noBackupFilesDir).hasConsent()) {
@@ -147,7 +166,37 @@ class XingDunStartupActivity : AppCompatActivity() {
                     // Slow network is not expired authentication. Let the bounded request finish.
                     updateStartupStatus(R.string.xingdun_startup_waiting_network)
                 }
-                prepareAuthenticatedStartup()
+                var failures = 0
+                while (isStartupActive()) {
+                    awaitForeground(Lifecycle.State.STARTED)
+                    waitingToRetry = false
+                    retryButton.visibility = View.GONE
+                    while (retrySignals.tryReceive().isSuccess) { /* Discard a prior retry signal. */ }
+                    try {
+                        prepareAuthenticatedStartup()
+                        break
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        failStartupAuthentication()
+                        if (!isStartupActive() ||
+                            XingDunCredentialRecoveryCoordinator.state.value == XingDunCredentialRecoveryState.REDIRECTING
+                        ) break
+                        // Fail closed while retaining the account. Only a confirmed rejection
+                        // may route to sign-in; a failed connection is not a logout event.
+                        Log.w("XingDunStartup", "stage=session_recovery outcome=retry failure=${error.javaClass.simpleName}")
+                        updateStartupStatus(
+                            (error as? StartupRetryException)?.noticeResId
+                                ?: R.string.xingdun_startup_recovering_session,
+                        )
+                        timeoutJob?.cancel()
+                        waitingToRetry = true
+                        retryButton.visibility = View.VISIBLE
+                        withTimeoutOrNull(XingDunStartupRecoveryPolicy.retryDelayMillis(failures++)) {
+                            retrySignals.receive()
+                        }
+                    }
+                }
             } finally {
                 failStartupAuthentication()
             }
@@ -157,6 +206,7 @@ class XingDunStartupActivity : AppCompatActivity() {
     private suspend fun prepareAuthenticatedStartup() = coroutineScope {
         var enterprise = XingDunSessionManager.currentEnterprise()
         if (enterprise == null) {
+            if (XingDunSessionManager.hasStoredSession()) throw StartupRetryException()
             updateStartupStatus(R.string.xingdun_startup_loading_enterprise)
             enterprise = runCatching { XingDunSessionManager.attemptSimpleEnterprise() }.getOrNull()
         }
@@ -167,6 +217,7 @@ class XingDunStartupActivity : AppCompatActivity() {
         }
 
         if (XingDunSessionManager.currentSession() == null) {
+            if (XingDunSessionManager.hasStoredSession()) throw StartupRetryException()
             routeToAuthentication()
             return@coroutineScope
         }
@@ -193,37 +244,38 @@ class XingDunStartupActivity : AppCompatActivity() {
         }
         val restoredSession = (if (wakeupSession != null) Result.success(wakeupSession)
             else startupResult("restore") { XingDunSessionManager.restore(preferCachedCredentials = true) })
-            .getOrElse { error ->
-                failStartupAuthentication()
-                if (!isStartupActive()) return@coroutineScope
-                routeToAuthentication(XingDunAuthenticationErrorPresenter.login(error))
-                return@coroutineScope
-            }
+            .getOrThrow()
         if (!isStartupActive()) return@coroutineScope
         if (restoredSession == null) {
+            if (XingDunSessionManager.hasStoredSession()) throw StartupRetryException()
             failStartupAuthentication()
             routeToAuthentication(R.string.xingdun_session_expired)
             return@coroutineScope
         }
+        if (authenticationTicket?.let { !XingDunCredentialRecoveryCoordinator.ownsAuthentication(it) } == true) {
+            return@coroutineScope
+        }
 
         updateStartupStatus(R.string.xingdun_connecting_im)
-        val imLoginFailure = if (wakeupSession != null) 0 else loginToIM(restoredSession)
+        val imLoginFailure = if (wakeupSession != null) 0 else {
+            withTimeoutOrNull(IM_LOGIN_TIMEOUT_MILLIS) { loginToIM(restoredSession) }
+                ?: R.string.xingdun_im_connection_failed
+        }
         logStartup("im_ready")
         if (!isStartupActive()) {
             return@coroutineScope
         }
-        if (imLoginFailure != 0) {
-            failStartupAuthentication()
-            routeToAuthentication(imLoginFailure)
+        if (authenticationTicket?.let { !XingDunCredentialRecoveryCoordinator.ownsAuthentication(it) } == true) {
             return@coroutineScope
+        }
+        if (imLoginFailure != 0) {
+            throw StartupRetryException(R.string.xingdun_startup_recovering_session)
         }
         if (!XingDunSessionManager.matchesCurrentIMIdentity(restoredSession.sdkAppId, restoredSession.timUserId) ||
             LoginStore.shared.sdkAppID != restoredSession.sdkAppId ||
             TUILogin.getLoginUser() != restoredSession.timUserId
         ) {
-            LoginStore.shared.logout(null)
-            routeToAuthentication(R.string.xingdun_error_company_mismatch)
-            return@coroutineScope
+            throw StartupRetryException(R.string.xingdun_error_company_mismatch)
         }
 
         MMKV.defaultMMKV().encode(AppConstants.KEY_LOGIN_USER, restoredSession.timUserId)
@@ -269,15 +321,13 @@ class XingDunStartupActivity : AppCompatActivity() {
         if (enterpriseRefreshError != null &&
             !XingDunSessionManager.shouldRetainCachedEnterprise(enterpriseRefreshError)
         ) {
-            XingDunSessionManager.clearEnterpriseSelection()
-            clearStartupValidation()
-            routeToEnterpriseAccess()
-            return@coroutineScope
+            // A changed/unreadable configuration must be revalidated, not erase the account.
+            throw enterpriseRefreshError
         }
-        if (versionResult?.getOrNull()?.hasUpdate == true) {
-            clearStartupValidation()
-            routeToAuthentication()
-            return@coroutineScope
+        versionResult?.getOrNull()?.takeIf { it.hasUpdate }?.let {
+            if (!awaitUpdateDecision(it)) {
+                throw StartupRetryException(R.string.xingdun_force_update)
+            }
         }
         if (!validationIsFresh && enterpriseResult.isSuccess && versionResult?.isSuccess == true) {
             markStartupValidationFresh(enterprise.companyCode)
@@ -287,7 +337,90 @@ class XingDunStartupActivity : AppCompatActivity() {
         updateStartupStatus(R.string.xingdun_startup_loading_messages)
         XingDunMessageFirstFramePreloader.preload(this@XingDunStartupActivity, restoredSession)
         awaitIncomingCallIfPresent(restoredSession)
+        // Do not pull an app back over the user's foreground app after a slow recovery.
+        awaitForeground(Lifecycle.State.RESUMED)
+        if (!isStartupActive() || !XingDunSessionManager.matchesCurrentIMIdentity(
+                restoredSession.sdkAppId, restoredSession.timUserId,
+            ) || LoginStore.shared.sdkAppID != restoredSession.sdkAppId ||
+            TUILogin.getLoginUser() != restoredSession.timUserId
+        ) {
+            if (isStartupActive()) throw StartupRetryException()
+            return@coroutineScope
+        }
         routeToHome()
+    }
+
+    private suspend fun awaitUpdateDecision(result: XingDunVersionCheckResult): Boolean {
+        val version = result.latestVersion ?: return !result.isForce
+        val uri = version.downloadUrl?.trim()?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            ?.takeIf { it.scheme == "https" && !it.host.isNullOrBlank() }
+        if (uri == null) {
+            if (result.isForce) throw StartupRetryException(R.string.xingdun_force_update_url_invalid)
+            return true
+        }
+        awaitForeground(Lifecycle.State.RESUMED)
+        return suspendCancellableCoroutine { continuation ->
+            fun complete(proceed: Boolean) {
+                if (continuation.isActive) continuation.resume(proceed)
+            }
+            val dialog = AlertDialog.Builder(this)
+                .setTitle(if (result.isForce) R.string.xingdun_force_update else R.string.xingdun_update_available)
+                .setMessage(listOfNotNull(version.versionName ?: version.versionCode, version.updateLog)
+                    .joinToString("\n\n"))
+                .setCancelable(!result.isForce)
+                .setPositiveButton(R.string.xingdun_update_now) { _, _ ->
+                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+                    complete(!result.isForce)
+                }
+                .apply {
+                    if (!result.isForce) setNegativeButton(R.string.xingdun_update_later) { _, _ -> complete(true) }
+                }
+                .setOnCancelListener { complete(!result.isForce) }
+                .create()
+            continuation.invokeOnCancellation { runOnUiThread { dialog.dismiss() } }
+            dialog.show()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val manager = getSystemService(ConnectivityManager::class.java)
+        networkCallbackRegistered = runCatching {
+            manager.registerNetworkCallback(
+                NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(),
+                networkCallback,
+            )
+            true
+        }.getOrDefault(false)
+        if (waitingToRetry) retrySignals.trySend(Unit)
+    }
+
+    override fun onStop() {
+        if (networkCallbackRegistered) {
+            runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(networkCallback) }
+            networkCallbackRegistered = false
+        }
+        super.onStop()
+    }
+
+    private class StartupRetryException(
+        @StringRes val noticeResId: Int = R.string.xingdun_startup_recovering_session,
+    ) : Exception()
+
+    private suspend fun awaitForeground(minimum: Lifecycle.State) {
+        if (lifecycle.currentState.isAtLeast(minimum)) return
+        suspendCancellableCoroutine<Unit> { continuation ->
+            val observer = object : LifecycleEventObserver {
+                override fun onStateChanged(source: androidx.lifecycle.LifecycleOwner, event: Lifecycle.Event) {
+                    if (source.lifecycle.currentState.isAtLeast(minimum)) {
+                        source.lifecycle.removeObserver(this)
+                        if (continuation.isActive) continuation.resume(Unit)
+                    }
+                }
+            }
+            continuation.invokeOnCancellation { runOnUiThread { lifecycle.removeObserver(observer) } }
+            lifecycle.addObserver(observer)
+        }
     }
 
     private fun hasIncomingCall(session: XingDunStoredSession): Boolean {
@@ -406,10 +539,12 @@ class XingDunStartupActivity : AppCompatActivity() {
         hasRouted = true
         timeoutJob?.cancel()
         timeoutJob = null
+        waitingToRetry = false
         startActivity(target)
     }
 
-    private fun isStartupActive(): Boolean = !hasRouted && !isFinishing && !isDestroyed
+    private fun isStartupActive(): Boolean = !hasRouted && !isFinishing && !isDestroyed &&
+        XingDunCredentialRecoveryCoordinator.state.value != XingDunCredentialRecoveryState.REDIRECTING
 
     private fun updateStartupStatus(@StringRes messageResId: Int) {
         if (::startupStatusView.isInitialized) startupStatusView.setText(
@@ -453,6 +588,7 @@ class XingDunStartupActivity : AppCompatActivity() {
 
     companion object {
         private const val STARTUP_TIMEOUT_MILLIS = 15_000L
+        private const val IM_LOGIN_TIMEOUT_MILLIS = 30_000L
         private const val STARTUP_VALIDATION_TTL_MILLIS = 5 * 60 * 1000L
         private const val KEY_STARTUP_VALIDATION_SCOPE = "xingdun.startup.validation.scope"
         private const val KEY_STARTUP_VALIDATED_AT = "xingdun.startup.validation.validated_at"

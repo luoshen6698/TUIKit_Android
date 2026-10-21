@@ -24,7 +24,7 @@ import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunQRCodeRoute
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunAccountDeletionReceiptStore
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
-import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunLaunchRecoveryPolicy
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import android.util.Log
@@ -48,6 +48,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
     private lateinit var switchMode: Button
     private lateinit var forgotPassword: Button
     private var isLoading = false
+    private var recoveryRouted = false
     private var resolvedBootstrap: XingDunBootstrapConfiguration? = null
     private val initialNoticeResId: Int by lazy { intent.getIntExtra(EXTRA_NOTICE_RES_ID, 0) }
     private val autoRestoreAllowed: Boolean by lazy {
@@ -63,6 +64,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent?.data == null && routeToRecoveryIfSessionExists(autoRestoreAllowed)) return
         setContentView(R.layout.xingdun_activity_launch)
         bindViews()
         if (!applySelectedEnterprise()) return
@@ -148,28 +150,22 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
     }
 
     private fun restoreSession() {
-        if (XingDunSessionManager.currentSession() == null) {
-            setLoading(false, initialNoticeResId.takeIf { it != 0 }?.let(::getString).orEmpty())
-            return
-        }
-        setLoading(true, getString(R.string.xingdun_restoring_session))
-        XingDunCredentialRecoveryCoordinator.onAuthenticationStarted()
-        lifecycleScope.launch {
-            runCatching { XingDunSessionManager.restore() }
-                .onSuccess { session ->
-                    if (session == null) {
-                        XingDunCredentialRecoveryCoordinator.onAuthenticationFailed()
-                        setLoading(false, getString(R.string.xingdun_session_expired))
-                    } else {
-                        loginToIM(session)
-                    }
-                }
-                .onFailure { error ->
-                    if (error is CancellationException) throw error
-                    XingDunCredentialRecoveryCoordinator.onAuthenticationFailed()
-                    setLoading(false, getString(XingDunAuthenticationErrorPresenter.login(error)))
-                }
-        }
+        if (routeToRecoveryIfSessionExists()) return
+        setLoading(false, initialNoticeResId.takeIf { it != 0 }?.let(::getString).orEmpty())
+    }
+
+    private fun routeToRecoveryIfSessionExists(allowRecovery: Boolean = true): Boolean {
+        if (recoveryRouted) return true
+        val hasStoredSession = XingDunSessionManager.hasStoredSession()
+        val hasBusinessSession = !hasStoredSession &&
+            runCatching { XingDunSessionManager.currentSession() != null }.getOrDefault(false)
+        if (!XingDunLaunchRecoveryPolicy.shouldRecover(allowRecovery, hasBusinessSession, hasStoredSession)) return false
+        recoveryRouted = true
+        startActivity(Intent(this, XingDunStartupActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        })
+        finish()
+        return true
     }
 
     private fun checkVersionThenRestore() {
@@ -244,28 +240,33 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
             return
         }
         setLoading(true, getString(R.string.xingdun_signing_in))
-        XingDunCredentialRecoveryCoordinator.onAuthenticationStarted()
+        val ticket = beginAuthenticationAttempt()
         lifecycleScope.launch {
             val result = runCatching { XingDunSessionManager.login(company, account, passwordValue) }
-            result.onSuccess(::loginToIM).onFailure { error ->
+            result.onSuccess { session ->
+                if (ownsAuthenticationAttempt(ticket)) loginToIM(session, ticket)
+            }.onFailure { error ->
                 if (error is CancellationException) throw error
-                XingDunCredentialRecoveryCoordinator.onAuthenticationFailed()
+                if (!ownsAuthenticationAttempt(ticket)) return@onFailure
+                failAuthenticationAttempt(ticket)
                 Log.w("XingDunLogin", "stage=business failure=${error.javaClass.simpleName}")
+                if (routeToRecoveryIfSessionExists()) return@onFailure
                 setLoading(false, getString(XingDunAuthenticationErrorPresenter.login(error)))
             }
         }
     }
 
-    private fun loginToIM(session: XingDunStoredSession) {
+    private fun loginToIM(session: XingDunStoredSession, ticket: Long) {
         setLoading(true, getString(R.string.xingdun_connecting_im))
         performLogin(
             sdkAppId = session.sdkAppId,
             userId = session.timUserId,
             userSig = session.userSig,
             retryTransientFailureOnce = true,
+            authenticationTicket = ticket,
             onFailure = { code, description ->
-                XingDunCredentialRecoveryCoordinator.onAuthenticationFailed()
                 Log.w("XingDunLogin", "stage=interactive_im code=$code")
+                if (routeToRecoveryIfSessionExists()) return@performLogin
                 setLoading(false, getString(XingDunAuthenticationErrorPresenter.im(code, description)))
             }
         )

@@ -9,6 +9,8 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:gravity="center"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
         android:orientation="vertical">
 
         <ProgressBar
@@ -27,5 +29,13 @@
             android:text="@string/xingdun_startup_checking_account"
             android:textColor="#536A66"
             android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/xingdun_startup_retry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/xingdun_retry"
+            android:visibility="gone" />
     </LinearLayout>
 </FrameLayout>

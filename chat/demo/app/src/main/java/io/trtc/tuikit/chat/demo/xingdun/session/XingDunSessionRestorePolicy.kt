@@ -19,8 +19,9 @@ internal object XingDunSessionRestorePolicy {
         preferCachedCredentials: Boolean,
     ): XingDunSessionRestorePlan {
         val accessIsUsable = session.accessExpiresAtMillis > nowMillis + EXPIRY_SAFETY_MILLIS
-        val canRefreshSession = !session.refreshToken.isNullOrBlank() &&
-            (session.refreshExpiresAtMillis ?: 0L) > nowMillis
+        // Local expiry estimates can be stale or affected by a changed device clock.
+        // Only the server can accept or reject the retained refresh credential.
+        val canRefreshSession = !session.refreshToken.isNullOrBlank()
         return when {
             canRefreshSession -> XingDunSessionRestorePlan.REFRESH_SESSION
             // A locally unexpired UserSig does not prove ownership after another phone logs in.
