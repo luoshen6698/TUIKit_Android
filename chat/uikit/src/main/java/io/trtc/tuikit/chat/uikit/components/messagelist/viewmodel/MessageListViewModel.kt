@@ -138,7 +138,8 @@ class MessageListViewModel(
         messageSource = mediaPreviewMessageSource,
         downloadResource = ::downloadMessageMedia,
         enableBoundaryLoading = enableMediaPreviewBoundaryLoading,
-        reverseMessageOrderForPreview = false
+        reverseMessageOrderForPreview = false,
+        conversationID = conversationID.takeIf { enableMediaPreviewBoundaryLoading }
     )
     private val forwardCoordinator by lazy {
         MessageForwardCoordinator(
@@ -156,13 +157,14 @@ class MessageListViewModel(
     val messageList: StateFlow<List<MessageInfo>> = combine(
         messageListState.messageList,
         AlbumPickerProcessingMessageStore.messagesByConversation,
-        hiddenResendingMessageIds
-    ) { list, processingMessagesByConversation, hiddenMessageIds ->
+        hiddenResendingMessageIds,
+        io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility.revision,
+    ) { list, processingMessagesByConversation, hiddenMessageIds, _ ->
         val processingMessages = processingMessagesByConversation[conversationID].orEmpty()
         val visibleMessages = AlbumPickerProcessingMessageStore.mergeWithMessages(list, processingMessages).filterNot { message ->
             message.msgID in hiddenMessageIds
         }
-        displayMapper.map(visibleMessages)
+        displayMapper.map(io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility.redactQuotes(conversationID, visibleMessages))
     }
         .stateIn(
             scope = viewModelScope,

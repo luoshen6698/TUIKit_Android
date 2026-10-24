@@ -24,6 +24,7 @@ internal object XingDunConversationPreviewResolver {
         ConversationPreviewMessageRegistry.setProvider(
             object : ConversationPreviewMessageProvider {
                 override fun shouldOverride(conversation: ConversationInfo): Boolean =
+                    XingDunC2CDeletionRepository.isDeleted(conversation.conversationID, conversation.lastMessage?.msgID.orEmpty()) ||
                     XingDunConversationPreviewPolicy.shouldSkipInConversationList(
                         conversation.lastMessage?.let { XingDunCustomMessageParser.parse(it) },
                     )
@@ -76,6 +77,7 @@ internal object XingDunConversationPreviewResolver {
                     val preview = store.state.messageList.value
                         .asSequence()
                         .filterNot { it.msgID == conversation.lastMessage?.msgID }
+                        .filterNot { XingDunC2CDeletionRepository.isDeleted(conversation.conversationID, it.msgID) }
                         .filterNot { message ->
                             XingDunCustomMessageParser.parse(message).let { custom ->
                                 XingDunConversationPreviewPolicy.shouldSkipInConversationList(custom) ||
@@ -98,5 +100,5 @@ internal object XingDunConversationPreviewResolver {
     }
 
     private fun cacheKey(conversation: ConversationInfo): String =
-        "${conversation.conversationID}:${conversation.lastMessage?.msgID.orEmpty()}"
+        "${XingDunC2CDeletionRepository.accountKey()}:${conversation.conversationID}:${conversation.lastMessage?.msgID.orEmpty()}"
 }

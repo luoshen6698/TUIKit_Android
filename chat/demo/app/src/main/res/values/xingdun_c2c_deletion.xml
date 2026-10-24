@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="xingdun_c2c_delete_action">Delete for both</string>
+    <string name="xingdun_c2c_delete_for_me">Delete for me</string>
+    <string name="xingdun_c2c_delete_confirm_title">Delete this message for both?</string>
+    <string name="xingdun_c2c_delete_confirm_message">This message will be removed from both sides of this chat. This cannot be undone.</string>
+    <string name="xingdun_c2c_delete_success">Message deleted for both</string>
+    <string name="xingdun_c2c_delete_failed">Deletion could not be confirmed. Reconnect and try again; the same message will be checked first.</string>
+</resources>

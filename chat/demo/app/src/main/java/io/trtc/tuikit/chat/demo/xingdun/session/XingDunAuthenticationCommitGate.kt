@@ -7,6 +7,9 @@ internal class XingDunAuthenticationCommitGate {
     private var generation = 0L
 
     @Synchronized
+    fun currentGeneration(): Long = generation
+
+    @Synchronized
     fun begin(): Long = ++generation
 
     @Synchronized

@@ -38,6 +38,10 @@ internal object XingDunConversationPreviewCleaner {
         values: Map<String, String>,
         controlMessage: V2TIMMessage,
     ) {
+        if (conversationID.startsWith("c2c_")) {
+            XingDunC2CDeletionSync.onHint(context, conversationID, values, controlMessage)
+            return
+        }
         XingDunAutoDeleteRepository.applyRemoteDeletion(context, conversationID, values)
         removeControlEnvelope(context, conversationID, values, controlMessage)
     }
@@ -98,6 +102,10 @@ internal object XingDunConversationPreviewCleaner {
             return
         }
         if (!XingDunConversationPreviewPolicy.shouldRemoveFromLocalHistory(custom)) return
+        if (conversation.conversationID.startsWith("c2c_")) {
+            XingDunC2CDeletionSync.onHint(context, conversation.conversationID, custom.values, controlMessage)
+            return
+        }
         XingDunAutoDeleteRepository.applyRemoteDeletion(context, conversation.conversationID, custom.values)
         removeControlEnvelope(context, conversation.conversationID, custom.values, controlMessage)
     }

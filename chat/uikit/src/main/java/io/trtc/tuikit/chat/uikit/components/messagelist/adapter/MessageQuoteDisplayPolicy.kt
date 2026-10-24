@@ -26,13 +26,6 @@ internal object MessageQuoteDisplayPolicy {
                 isStatusText = true
             )
         }
-        if (payload == null) {
-            return MessageQuoteDisplayData(
-                senderName = senderName,
-                contentText = PARTIAL_CONTENT,
-                isPartial = true
-            )
-        }
         when (quoteInfo.status) {
             MessageStatus.DELETED -> {
                 if (!preferSnapshotContent) {
@@ -44,6 +37,13 @@ internal object MessageQuoteDisplayPolicy {
                 }
             }
             else -> Unit
+        }
+        if (payload == null) {
+            return MessageQuoteDisplayData(
+                senderName = senderName,
+                contentText = PARTIAL_CONTENT,
+                isPartial = true
+            )
         }
 
         return MessageQuoteDisplayData(

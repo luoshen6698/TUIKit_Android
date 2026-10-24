@@ -17,8 +17,8 @@ internal object XingDunPinnedMessagePolicy {
     fun shouldApply(currentVersion: Int?, incomingVersion: Int): Boolean =
         incomingVersion > 0 && (currentVersion == null || incomingVersion >= currentVersion)
 
-    fun visiblePins(items: List<XingDunPinnedMessage>): List<XingDunPinnedMessage> =
-        items.filter { it.isPinned && it.messageId.isNotBlank() }
+    fun visiblePins(items: List<XingDunPinnedMessage>, deletedIDs: Set<String> = emptySet()): List<XingDunPinnedMessage> =
+        items.filter { it.isPinned && it.messageId.isNotBlank() && it.messageId !in deletedIDs }
 
     fun readToken(pin: XingDunPinnedMessage): String = "${pin.messageId}#${pin.version}"
 

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="xingdun_c2c_delete_action">为双方删除</string>
+    <string name="xingdun_c2c_delete_for_me">为自己删除</string>
+    <string name="xingdun_c2c_delete_confirm_title">为双方删除这条消息？</string>
+    <string name="xingdun_c2c_delete_confirm_message">这条消息会从双方的当前对话中移除，删除后无法恢复。</string>
+    <string name="xingdun_c2c_delete_success">已为双方删除</string>
+    <string name="xingdun_c2c_delete_failed">未能确认删除结果。请联网后重试，重试时会先核对同一条消息。</string>
+</resources>

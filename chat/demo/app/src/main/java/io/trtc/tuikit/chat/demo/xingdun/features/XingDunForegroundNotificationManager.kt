@@ -108,9 +108,12 @@ internal object XingDunForegroundNotificationManager {
         if (::appContext.isInitialized) return
         appContext = application.applicationContext
         notifications = XingDunMessageNotifications(appContext).also { it.initializeChannels() }
+        XingDunC2CDeletionRepository.initialize(appContext)
+        XingDunC2CDeletionSync.initialize(appContext)
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 synchronized(this@XingDunForegroundNotificationManager) { startedActivityCount += 1 }
+                XingDunC2CDeletionSync.refresh(appContext)
             }
 
             override fun onActivityStopped(activity: Activity) {

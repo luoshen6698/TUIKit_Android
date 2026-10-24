@@ -31,7 +31,17 @@ internal object XingDunPinnedMessageRepository {
     }
 
     suspend fun load(context: Context, conversationID: String, force: Boolean = false): XingDunPinnedMessagePage {
-        if (conversationID.startsWith("c2c_")) return directPage(context, conversationID)
+        if (conversationID.startsWith("c2c_")) {
+            val account = XingDunC2CDeletionRepository.accountKey()
+            val pin = directPin(context, conversationID)
+            if (pin != null && XingDunC2CDeletionPolicy.validID(pin.messageId)) {
+                try { XingDunC2CDeletionRepository.check(context, conversationID, setOf(pin.messageId)) }
+                catch (error: kotlinx.coroutines.CancellationException) { throw error }
+                catch (_: Exception) { /* Known tombstones still filter the persisted snapshot offline. */ }
+            }
+            return if (account == XingDunC2CDeletionRepository.accountKey()) directPage(context, conversationID)
+                else XingDunPinnedMessagePage()
+        }
         if (!force) cached(conversationID)?.let { return it }
         return loadMutex.withLock {
             if (!force) cached(conversationID)?.let { return@withLock it }
@@ -126,7 +136,8 @@ internal object XingDunPinnedMessageRepository {
 
     fun unreadPins(context: Context, conversationID: String, items: List<XingDunPinnedMessage>): List<XingDunPinnedMessage> {
         val tokens = readTokens(context, conversationID)
-        return XingDunPinnedMessagePolicy.visiblePins(items).filterNot { XingDunPinnedMessagePolicy.readToken(it) in tokens }
+        val deleted = if (conversationID.startsWith("c2c_")) XingDunC2CDeletionRepository.deletedIDs(context, conversationID) else emptySet()
+        return XingDunPinnedMessagePolicy.visiblePins(items, deleted).filterNot { XingDunPinnedMessagePolicy.readToken(it) in tokens }
     }
 
     fun markRead(context: Context, pin: XingDunPinnedMessage) {
@@ -145,6 +156,7 @@ internal object XingDunPinnedMessageRepository {
         return runCatching { gson.fromJson(raw, XingDunPinnedMessage::class.java) }
             .getOrNull()
             ?.takeIf { it.conversationId == conversationID && it.isPinned && it.messageId.isNotBlank() }
+            ?.takeUnless { it.messageId in XingDunC2CDeletionRepository.deletedIDs(context, conversationID) }
     }
 
     fun isPinned(context: Context, conversationID: String, messageID: String): Boolean =
@@ -169,6 +181,12 @@ internal object XingDunPinnedMessageRepository {
 
     fun clearTenantCache() {
         cache.clear()
+    }
+
+    fun onC2CDeletion(conversationID: String) {
+        if (!conversationID.startsWith("c2c_")) return
+        cacheKey(conversationID)?.let(cache::remove)
+        notifyChanged(conversationID)
     }
 
     private fun directPage(context: Context, conversationID: String): XingDunPinnedMessagePage {

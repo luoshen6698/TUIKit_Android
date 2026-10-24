@@ -2,7 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <application>
+    <application android:networkSecurityConfig="@xml/xingdun_c2c_fixture_network_security">
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunC2CDeletionFixtureActivity"
+            android:exported="true"
+            android:theme="@style/Chat_UIKit_Theme" />
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunC2CDeletionEnglishFixtureActivity"
+            android:exported="true"
+            android:theme="@style/Chat_UIKit_Theme" />
         <!-- Debug-only ADB entry for device UI verification without test-account credentials. -->
         <activity
             android:name="io.trtc.tuikit.chat.demo.chat.XingDunC2CChatSettingPreviewActivity"

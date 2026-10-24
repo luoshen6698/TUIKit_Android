@@ -142,6 +142,7 @@ class ImageViewerActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        session?.isVisible = true
         if (shouldResumeInlineVideoPlayback) {
             currentVideoPageView()?.resumeInlinePlayback()
             shouldResumeInlineVideoPlayback = false
@@ -149,6 +150,7 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        session?.isVisible = false
         shouldResumeInlineVideoPlayback = currentVideoPageView()?.pauseInlinePlaybackForHostStop() == true
         super.onStop()
     }
@@ -367,6 +369,7 @@ class ImageViewerActivity : AppCompatActivity() {
             "playableVideos=${mediaList.count { it.type == MEDIA_TYPE_VIDEO && it.videoData != null }}")
         adapter.submitItems(mediaList)
         if (mediaList.isEmpty()) {
+            if (current?.isCloseRequested == true) { finish(); return }
             currentPage = 0
             currentLogicalItem = null
             updateSaveButtonVisibility()

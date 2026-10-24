@@ -39,6 +39,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 /** Pinned-message list aligned with the active iOS sheet. */
 open class XingDunPinnedMessagesActivity : BaseActivity() {
@@ -53,6 +56,8 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
     private var canManage = false
     private var isLoading = false
     private var isUpdating = false
+    private var isChecking = false
+    private var deletionRefreshJob: Job? = null
 
     private lateinit var root: LinearLayout
     private lateinit var header: LinearLayout
@@ -100,6 +105,25 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
         activityScope?.cancel()
         activityScope = null
         super.onDestroy()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!isDebugPreview && conversationID.startsWith("c2c_")) {
+            deletionRefreshJob?.cancel()
+            deletionRefreshJob = activityScope?.launch {
+                while (isActive) {
+                    delay(15_000)
+                    load(force = true)
+                }
+            }
+        }
+    }
+
+    override fun onPause() {
+        deletionRefreshJob?.cancel()
+        deletionRefreshJob = null
+        super.onPause()
     }
 
     private fun bindViews() {
@@ -157,7 +181,8 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
     }
 
     private fun load(force: Boolean = false) {
-        if (isLoading || isUpdating) return
+        if (isChecking || isUpdating) return
+        isChecking = true
         XingDunPinnedMessageRepository.cached(conversationID)?.let {
             page = it
             render()
@@ -168,10 +193,12 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
             runCatching { XingDunPinnedMessageRepository.load(this@XingDunPinnedMessagesActivity, conversationID, force) }
                 .onSuccess {
                     page = it
+                    isChecking = false
                     isLoading = false
                     render()
                 }
                 .onFailure {
+                    isChecking = false
                     isLoading = false
                     showError(R.string.xingdun_pinned_load_failed)
                 }

@@ -60,6 +60,16 @@ object XingDunSessionManager {
 
     fun currentSession(): XingDunStoredSession? = if (::store.isInitialized) store.loadBoundSession() else null
 
+    internal fun currentAuthenticationGeneration(): Long? =
+        if (currentSession() != null) authenticationCommitGate.currentGeneration() else null
+
+    internal fun commitIfAuthenticationGeneration(generation: Long, action: () -> Unit) {
+        authenticationCommitGate.commit(generation) {
+            check(currentSession() != null) { "Session ended" }
+            action()
+        }
+    }
+
     fun hasStoredSession(): Boolean = ::store.isInitialized && store.hasStoredSession()
 
     fun currentEnterprise(): XingDunBootstrapConfiguration? {

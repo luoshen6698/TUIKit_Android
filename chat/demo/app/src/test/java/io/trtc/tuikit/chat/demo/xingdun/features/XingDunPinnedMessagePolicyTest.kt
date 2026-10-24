@@ -27,6 +27,15 @@ class XingDunPinnedMessagePolicyTest {
         assertFalse(XingDunPinnedMessagePolicy.shouldApply(4, 3))
     }
 
+    @Test fun `durable C2C tombstones suppress persisted pinned snapshots after restart and repeated checks`() {
+        val deleted = XingDunPinnedMessage(messageId = "deleted", isPinned = true)
+        val retained = XingDunPinnedMessage(messageId = "retained", isPinned = true)
+        repeat(3) {
+            assertEquals(listOf(retained), XingDunPinnedMessagePolicy.visiblePins(listOf(deleted, retained), setOf("deleted")))
+        }
+        assertEquals(listOf(deleted, retained), XingDunPinnedMessagePolicy.visiblePins(listOf(deleted, retained)))
+    }
+
     @Test fun `read token is version aware so repinned server message becomes visible`() {
         assertEquals(
             "m1#4",

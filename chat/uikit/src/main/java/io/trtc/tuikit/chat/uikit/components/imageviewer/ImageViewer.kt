@@ -60,6 +60,15 @@ object ImageViewer {
         internal val videoOverrides = mutableMapOf<String, Any>()
         internal var isClosed: Boolean = false
             private set
+        internal var isCloseRequested: Boolean = false
+            private set
+        internal var isVisible: Boolean = false
+
+        internal fun requestClose() {
+            if (isClosed) return
+            isCloseRequested = true
+            submitMediaList(emptyList())
+        }
 
         fun submitMediaList(list: List<ImageElement>) {
             if (isClosed) {

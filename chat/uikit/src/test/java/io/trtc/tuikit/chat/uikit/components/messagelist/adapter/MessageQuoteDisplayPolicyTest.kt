@@ -81,4 +81,12 @@ class MessageQuoteDisplayPolicyTest {
             )
         )
     }
+
+    @Test fun redactedDeletedQuoteUsesExistingLocalizedDeletedLabelWithoutPayload() {
+        val displayData = MessageQuoteDisplayPolicy.resolve(
+            deletedTextQuote("private").copy(messagePayload = null), labels)
+        assertEquals("deleted", displayData.contentText)
+        assertTrue(displayData.isStatusText)
+        assertFalse(displayData.isPartial)
+    }
 }

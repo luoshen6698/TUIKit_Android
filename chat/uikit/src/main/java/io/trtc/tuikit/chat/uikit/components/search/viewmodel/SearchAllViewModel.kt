@@ -52,9 +52,12 @@ class SearchAllViewModel internal constructor(
         val messageSource = combine(
             state.messageResults,
             state.messageResultTotalCount,
-            state.hasMoreMessageResults
-        ) { results, totalCount, hasMore ->
-            SearchCategory(SearchType.MESSAGE, results.take(3), hasMore || results.size > 3, totalCount)
+            state.hasMoreMessageResults,
+            SearchMessageVisibility.revision
+        ) { results, totalCount, hasMore, _ ->
+            val visible = SearchMessageVisibility.filter(results)
+            SearchCategory(SearchType.MESSAGE, visible.take(3), hasMore || visible.size > 3,
+                (totalCount - (results.sumOf { it.messageList.size } - visible.sumOf { it.messageList.size })).coerceAtLeast(0))
         }
 
         viewModelScope.launch {

@@ -11,6 +11,13 @@ import io.trtc.tuikit.atomicxcore.api.message.MessageLoadDirection
 import io.trtc.tuikit.atomicxcore.api.message.MessageType
 import io.trtc.tuikit.atomicxcore.api.message.VideoMessagePayload
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
+import io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility
 
 private data class ImageViewerMediaEntry(
     val messageId: String,
@@ -19,34 +26,71 @@ private data class ImageViewerMediaEntry(
 
 @Suppress("UNUSED_PARAMETER")
 internal class MessageMediaPreviewController(
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
     private val messageSource: MessageMediaPreviewMessageSource,
     private val downloadResource: (MessageInfo, MessageMediaFileType, CompletionHandler) -> Unit,
     private val enableBoundaryLoading: Boolean = true,
     private val reverseMessageOrderForPreview: Boolean = true,
     private val canPlayDirectlyByPath: (String) -> Boolean = {
         MessageVideoPlaybackController.canPlayDirectlyByPath(it)
-    }
+    },
+    private val conversationID: String? = null,
 ) {
     private var activeImageViewerSession: ImageViewer.Session? = null
+    private val deletionGate = MessageMediaDeletionGate()
+    private var checkedMediaMessages = emptyList<MessageInfo>()
+    private var deletionRefreshJob: Job? = null
+    private val checksDeletions get() = conversationID?.startsWith("c2c_") == true
+
+    init {
+        if (checksDeletions) scope.launch {
+            SearchMessageVisibility.revision.collect {
+                if (deletionGate.shouldClose(::isDeleted)) clear()
+            }
+        }
+    }
+
+    private fun isDeleted(id: String): Boolean = conversationID?.let {
+        SearchMessageVisibility.isDeleted(it, id)
+    } == true
+
+    private fun authorizePage(messages: List<MessageInfo>, completion: (List<MessageInfo>) -> Unit) {
+        if (!checksDeletions) { completion(messages); return }
+        scope.launch {
+            try { completion(SearchMessageVisibility.authoritativeMessages(requireNotNull(conversationID), messages)) }
+            catch (error: CancellationException) { throw error }
+            catch (_: Exception) { completion(emptyList()) }
+        }
+    }
+
+    private fun currentAuthorizedMediaMessages(): List<MessageInfo> = if (checksDeletions)
+        checkedMediaMessages.filterNot { isDeleted(it.msgID) } else messageSource.currentMediaMessages()
 
     fun showImage(context: Context, messageInfo: MessageInfo) {
+        clear()
+        val token = deletionGate.begin(messageInfo.msgID)
         try {
             messageSource.loadInitialMediaMessages(messageInfo) { messages ->
-                openImageViewer(messages, messageInfo)
+                authorizePage(messages) { checked ->
+                    if (deletionGate.isCurrent(token) && !isDeleted(messageInfo.msgID)) {
+                        checkedMediaMessages = checked
+                        openImageViewer(checked, messageInfo, token)
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error showing media", e)
         }
     }
 
-    private fun openImageViewer(messages: List<MessageInfo>, messageInfo: MessageInfo) {
+    private fun openImageViewer(messages: List<MessageInfo>, messageInfo: MessageInfo, token: Long) {
         try {
             val mediaEntries = buildImageViewerMediaEntries(messages)
             if (mediaEntries.isEmpty()) {
                 Log.w(TAG, "No media data available to show")
                 return
             }
+            if (checksDeletions && mediaEntries.none { it.messageId == messageInfo.msgID }) return
             val initialIndex = mediaEntries.indexOfFirst { it.messageId == messageInfo.msgID }
                 .takeIf { it >= 0 } ?: 0
             var viewerSession: ImageViewer.Session? = null
@@ -57,9 +101,29 @@ internal class MessageMediaPreviewController(
                 onEventTriggered = eventHandler
             )
             activeImageViewerSession = viewerSession
+            deletionGate.bind(token, mediaEntries.map { it.messageId }.toSet())
             viewerSession?.addOnClosedListener {
                 if (activeImageViewerSession === viewerSession) {
                     activeImageViewerSession = null
+                    deletionGate.invalidate()
+                    deletionRefreshJob?.cancel()
+                }
+            }
+            if (checksDeletions && viewerSession != null) {
+                deletionRefreshJob = scope.launch {
+                    while (isActive && activeImageViewerSession === viewerSession && !viewerSession.isClosed) {
+                        delay(15_000)
+                        if (!viewerSession.isVisible) continue
+                        val ids = checkedMediaMessages.map { it.msgID }.toSet()
+                        val checked = try {
+                            SearchMessageVisibility.authoritativeMessages(requireNotNull(conversationID), checkedMediaMessages)
+                        } catch (error: CancellationException) { throw error }
+                        catch (_: Exception) { continue }
+                        if (!deletionGate.isCurrent(token) || activeImageViewerSession !== viewerSession) return@launch
+                        if (checked.map { it.msgID }.toSet() != ids || deletionGate.shouldClose(::isDeleted)) {
+                            clear(); return@launch
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -68,7 +132,13 @@ internal class MessageMediaPreviewController(
     }
 
     fun clear() {
+        deletionGate.invalidate()
+        deletionRefreshJob?.cancel()
+        deletionRefreshJob = null
+        val previous = activeImageViewerSession
         activeImageViewerSession = null
+        checkedMediaMessages = emptyList()
+        if (checksDeletions) previous?.requestClose()
     }
 
     private fun createImageViewerEventHandler(sessionProvider: () -> ImageViewer.Session?): EventHandler {
@@ -125,10 +195,10 @@ internal class MessageMediaPreviewController(
             return
         }
         val target = stableId?.takeIf { it.isNotBlank() }?.let { messageId ->
-            messageSource.currentMediaMessages().firstOrNull { message ->
+            currentAuthorizedMediaMessages().firstOrNull { message ->
                 message.messageType == MessageType.VIDEO && message.msgID == messageId
             }
-        } ?: messageSource.currentMediaMessages().firstOrNull { message ->
+        } ?: currentAuthorizedMediaMessages().firstOrNull { message ->
             message.messageType == MessageType.VIDEO &&
                 (message.messagePayload as? VideoMessagePayload)?.videoSnapshotPath == imagePath
         }
@@ -141,6 +211,7 @@ internal class MessageMediaPreviewController(
             MessageMediaFileType.VIDEO,
             object : CompletionHandler {
                 override fun onSuccess() {
+                    if (isDeleted(target.msgID)) { callback(null); return }
                     val resolvedPath = resolveDownloadedVideoPath(target, imagePath, stableId)
                     if (resolvedPath != null) {
                         callback(resolvedPath)
@@ -188,6 +259,7 @@ internal class MessageMediaPreviewController(
             fileType,
             object : CompletionHandler {
                 override fun onSuccess() {
+                    if (isDeleted(target.msgID)) { callback(null); return }
                     callback(resolveLocalSavePath(target))
                 }
 
@@ -199,7 +271,7 @@ internal class MessageMediaPreviewController(
     }
 
     private fun findMediaMessage(path: String?, stableId: String?, mediaType: Int?): MessageInfo? {
-        val messages = messageSource.currentMediaMessages()
+        val messages = currentAuthorizedMediaMessages()
         val stableTarget = stableId?.takeIf { it.isNotBlank() }?.let { messageId ->
             messages.firstOrNull { message ->
                 message.msgID == messageId && matchesMediaType(message, mediaType)
@@ -258,23 +330,24 @@ internal class MessageMediaPreviewController(
         sessionProvider: () -> ImageViewer.Session?
     ) {
         val targetSession = sessionProvider()
+        val token = deletionGate.token()
         if (targetSession == null || targetSession.isClosed) {
             callback(null)
             return
         }
         messageSource.loadMoreMediaMessages(direction) { messages ->
-            if (targetSession.isClosed) {
-                callback(null)
-                return@loadMoreMediaMessages
+            authorizePage(messages) { checked ->
+                if (targetSession.isClosed || activeImageViewerSession !== targetSession || !deletionGate.isCurrent(token)) {
+                    callback(null)
+                } else {
+                    checkedMediaMessages = checked
+                    val entries = buildImageViewerMediaEntries(checked)
+                    deletionGate.bind(token, entries.map { it.messageId }.toSet())
+                    if (checksDeletions && entries.isEmpty()) clear()
+                    else targetSession.submitMediaList(entries.map { it.element })
+                    callback(null)
+                }
             }
-            Log.d(DIAG_TAG, "loadMore direction=$direction messages=${messages.size} " +
-                "media=${messages.count { it.messageType == MessageType.IMAGE || it.messageType == MessageType.VIDEO }}")
-            val updatedMediaList = buildImageViewerMediaEntries(messages).map { it.element }
-            Log.d(DIAG_TAG, "submitMediaList size=${updatedMediaList.size} " +
-                "videos=${updatedMediaList.count { it.type == IMAGE_VIEWER_VIDEO_TYPE }} " +
-                "playableVideos=${updatedMediaList.count { it.type == IMAGE_VIEWER_VIDEO_TYPE && it.videoData != null }}")
-            targetSession.submitMediaList(updatedMediaList)
-            callback(null)
         }
     }
 
@@ -285,7 +358,7 @@ internal class MessageMediaPreviewController(
         } else {
             messages
         }
-        orderedMessages.forEach { message ->
+        orderedMessages.filterNot { isDeleted(it.msgID) }.forEach { message ->
             val mediaElement = createImageViewerElement(message) ?: return@forEach
             val messageId = message.msgID ?: return@forEach
             mediaEntries.add(ImageViewerMediaEntry(messageId = messageId, element = mediaElement))

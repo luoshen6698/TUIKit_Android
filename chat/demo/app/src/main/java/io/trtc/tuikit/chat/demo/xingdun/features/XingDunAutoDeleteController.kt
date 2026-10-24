@@ -63,7 +63,9 @@ internal class XingDunAutoDeleteController(
             val custom = XingDunCustomMessageParser.parse(message) ?: return@forEach
             when (custom.type) {
                 "auto_delete_config" -> XingDunAutoDeleteRepository.applyRemote(conversationID, custom.values)
-                "remote_delete" -> XingDunAutoDeleteRepository.applyRemoteDeletion(context, conversationID, custom.values)
+                "remote_delete" -> if (!conversationID.startsWith("c2c_")) {
+                    XingDunAutoDeleteRepository.applyRemoteDeletion(context, conversationID, custom.values)
+                }
             }
         }
         val configuration = XingDunAutoDeleteRepository.cached(conversationID)

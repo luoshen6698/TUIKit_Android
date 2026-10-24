@@ -9,6 +9,7 @@ import io.trtc.tuikit.atomicxcore.api.search.SearchType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class SearchMessageInConversationViewModel internal constructor(
@@ -35,7 +36,9 @@ class SearchMessageInConversationViewModel internal constructor(
 
     init {
         viewModelScope.launch {
-            state.messageResults.collectLatest { messageResults ->
+            combine(state.messageResults, SearchMessageVisibility.revision) { results, _ ->
+                SearchMessageVisibility.filter(results)
+            }.collectLatest { messageResults ->
                 _messagesInConversation.value = messageResults.firstOrNull()?.messageList ?: emptyList()
             }
         }

@@ -43,6 +43,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility
 
 class MessageInputView @JvmOverloads constructor(
     context: Context,
@@ -194,6 +195,16 @@ class MessageInputView @JvmOverloads constructor(
                 handleEffect(effect)
             }
         }
+        viewScope?.launch {
+            SearchMessageVisibility.revision.collectLatest {
+                val quote = coordinator.state.value.overlay.quoteMessage
+                val conversationID = viewModel?.conversationID
+                if (quote != null && conversationID != null && SearchMessageVisibility.isDeleted(conversationID, quote.messageId)) {
+                    // Keep the user's typed text; only the deleted reference is cleared.
+                    coordinator.dispatch(OverlayEvent.ClearQuote)
+                }
+            }
+        }
 
         viewScope?.launch {
             ThemeStore.shared(context).themeState.collectLatest {
@@ -254,6 +265,7 @@ class MessageInputView @JvmOverloads constructor(
             event = event,
             currentConversationID = viewModel?.conversationID
         ) ?: return
+        if (viewModel?.conversationID?.let { SearchMessageVisibility.isDeleted(it, quoteInfo.messageId) } == true) return
 
         coordinator.dispatch(OverlayEvent.SetQuote(quoteInfo))
         coordinator.dispatch(InputModeEvent.SwitchToText)

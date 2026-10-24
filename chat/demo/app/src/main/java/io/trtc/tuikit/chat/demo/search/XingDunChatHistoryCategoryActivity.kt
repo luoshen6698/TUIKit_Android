@@ -41,6 +41,7 @@ import io.trtc.tuikit.atomicxcore.api.message.VideoMessagePayload
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunC2CDeletionRepository
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageElement
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageViewer
 import io.trtc.tuikit.chat.uikit.components.search.utils.getMessageAbstract
@@ -70,6 +71,9 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     private val messageStore by lazy { MessageListStore.create(conversationID) }
     private var activityScope: CoroutineScope? = null
     private var messages: List<MessageInfo> = emptyList()
+    private val deletionListener: (String) -> Unit = { changed ->
+        if (changed == conversationID) runOnUiThread { if (!isDestroyed) renderLoaded(messages) }
+    }
 
     private lateinit var root: LinearLayout
     private lateinit var header: LinearLayout
@@ -92,11 +96,13 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         bindViews()
         configureHeader()
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        XingDunC2CDeletionRepository.addListener(deletionListener)
         activityScope?.launch { themeStore.themeState.collectLatest { applyColors(it.currentTheme.tokens.color) } }
         if (mode == MODE_DATE) showDatePicker() else loadMessages()
     }
 
     override fun onDestroy() {
+        XingDunC2CDeletionRepository.removeListener(deletionListener)
         activityScope?.cancel()
         activityScope = null
         super.onDestroy()
@@ -199,7 +205,13 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
                 messageTypeList = types,
             ),
             object : CompletionHandler {
-                override fun onSuccess() = runOnUiThread { renderLoaded(messageStore.state.messageList.value) }
+                override fun onSuccess() {
+                    activityScope?.launch {
+                        renderLoaded(XingDunC2CDeletionRepository.filterMessages(
+                            this@XingDunChatHistoryCategoryActivity, conversationID, messageStore.state.messageList.value,
+                        ))
+                    }
+                }
                 override fun onFailure(code: Int, desc: String) = runOnUiThread { showLoadError() }
             },
         )
@@ -216,6 +228,7 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
 
     private fun renderLoaded(values: List<MessageInfo>) {
         messages = values
+            .filterNot { XingDunC2CDeletionRepository.isDeleted(conversationID, it.msgID) }
             .filter(::matchesMode)
             .distinctBy { it.msgID }
             .sortedByDescending { it.timestamp ?: 0L }
