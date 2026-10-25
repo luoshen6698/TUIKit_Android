@@ -28,6 +28,7 @@ internal object XingDunPinnedMessageRepository {
         val key = cacheKey(conversationID) ?: return null
         val value = cache[key] ?: return null
         return value.page.takeIf { System.currentTimeMillis() - value.fetchedAtMillis in 0 until CACHE_MILLIS }
+            ?.let { visibleGroupPage(conversationID, it) }
     }
 
     suspend fun load(context: Context, conversationID: String, force: Boolean = false): XingDunPinnedMessagePage {
@@ -46,13 +47,23 @@ internal object XingDunPinnedMessageRepository {
         return loadMutex.withLock {
             if (!force) cached(conversationID)?.let { return@withLock it }
             val session = XingDunSessionManager.currentSession() ?: error("Missing session")
+            val account = XingDunC2CDeletionRepository.accountKey()
+            val generation = XingDunSessionManager.currentAuthenticationGeneration()
             val page = XingDunSessionManager.apiClient().get<XingDunPinnedMessagePage>(
                 session,
                 "message/pins",
                 mapOf("conversation_id" to conversationID, "page" to "1", "page_size" to "100"),
                 XingDunPinnedMessagePage::class.java,
             )
-            store(conversationID, page)
+            check(account == XingDunC2CDeletionRepository.accountKey() && generation == XingDunSessionManager.currentAuthenticationGeneration()) { "Authentication instance changed" }
+            if (XingDunGroupDeletionPolicy.group(conversationID) != null) {
+                page.items.map { it.messageId }.filter(XingDunGroupDeletionPolicy::validMessage).chunked(100).forEach {
+                    check(account == XingDunC2CDeletionRepository.accountKey() && generation == XingDunSessionManager.currentAuthenticationGeneration()) { "Authentication instance changed" }
+                    XingDunGroupDeletionRepository.check(context, conversationID, it.toSet())
+                }
+            }
+            check(account == XingDunC2CDeletionRepository.accountKey() && generation == XingDunSessionManager.currentAuthenticationGeneration()) { "Authentication instance changed" }
+            store(conversationID, visibleGroupPage(conversationID, page))
         }
     }
 
@@ -136,7 +147,8 @@ internal object XingDunPinnedMessageRepository {
 
     fun unreadPins(context: Context, conversationID: String, items: List<XingDunPinnedMessage>): List<XingDunPinnedMessage> {
         val tokens = readTokens(context, conversationID)
-        val deleted = if (conversationID.startsWith("c2c_")) XingDunC2CDeletionRepository.deletedIDs(context, conversationID) else emptySet()
+        val deleted = if (conversationID.startsWith("c2c_")) XingDunC2CDeletionRepository.deletedIDs(context, conversationID)
+            else items.filter { XingDunGroupDeletionRepository.isHidden(conversationID, it.messageId) }.map { it.messageId }.toSet()
         return XingDunPinnedMessagePolicy.visiblePins(items, deleted).filterNot { XingDunPinnedMessagePolicy.readToken(it) in tokens }
     }
 
@@ -187,6 +199,21 @@ internal object XingDunPinnedMessageRepository {
         if (!conversationID.startsWith("c2c_")) return
         cacheKey(conversationID)?.let(cache::remove)
         notifyChanged(conversationID)
+    }
+
+    fun cachedIDs(conversationID: String): Set<String> = currentItems(conversationID).map { it.messageId }.toSet()
+    fun onGroupVisibilityChanged(conversationID: String) { notifyChanged(conversationID) }
+
+    fun onGroupDeletion(conversationID: String) {
+        if (XingDunGroupDeletionPolicy.group(conversationID) == null) return
+        cacheKey(conversationID)?.let { key -> cache[key]?.let { old -> cache[key] = old.copy(page = visibleGroupPage(conversationID, old.page)) } }
+        notifyChanged(conversationID)
+    }
+
+    private fun visibleGroupPage(conversationID: String, page: XingDunPinnedMessagePage): XingDunPinnedMessagePage {
+        if (XingDunGroupDeletionPolicy.group(conversationID) == null) return page
+        val items = page.items.filterNot { XingDunGroupDeletionRepository.isHidden(conversationID, it.messageId) }
+        return page.copy(items = items, total = items.size)
     }
 
     private fun directPage(context: Context, conversationID: String): XingDunPinnedMessagePage {

@@ -108,17 +108,20 @@ internal object XingDunForegroundNotificationManager {
         if (::appContext.isInitialized) return
         appContext = application.applicationContext
         notifications = XingDunMessageNotifications(appContext).also { it.initializeChannels() }
-        XingDunC2CDeletionRepository.initialize(appContext)
+        XingDunMessageDeletionVisibility.initialize(appContext)
         XingDunC2CDeletionSync.initialize(appContext)
+        XingDunGroupDeletionSync.initialize(appContext)
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 synchronized(this@XingDunForegroundNotificationManager) { startedActivityCount += 1 }
                 XingDunC2CDeletionSync.refresh(appContext)
+                XingDunGroupDeletionSync.setForeground(appContext, true)
             }
 
             override fun onActivityStopped(activity: Activity) {
                 synchronized(this@XingDunForegroundNotificationManager) {
                     startedActivityCount = (startedActivityCount - 1).coerceAtLeast(0)
+                    if (startedActivityCount == 0) XingDunGroupDeletionSync.setForeground(appContext, false)
                 }
             }
 
@@ -146,6 +149,7 @@ internal object XingDunForegroundNotificationManager {
         XingDunCallHistoryNotificationManager.clear()
         XingDunConversationPreviewCleaner.resetAccountState()
         XingDunConversationPreviewResolver.clear()
+        XingDunGroupDeletionRepository.resetSession()
     }
 
     fun soundEnabled(context: Context): Boolean = preferences(context).getBoolean(KEY_SOUND, true)

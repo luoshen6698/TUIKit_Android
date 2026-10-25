@@ -21,6 +21,8 @@ class SearchMessageInConversationViewModel internal constructor(
     private val state: SearchState = searchStore.state
     private var lastSubmittedConversationID: String = ""
     private var lastSubmittedQuery: String = ""
+    private val ownerSession = SearchMessageVisibility.currentSessionKey()
+    private var messageQuerySession: String? = null
 
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching
@@ -36,15 +38,26 @@ class SearchMessageInConversationViewModel internal constructor(
 
     init {
         viewModelScope.launch {
+            SearchMessageVisibility.revision.collectLatest {
+                _messagesInConversation.value = if (ownerSession == SearchMessageVisibility.currentSessionKey())
+                    SearchMessageVisibility.redactQuotes(lastSubmittedConversationID,
+                        _messagesInConversation.value.filterNot { SearchMessageVisibility.isDeleted(lastSubmittedConversationID, it.msgID) })
+                    else emptyList()
+            }
+        }
+        viewModelScope.launch {
             combine(state.messageResults, SearchMessageVisibility.revision) { results, _ ->
-                SearchMessageVisibility.filter(results)
+                SearchMessageVisibility.filter(results, messageQuerySession)
             }.collectLatest { messageResults ->
-                _messagesInConversation.value = messageResults.firstOrNull()?.messageList ?: emptyList()
+                _messagesInConversation.value = if (ownerSession == SearchMessageVisibility.currentSessionKey())
+                    messageResults.firstOrNull { it.conversationID == lastSubmittedConversationID }?.messageList ?: emptyList()
+                    else emptyList()
             }
         }
     }
 
     fun updateSearchQuery(conversationID: String, query: String) {
+        if (ownerSession != SearchMessageVisibility.currentSessionKey()) { clearSearch(); return }
         if (query.isBlank()) {
             clearSearch()
             return
@@ -58,6 +71,7 @@ class SearchMessageInConversationViewModel internal constructor(
         }
 
         lastSubmittedConversationID = conversationID
+        messageQuerySession = SearchMessageVisibility.currentSessionKey()
         lastSubmittedQuery = query
         _isSearching.value = true
         _searchError.value = null
@@ -76,6 +90,7 @@ class SearchMessageInConversationViewModel internal constructor(
     }
 
     fun searchMore() {
+        if (ownerSession != SearchMessageVisibility.currentSessionKey()) { clearSearch(); return }
         if (_isSearching.value || _isLoadingMore.value || !state.hasMoreMessageResults.value) return
 
         _isLoadingMore.value = true
@@ -84,6 +99,7 @@ class SearchMessageInConversationViewModel internal constructor(
     }
 
     private fun clearSearch() {
+        messageQuerySession = null
         lastSubmittedConversationID = ""
         lastSubmittedQuery = ""
         _isSearching.value = false

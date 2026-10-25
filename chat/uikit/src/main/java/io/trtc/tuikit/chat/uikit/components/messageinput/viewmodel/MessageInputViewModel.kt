@@ -63,6 +63,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
+import io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -313,8 +315,19 @@ class MessageInputViewModel(
         text: String,
         mentionList: List<MentionInfo>,
         quotedMessage: MessageInfo? = null,
-        onSuccess: (() -> Unit)? = null
+        onSuccess: (() -> Unit)? = null,
+        onSubmitted: (() -> Unit)? = null,
     ): Boolean {
+        var submitted = false
+        val synchronous = withAuthorizedQuote(context, quotedMessage) { quote ->
+            submitted = performTextSend(context, text, mentionList, quote, onSuccess)
+            if (submitted) onSubmitted?.invoke()
+        }
+        return synchronous && submitted
+    }
+
+    private fun performTextSend(context: Context?, text: String, mentionList: List<MentionInfo>,
+                                quotedMessage: MessageInfo?, onSuccess: (() -> Unit)?): Boolean {
         if (!MentionAllPermissionPolicy.canSend(messageInputConfig.canMentionAll, mentionList)) {
             context?.let { showMentionAllNotAllowed(it) }
             return false
@@ -346,6 +359,10 @@ class MessageInputViewModel(
         quotedMessage: MessageInfo? = null,
         onSuccess: (() -> Unit)? = null
     ) {
+        withAuthorizedQuote(context, quotedMessage) { quote -> performFaceSend(context, faceIndex, faceData, quote, onSuccess) }
+    }
+
+    private fun performFaceSend(context: Context?, faceIndex: Int, faceData: String, quotedMessage: MessageInfo?, onSuccess: (() -> Unit)?) {
         if (faceData.isEmpty()) {
             return
         }
@@ -767,13 +784,42 @@ class MessageInputViewModel(
     ): SendMessageOption {
         return SendMessageOption(
             atUserList = atUserList,
-            quotedMessage = quotedMessage,
+            quotedMessage = SearchMessageVisibility.quoteForSend(conversationID, quotedMessage),
             needReadReceipt = MessageInputReadReceiptPolicy.needReadReceipt(
                 isReadReceiptEnabled = AppBuilderConfig.enableReadReceipt,
                 groupType = conversationInfo.value?.groupType
             ),
             offlinePushInfo = createOfflinePushInfo(context, payload)
         )
+    }
+
+    private var quoteSubmissionInFlight = false
+    private val groupSourceSession = SearchMessageVisibility.currentSessionKey()
+    internal fun isSourceSessionCurrent(): Boolean = !conversationID.startsWith("group_") ||
+        (groupSourceSession != null && groupSourceSession == SearchMessageVisibility.currentSessionKey())
+    private fun withAuthorizedQuote(context: Context?, quote: MessageInfo?, ready: (MessageInfo?) -> Unit): Boolean {
+        if (!isSourceSessionCurrent()) {
+            context?.let(::showSendFailed); return false
+        }
+        if (!conversationID.startsWith("group_") || quote == null) { ready(quote); return true }
+        if (quoteSubmissionInFlight) return false
+        val session = SearchMessageVisibility.currentSessionKey() ?: run { context?.let(::showSendFailed); return false }
+        quoteSubmissionInFlight = true
+        viewModelScope.launch {
+            try {
+                val checked = try {
+                    SearchMessageVisibility.messagesForAction(conversationID, listOf(quote)).firstOrNull { it.msgID == quote.msgID }
+                } catch (error: CancellationException) { throw error }
+                catch (_: Exception) { null }
+                if (session != SearchMessageVisibility.currentSessionKey()) { context?.let(::showSendFailed); return@launch }
+                val authorized = SearchMessageVisibility.quoteForSend(conversationID, checked)
+                if (authorized == null) context?.let { AtomicToast.show(it, it.getString(R.string.group_deletion_quote_omitted)) }
+                ready(authorized)
+            } catch (error: CancellationException) { throw error }
+            catch (_: Exception) { context?.let(::showSendFailed) }
+            finally { quoteSubmissionInFlight = false }
+        }
+        return false
     }
 
     private fun createOfflinePushInfo(context: Context?, payload: SendMessagePayload): OfflinePushInfo {

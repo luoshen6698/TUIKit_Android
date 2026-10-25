@@ -74,6 +74,7 @@ class XingDunApiClient(
             }
         }
         .build()
+    private val groupDeleteHttpClient = XingDunGroupDeleteRequestPolicy.client(httpClient)
     private val authenticatedRequestExecutor = XingDunAuthenticatedRequestExecutor()
 
     fun configureAuthenticatedSessionRecovery(
@@ -314,11 +315,36 @@ class XingDunApiClient(
         request: Request,
         responseType: Type,
         session: XingDunStoredSession? = null,
-    ): T = authenticatedRequestExecutor.execute(
-        session = session,
-        initialRequest = { executeOnce(request, responseType) },
-        replayRequest = { refreshed -> executeOnce(replayRequest(request, refreshed), responseType) },
-    )
+    ): T {
+        // Even credential recovery must not automatically replay a destructive POST.
+        // The caller uses groupDeleted to resolve an unknown outcome before any explicit retry.
+        if (XingDunGroupDeleteRequestPolicy.appliesTo(request)) return executeGroupDeletionOnce(request, responseType)
+        val isGroupDeletionRead = XingDunGroupDeleteRequestPolicy.isRead(request)
+        return authenticatedRequestExecutor.execute(
+            session = session,
+            initialRequest = { if (isGroupDeletionRead) executeGroupDeletionOnce(request, responseType) else executeOnce(request, responseType) },
+            replayRequest = { refreshed ->
+                val replayed = replayRequest(request, refreshed)
+                if (isGroupDeletionRead) executeGroupDeletionOnce(replayed, responseType) else executeOnce(replayed, responseType)
+            },
+        )
+    }
+
+    private suspend fun <T> executeGroupDeletionOnce(request: Request, responseType: Type): T =
+        (if (XingDunGroupDeleteRequestPolicy.appliesTo(request)) groupDeleteHttpClient else httpClient)
+            .newCall(XingDunGroupDeleteRequestPolicy.protect(request)).executeCancellable { response ->
+                val payload = response.body?.string().orEmpty()
+                if (!response.isSuccessful) throw apiException(payload, response.code)
+                val data: T = try {
+                    gson.fromJson(XingDunGroupDeleteRequestPolicy.responseData(payload), responseType)
+                } catch (error: XingDunGroupEndpointBusinessException) {
+                    throw XingDunApiException(error.code, response.code,
+                        error.serverMessage ?: appContext.getString(R.string.xingdun_error_response_data), error.traceID)
+                } catch (_: Exception) {
+                    throw XingDunApiException(null, response.code, appContext.getString(R.string.xingdun_error_response_format))
+                }
+                data
+            }
 
     private suspend fun <T> executeOnce(request: Request, responseType: Type): T =
         httpClient.newCall(request).executeCancellable { response ->

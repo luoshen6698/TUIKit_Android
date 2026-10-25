@@ -42,8 +42,9 @@ internal object XingDunConversationPreviewCleaner {
             XingDunC2CDeletionSync.onHint(context, conversationID, values, controlMessage)
             return
         }
-        XingDunAutoDeleteRepository.applyRemoteDeletion(context, conversationID, values)
-        removeControlEnvelope(context, conversationID, values, controlMessage)
+        if (XingDunGroupDeletionPolicy.group(conversationID) != null) {
+            XingDunGroupDeletionSync.onHint(context, conversationID, controlMessage.customElem?.data?.toString(Charsets.UTF_8), controlMessage)
+        }
     }
 
     fun onAutoDeleteConfigurationReceived(
@@ -106,8 +107,9 @@ internal object XingDunConversationPreviewCleaner {
             XingDunC2CDeletionSync.onHint(context, conversation.conversationID, custom.values, controlMessage)
             return
         }
-        XingDunAutoDeleteRepository.applyRemoteDeletion(context, conversation.conversationID, custom.values)
-        removeControlEnvelope(context, conversation.conversationID, custom.values, controlMessage)
+        if (XingDunGroupDeletionPolicy.group(conversation.conversationID) != null) {
+            XingDunGroupDeletionSync.onHint(context, conversation.conversationID, controlMessage.customElem?.data?.toString(Charsets.UTF_8), controlMessage)
+        }
     }
 
     private fun removeControlEnvelope(

@@ -41,7 +41,9 @@ import io.trtc.tuikit.atomicxcore.api.message.VideoMessagePayload
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.common.BaseActivity
-import io.trtc.tuikit.chat.demo.xingdun.features.XingDunC2CDeletionRepository
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageDeletionVisibility
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupDeletionRepository
+import io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageElement
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageViewer
 import io.trtc.tuikit.chat.uikit.components.search.utils.getMessageAbstract
@@ -71,8 +73,20 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     private val messageStore by lazy { MessageListStore.create(conversationID) }
     private var activityScope: CoroutineScope? = null
     private var messages: List<MessageInfo> = emptyList()
+    private var loadedMessages: List<MessageInfo> = emptyList()
+    private var activeMediaSession: ImageViewer.Session? = null
+    private var activeMediaIDs = emptySet<String>()
+    private var mediaRevision = 0L
+    private var sourceSession: String? = null
+    private fun isSourceCurrent() = !conversationID.startsWith("group_") ||
+        (sourceSession != null && sourceSession == SearchMessageVisibility.currentSessionKey())
     private val deletionListener: (String) -> Unit = { changed ->
-        if (changed == conversationID) runOnUiThread { if (!isDestroyed) renderLoaded(messages) }
+        if (changed == conversationID) runOnUiThread {
+            if (!isDestroyed && isSourceCurrent()) {
+                closeDeletedMedia()
+                renderLoaded(messages)
+            }
+        }
     }
 
     private lateinit var root: LinearLayout
@@ -96,13 +110,31 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         bindViews()
         configureHeader()
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-        XingDunC2CDeletionRepository.addListener(deletionListener)
+        sourceSession = SearchMessageVisibility.currentSessionKey()
+        XingDunMessageDeletionVisibility.addListener(deletionListener)
+        activityScope?.launch {
+            SearchMessageVisibility.revision.collectLatest {
+                if (!isSourceCurrent()) { activeMediaSession?.dismiss(); finish(); return@collectLatest }
+                closeDeletedMedia()
+                if (conversationID.startsWith("group_") && loadedMessages.isNotEmpty()) {
+                    val checked = XingDunMessageDeletionVisibility.filterMessages(
+                        this@XingDunChatHistoryCategoryActivity, conversationID, loadedMessages,
+                    )
+                    if (!isSourceCurrent()) return@collectLatest
+                    renderLoaded(checked)
+                    closeDeletedMedia()
+                }
+            }
+        }
         activityScope?.launch { themeStore.themeState.collectLatest { applyColors(it.currentTheme.tokens.color) } }
         if (mode == MODE_DATE) showDatePicker() else loadMessages()
     }
 
     override fun onDestroy() {
-        XingDunC2CDeletionRepository.removeListener(deletionListener)
+        XingDunMessageDeletionVisibility.removeListener(deletionListener)
+        mediaRevision++
+        activeMediaSession?.dismiss()
+        activeMediaSession = null
         activityScope?.cancel()
         activityScope = null
         super.onDestroy()
@@ -186,6 +218,7 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     }
 
     private fun loadMessages() {
+        if (!isSourceCurrent() && !isDebugPreview) return
         if (isDebugPreview) {
             renderLoaded(emptyList())
             return
@@ -206,10 +239,15 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
             ),
             object : CompletionHandler {
                 override fun onSuccess() {
+                    if (!isSourceCurrent()) return
                     activityScope?.launch {
-                        renderLoaded(XingDunC2CDeletionRepository.filterMessages(
-                            this@XingDunChatHistoryCategoryActivity, conversationID, messageStore.state.messageList.value,
-                        ))
+                        loadedMessages = messageStore.state.messageList.value.toList()
+                        val checked = XingDunMessageDeletionVisibility.filterMessages(
+                            this@XingDunChatHistoryCategoryActivity, conversationID, loadedMessages,
+                        )
+                        if (!isSourceCurrent()) return@launch
+                        renderLoaded(checked)
+                        if (conversationID.startsWith("group_") && XingDunGroupDeletionRepository.verificationFailed(conversationID)) showLoadError()
                     }
                 }
                 override fun onFailure(code: Int, desc: String) = runOnUiThread { showLoadError() }
@@ -227,8 +265,9 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     }
 
     private fun renderLoaded(values: List<MessageInfo>) {
+        if (!isSourceCurrent() && !isDebugPreview) return
         messages = values
-            .filterNot { XingDunC2CDeletionRepository.isDeleted(conversationID, it.msgID) }
+            .filterNot { XingDunMessageDeletionVisibility.isDeleted(conversationID, it.msgID) }
             .filter(::matchesMode)
             .distinctBy { it.msgID }
             .sortedByDescending { it.timestamp ?: 0L }
@@ -302,6 +341,7 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         setPadding(14.dp(), 8.dp(), 14.dp(), 8.dp())
         background = rounded(colors().bgColorOperate, 0f)
         setOnClickListener {
+            if (XingDunMessageDeletionVisibility.isDeleted(conversationID, message.msgID)) return@setOnClickListener
             if (message.messageType == MessageType.IMAGE || message.messageType == MessageType.VIDEO) {
                 showMedia(message)
             } else {
@@ -406,9 +446,27 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     }
 
     private fun showMedia(selected: MessageInfo) {
-        val entries = messages.mapNotNull { message -> imageElement(message)?.let { message to it } }
-        val index = entries.indexOfFirst { (message) -> message.msgID == selected.msgID }.coerceAtLeast(0)
-        if (entries.isNotEmpty()) ImageViewer.view(entries.map { it.second }, index.coerceAtMost(entries.lastIndex), null)
+        if (!isSourceCurrent()) return
+        val revision = ++mediaRevision
+        activityScope?.launch {
+            val checked = XingDunMessageDeletionVisibility.filterMessages(this@XingDunChatHistoryCategoryActivity, conversationID, messages)
+            if (revision != mediaRevision || isDestroyed || !isSourceCurrent() || checked.none { it.msgID == selected.msgID }) return@launch
+            val entries = checked.mapNotNull { message -> imageElement(message)?.let { message to it } }
+            val index = entries.indexOfFirst { (message) -> message.msgID == selected.msgID }
+            if (index < 0) return@launch
+            activeMediaSession?.dismiss()
+            activeMediaIDs = entries.map { it.first.msgID }.toSet()
+            activeMediaSession = ImageViewer.view(entries.map { it.second }, index, null)
+        }
+    }
+
+    private fun closeDeletedMedia() {
+        if (activeMediaIDs.any { XingDunMessageDeletionVisibility.isDeleted(conversationID, it) }) {
+            mediaRevision++
+            activeMediaSession?.dismiss()
+            activeMediaSession = null
+            activeMediaIDs = emptySet()
+        }
     }
 
     private fun imageElement(message: MessageInfo): ImageElement? {

@@ -7,13 +7,19 @@ import io.trtc.tuikit.atomicxcore.api.message.TextMessagePayload
 import io.trtc.tuikit.atomicxcore.api.search.MessageSearchResultItem
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.*
 import org.junit.Test
 
 class SearchMessageVisibilityTest {
+    @Before fun prepare() { restore(); SearchMessageVisibility.setSessionProvider { "test-session" } }
     @After fun restore() {
         SearchMessageVisibility.setProvider { _, messages -> messages }
         SearchMessageVisibility.setDeletedProvider { _, _ -> false }
+        SearchMessageVisibility.setQuoteHiddenProvider(null)
+        SearchMessageVisibility.setConfirmedDeletedProvider(null)
+        SearchMessageVisibility.setVerificationFailureProvider { false }
+        SearchMessageVisibility.setSessionProvider { null }
     }
 
     @Test fun `unloaded quote targets are included in authoritative page queries`() {
@@ -34,13 +40,97 @@ class SearchMessageVisibilityTest {
         assertEquals(MessageStatus.SEND_SUCCESS, reply.quoteInfo?.status)
     }
 
-    @Test fun `group quotes and unknown C2C targets are not redacted`() {
+    @Test fun `group quote tombstones now redact while unknown C2C targets still remain intact`() {
         val reply = MessageInfo(msgID = "reply", quoteInfo = MessageQuoteInfo(msgID = "target",
             messagePayload = TextMessagePayload(text = "original")))
         SearchMessageVisibility.setDeletedProvider { _, _ -> true }
-        assertSame(reply, SearchMessageVisibility.redactQuotes("group_bob", listOf(reply)).single())
+        assertEquals(MessageStatus.DELETED, SearchMessageVisibility.redactQuotes("group_bob", listOf(reply)).single().quoteInfo?.status)
         SearchMessageVisibility.setDeletedProvider { _, _ -> false }
         assertSame(reply, SearchMessageVisibility.redactQuotes("c2c_bob", listOf(reply)).single())
+    }
+
+    @Test fun `group search hints immediately hold only the target and preserve unrelated rows without network`() {
+        SearchMessageVisibility.setDeletedProvider { conversation, id -> conversation == "group_g" && id == "target" }
+        val row = MessageSearchResultItem(conversationID = "group_g", messageCount = 2,
+            messageList = listOf(MessageInfo(msgID = "target"), MessageInfo(msgID = "retained")))
+        val otherGroup = row.copy(conversationID = "group_other")
+        val filtered = SearchMessageVisibility.filterKnown(listOf(row, otherGroup))
+        assertEquals(listOf("retained"), filtered.first().messageList.map { it.msgID })
+        assertEquals(2, filtered.last().messageList.size)
+        assertEquals(2, row.messageList.size)
+    }
+
+    @Test fun `unverified group quote redaction keeps reply text and source snapshot intact`() {
+        SearchMessageVisibility.setQuoteHiddenProvider { conversation, id -> conversation == "group_g" && id == "old" }
+        val reply = MessageInfo(msgID = "reply", messagePayload = TextMessagePayload(text = "keep reply"),
+            quoteInfo = MessageQuoteInfo(msgID = "old", messagePayload = TextMessagePayload(text = "private snapshot")))
+        val safe = SearchMessageVisibility.redactQuotes("group_g", listOf(reply)).single()
+        assertNull(safe.quoteInfo?.messagePayload)
+        assertEquals("keep reply", (safe.messagePayload as TextMessagePayload).text)
+        assertEquals("private snapshot", (reply.quoteInfo?.messagePayload as TextMessagePayload).text)
+        assertSame(reply, SearchMessageVisibility.redactQuotes("group_other", listOf(reply)).single())
+    }
+
+    @Test fun `group authority failure becomes retry state and clears after successful recheck`() = runBlocking {
+        var failed = true
+        SearchMessageVisibility.setVerificationFailureProvider { it == "group_g" && failed }
+        SearchMessageVisibility.setProvider { _, messages -> if (failed) emptyList() else messages }
+        val rows = listOf(MessageSearchResultItem(conversationID = "group_g", messageCount = 1, messageList = listOf(MessageInfo(msgID = "M1"))))
+        assertTrue(SearchMessageVisibility.filter(rows).isEmpty())
+        assertTrue(SearchMessageVisibility.searchVerificationFailed.value)
+        failed = false
+        assertEquals(1, SearchMessageVisibility.filter(rows).size)
+        assertFalse(SearchMessageVisibility.searchVerificationFailed.value)
+    }
+
+    @Test fun `late group action requires fresh authority and rejects account or login replacement`() = runBlocking {
+        var session = "alice-login1"
+        SearchMessageVisibility.setSessionProvider { session }
+        SearchMessageVisibility.setProvider { conversation, messages ->
+            assertEquals("group_g", conversation)
+            session = "alice-login2"
+            messages
+        }
+        try { SearchMessageVisibility.messagesForAction("group_g", listOf(MessageInfo(msgID = "old"))); fail("No stale source publication") }
+        catch (_: IllegalStateException) { }
+    }
+
+    @Test fun `multi group batch does not query or publish remaining old SDK snapshots after account changes`() = runBlocking {
+        var session = "alice-login1"
+        val queried = mutableListOf<String>()
+        SearchMessageVisibility.setSessionProvider { session }
+        SearchMessageVisibility.setProvider { conversation, messages ->
+            queried += conversation
+            session = "bob-login1"
+            messages
+        }
+        val results = listOf("group_one", "group_two").map { conversation ->
+            MessageSearchResultItem(conversationID = conversation, messageCount = 1, messageList = listOf(MessageInfo(msgID = "old")))
+        }
+        assertTrue(SearchMessageVisibility.filter(results, "alice-login1").isEmpty())
+        assertEquals(listOf("group_one"), queried)
+        queried.clear()
+        assertTrue(SearchMessageVisibility.filter(results, "alice-login1").isEmpty())
+        assertTrue(queried.isEmpty())
+    }
+
+    @Test fun `source action fails on unavailable authority even when old safe rows remain visible`() = runBlocking {
+        SearchMessageVisibility.setSessionProvider { "alice-login1" }
+        SearchMessageVisibility.setProvider { _, messages -> messages }
+        SearchMessageVisibility.setVerificationFailureProvider { it == "group_g" }
+        try { SearchMessageVisibility.messagesForAction("group_g", listOf(MessageInfo(msgID = "old"))); fail("No optimistic forward") }
+        catch (_: IllegalStateException) { }
+    }
+
+    @Test fun `verified deleted source is not forwardable and quote omission does not change C2C semantics`() = runBlocking {
+        SearchMessageVisibility.setSessionProvider { "alice-login1" }
+        SearchMessageVisibility.setProvider { _, messages -> messages.filterNot { it.msgID == "deleted" } }
+        SearchMessageVisibility.setDeletedProvider { conversation, id -> conversation == "group_g" && id == "deleted" }
+        val source = MessageInfo(msgID = "deleted", messagePayload = TextMessagePayload(text = "private original"))
+        assertTrue(SearchMessageVisibility.messagesForAction("group_g", listOf(source)).isEmpty())
+        assertNull(SearchMessageVisibility.quoteForSend("group_g", source))
+        assertSame(source, SearchMessageVisibility.quoteForSend("c2c_bob", source))
+        assertEquals("private original", (source.messagePayload as TextMessagePayload).text)
     }
 
     @Test fun `recreated providers retain durable authority and cannot leak into another account`() {

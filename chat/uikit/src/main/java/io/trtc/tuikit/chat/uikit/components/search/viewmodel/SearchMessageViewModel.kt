@@ -19,6 +19,8 @@ class SearchMessageViewModel internal constructor(
 
     private val state: SearchState = searchStore.state
     private var lastSubmittedQuery: String = ""
+    private val ownerSession = SearchMessageVisibility.currentSessionKey()
+    private var messageQuerySession: String? = null
 
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching
@@ -34,15 +36,22 @@ class SearchMessageViewModel internal constructor(
 
     init {
         viewModelScope.launch {
+            SearchMessageVisibility.revision.collectLatest {
+                _messageSearchResults.value = if (ownerSession == SearchMessageVisibility.currentSessionKey())
+                    SearchMessageVisibility.filterKnown(_messageSearchResults.value) else emptyList()
+            }
+        }
+        viewModelScope.launch {
             combine(state.messageResults, SearchMessageVisibility.revision) { results, _ ->
-                SearchMessageVisibility.filter(results)
+                SearchMessageVisibility.filter(results, messageQuerySession)
             }.collectLatest {
-                _messageSearchResults.value = it
+                _messageSearchResults.value = if (ownerSession == SearchMessageVisibility.currentSessionKey()) it else emptyList()
             }
         }
     }
 
     fun updateSearchQuery(query: String) {
+        if (ownerSession != SearchMessageVisibility.currentSessionKey()) { clearSearch(); return }
         if (query.isBlank()) {
             clearSearch()
             return
@@ -50,6 +59,7 @@ class SearchMessageViewModel internal constructor(
         if (query == lastSubmittedQuery && (_isSearching.value || _messageSearchResults.value.isNotEmpty())) return
 
         lastSubmittedQuery = query
+        messageQuerySession = SearchMessageVisibility.currentSessionKey()
         _isSearching.value = true
         _searchError.value = null
         searchStore.search(
@@ -60,6 +70,7 @@ class SearchMessageViewModel internal constructor(
     }
 
     fun searchMore() {
+        if (ownerSession != SearchMessageVisibility.currentSessionKey()) { clearSearch(); return }
         if (_isSearching.value || _isLoadingMore.value || !state.hasMoreMessageResults.value) return
 
         _isLoadingMore.value = true
@@ -68,6 +79,7 @@ class SearchMessageViewModel internal constructor(
     }
 
     private fun clearSearch() {
+        messageQuerySession = null
         lastSubmittedQuery = ""
         _isSearching.value = false
         _isLoadingMore.value = false

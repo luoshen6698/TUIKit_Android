@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="xingdun_group_delete_for_me">Delete for me</string>
+    <string name="xingdun_group_delete_action">Delete for everyone</string>
+    <string name="xingdun_group_delete_confirm_title">Delete group message?</string>
+    <string name="xingdun_group_delete_confirm_message">This message will be removed for everyone in the group. This cannot be undone.</string>
+    <string name="xingdun_group_delete_success">Deleted for everyone</string>
+    <string name="xingdun_group_delete_failed">Could not delete. Check your connection and current permissions, then try again.</string>
+    <string name="xingdun_group_delete_check_retry">Unable to verify messages. Tap to retry.</string>
+</resources>

@@ -32,4 +32,35 @@ class MessageMediaDeletionGateTest {
         assertTrue(gate.shouldClose { it == "second" })
         assertFalse(gate.isCurrent(old))
     }
+
+    @Test fun `media SDK page and download tokens retain source login across account and relogin changes`() {
+        var session: String? = "alice-login1"
+        val gate = MessageMediaDeletionGate { session }
+        val initialPage = gate.begin("image")
+        gate.bind(initialPage, setOf("image", "video"))
+        val download = gate.token()
+        assertTrue(gate.isCurrent(download))
+        session = "bob-login1"
+        assertFalse(gate.isCurrent(initialPage))
+        assertFalse(gate.isCurrent(download))
+        session = "alice-login2"
+        assertFalse(gate.isCurrent(initialPage))
+        gate.bind(initialPage, setOf("stale"))
+        assertFalse(gate.shouldClose { it == "stale" })
+        val newPage = gate.begin("new-image")
+        assertTrue(gate.isCurrent(newPage))
+        assertFalse(gate.isCurrent(initialPage))
+        session = null
+        assertFalse(gate.isCurrent(newPage))
+    }
+
+    @Test fun `group preview without authenticated source cannot adopt a later login`() {
+        var session: String? = null
+        val gate = MessageMediaDeletionGate { session }
+        val old = gate.begin("old")
+        assertFalse(gate.isCurrent(old))
+        session = "alice-login1"
+        assertFalse(gate.isCurrent(old))
+        assertTrue(gate.isCurrent(gate.begin("new")))
+    }
 }

@@ -73,19 +73,26 @@ internal class MessageInputTextController(
         if (text.isNotEmpty()) {
             val mentionList = editText.getAtomicRanges<MentionInfo>().map { it.data }
             val quotedMessage = currentState().overlay.quoteMessage?.toMessageInfo()
-            val didSubmit = viewModelProvider()?.sendTextMessage(
+            viewModelProvider()?.sendTextMessage(
                 context = context,
                 text = text,
                 mentionList = mentionList,
                 quotedMessage = quotedMessage,
-                onSuccess = clearQuote
-            ) == true
-            if (!didSubmit) return
-            onSubmitted()
-            editText.setText("")
-            editText.clearAtomicRanges()
-            inputText = ""
-            refreshSendButtonIfReady()
+                onSuccess = {
+                    if (viewModelProvider()?.conversationID?.startsWith("group_") != true ||
+                        (isCoordinatorInitialized() && currentState().overlay.quoteMessage?.messageId == quotedMessage?.msgID)) clearQuote()
+                },
+                onSubmitted = {
+                    // A source verification can suspend. Do not erase text typed while it was pending.
+                    if (editText.text.toString() == text) {
+                        onSubmitted()
+                        editText.setText("")
+                        editText.clearAtomicRanges()
+                        inputText = ""
+                        refreshSendButtonIfReady()
+                    }
+                },
+            )
         }
     }
 
@@ -100,7 +107,10 @@ internal class MessageInputTextController(
             faceIndex = faceIndex,
             faceData = faceData,
             quotedMessage = quotedMessage,
-            onSuccess = clearQuote
+            onSuccess = {
+                if (viewModelProvider()?.conversationID?.startsWith("group_") != true ||
+                    (isCoordinatorInitialized() && currentState().overlay.quoteMessage?.messageId == quotedMessage?.msgID)) clearQuote()
+            }
         )
     }
 

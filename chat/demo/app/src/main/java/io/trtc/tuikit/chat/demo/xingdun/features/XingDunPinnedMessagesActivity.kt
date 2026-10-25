@@ -109,7 +109,7 @@ open class XingDunPinnedMessagesActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!isDebugPreview && conversationID.startsWith("c2c_")) {
+        if (!isDebugPreview && (conversationID.startsWith("c2c_") || conversationID.startsWith("group_"))) {
             deletionRefreshJob?.cancel()
             deletionRefreshJob = activityScope?.launch {
                 while (isActive) {

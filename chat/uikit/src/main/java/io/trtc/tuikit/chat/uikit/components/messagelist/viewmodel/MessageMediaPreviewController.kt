@@ -37,40 +37,49 @@ internal class MessageMediaPreviewController(
     private val conversationID: String? = null,
 ) {
     private var activeImageViewerSession: ImageViewer.Session? = null
-    private val deletionGate = MessageMediaDeletionGate()
+    private val groupSourceSession = SearchMessageVisibility.currentSessionKey()
+    private val deletionGate = MessageMediaDeletionGate(if (conversationID?.startsWith("group_") == true) SearchMessageVisibility::currentSessionKey else null)
     private var checkedMediaMessages = emptyList<MessageInfo>()
     private var deletionRefreshJob: Job? = null
-    private val checksDeletions get() = conversationID?.startsWith("c2c_") == true
+    private val checksDeletions get() = conversationID?.let { it.startsWith("c2c_") || it.startsWith("group_") } == true
+    private fun isSourceCurrent() = conversationID?.startsWith("group_") != true ||
+        (groupSourceSession != null && groupSourceSession == SearchMessageVisibility.currentSessionKey())
 
     init {
         if (checksDeletions) scope.launch {
             SearchMessageVisibility.revision.collect {
-                if (deletionGate.shouldClose(::isDeleted)) clear()
+                if (!isSourceCurrent() || deletionGate.shouldClose(::isDeleted)) clear()
             }
         }
     }
 
-    private fun isDeleted(id: String): Boolean = conversationID?.let {
+    private fun isDeleted(id: String): Boolean = !isSourceCurrent() || conversationID?.let {
         SearchMessageVisibility.isDeleted(it, id)
     } == true
 
     private fun authorizePage(messages: List<MessageInfo>, completion: (List<MessageInfo>) -> Unit) {
+        if (!isSourceCurrent()) { completion(emptyList()); return }
         if (!checksDeletions) { completion(messages); return }
         scope.launch {
-            try { completion(SearchMessageVisibility.authoritativeMessages(requireNotNull(conversationID), messages)) }
+            try {
+                val checked = SearchMessageVisibility.authoritativeMessages(requireNotNull(conversationID), messages)
+                completion(if (isSourceCurrent()) checked else emptyList())
+            }
             catch (error: CancellationException) { throw error }
             catch (_: Exception) { completion(emptyList()) }
         }
     }
 
-    private fun currentAuthorizedMediaMessages(): List<MessageInfo> = if (checksDeletions)
+    private fun currentAuthorizedMediaMessages(): List<MessageInfo> = if (!isSourceCurrent()) emptyList() else if (checksDeletions)
         checkedMediaMessages.filterNot { isDeleted(it.msgID) } else messageSource.currentMediaMessages()
 
     fun showImage(context: Context, messageInfo: MessageInfo) {
         clear()
+        if (!isSourceCurrent()) return
         val token = deletionGate.begin(messageInfo.msgID)
         try {
             messageSource.loadInitialMediaMessages(messageInfo) { messages ->
+                if (!isSourceCurrent() || !deletionGate.isCurrent(token)) return@loadInitialMediaMessages
                 authorizePage(messages) { checked ->
                     if (deletionGate.isCurrent(token) && !isDeleted(messageInfo.msgID)) {
                         checkedMediaMessages = checked
@@ -113,13 +122,14 @@ internal class MessageMediaPreviewController(
                 deletionRefreshJob = scope.launch {
                     while (isActive && activeImageViewerSession === viewerSession && !viewerSession.isClosed) {
                         delay(15_000)
+                        if (!isSourceCurrent()) { clear(); return@launch }
                         if (!viewerSession.isVisible) continue
                         val ids = checkedMediaMessages.map { it.msgID }.toSet()
                         val checked = try {
                             SearchMessageVisibility.authoritativeMessages(requireNotNull(conversationID), checkedMediaMessages)
                         } catch (error: CancellationException) { throw error }
                         catch (_: Exception) { continue }
-                        if (!deletionGate.isCurrent(token) || activeImageViewerSession !== viewerSession) return@launch
+                        if (!isSourceCurrent() || !deletionGate.isCurrent(token) || activeImageViewerSession !== viewerSession) return@launch
                         if (checked.map { it.msgID }.toSet() != ids || deletionGate.shouldClose(::isDeleted)) {
                             clear(); return@launch
                         }
@@ -206,12 +216,13 @@ internal class MessageMediaPreviewController(
             callback(null)
             return
         }
+        val token = deletionGate.token()
         downloadResource(
             target,
             MessageMediaFileType.VIDEO,
             object : CompletionHandler {
                 override fun onSuccess() {
-                    if (isDeleted(target.msgID)) { callback(null); return }
+                    if (!deletionGate.isCurrent(token) || isDeleted(target.msgID)) { callback(null); return }
                     val resolvedPath = resolveDownloadedVideoPath(target, imagePath, stableId)
                     if (resolvedPath != null) {
                         callback(resolvedPath)
@@ -254,12 +265,13 @@ internal class MessageMediaPreviewController(
                 return
             }
         }
+        val token = deletionGate.token()
         downloadResource(
             target,
             fileType,
             object : CompletionHandler {
                 override fun onSuccess() {
-                    if (isDeleted(target.msgID)) { callback(null); return }
+                    if (!deletionGate.isCurrent(token) || isDeleted(target.msgID)) { callback(null); return }
                     callback(resolveLocalSavePath(target))
                 }
 
@@ -336,6 +348,7 @@ internal class MessageMediaPreviewController(
             return
         }
         messageSource.loadMoreMediaMessages(direction) { messages ->
+            if (!isSourceCurrent() || !deletionGate.isCurrent(token) || activeImageViewerSession !== targetSession) { callback(null); return@loadMoreMediaMessages }
             authorizePage(messages) { checked ->
                 if (targetSession.isClosed || activeImageViewerSession !== targetSession || !deletionGate.isCurrent(token)) {
                     callback(null)

@@ -162,7 +162,7 @@ class MessageListViewModel(
     ) { list, processingMessagesByConversation, hiddenMessageIds, _ ->
         val processingMessages = processingMessagesByConversation[conversationID].orEmpty()
         val visibleMessages = AlbumPickerProcessingMessageStore.mergeWithMessages(list, processingMessages).filterNot { message ->
-            message.msgID in hiddenMessageIds
+            message.msgID in hiddenMessageIds || io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility.isDeleted(conversationID, message.msgID)
         }
         displayMapper.map(io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility.redactQuotes(conversationID, visibleMessages))
     }
@@ -1112,14 +1112,41 @@ class MessageListViewModel(
         dialogStateStore.clearEmojiPicker()
     }
 
+    private val groupForwardSourceSession = io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility.currentSessionKey()
     fun forwardMessages(
         messageList: List<MessageInfo>,
         conversationIDList: List<String>,
         completion: CompletionHandler? = null
     ) {
+        if (conversationID.startsWith("group_")) {
+            viewModelScope.launch {
+                try {
+                    val visibility = io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility
+                    val session = visibility.currentSessionKey() ?: error("Missing authentication instance")
+                    check(session == groupForwardSourceSession) { "Source authentication instance changed" }
+                    val checked = visibility.messagesForAction(conversationID, messageList)
+                    check(checked.size == messageList.size && checked.isNotEmpty() && session == visibility.currentSessionKey())
+                    performForwardMessages(checked, conversationIDList, completion, session)
+                } catch (error: kotlinx.coroutines.CancellationException) { throw error }
+                catch (_: Exception) { completion?.onFailure(-1, getLocalizedString(R.string.group_deletion_forward_unavailable)) }
+            }
+            return
+        }
+        performForwardMessages(messageList, conversationIDList, completion)
+    }
+
+    private fun performForwardMessages(messageList: List<MessageInfo>, conversationIDList: List<String>, completion: CompletionHandler?,
+                                       sourceSession: String? = null) {
         conversationIDList.forEach { tempConversationID ->
+            val visibility = io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility
+            val sourceMessages = if (sourceSession == null) messageList else visibility.redactQuotes(conversationID,
+                messageList.filterNot { visibility.isDeleted(conversationID, it.msgID) })
+            if (sourceSession != null && (sourceSession != visibility.currentSessionKey() || sourceMessages.size != messageList.size)) {
+                completion?.onFailure(-1, getLocalizedString(R.string.group_deletion_forward_unavailable))
+                return@forEach
+            }
             val sortedMessageList = forwardCoordinator.prepareMessagesForForward(
-                messages = messageList,
+                messages = sourceMessages,
                 conversationID = tempConversationID,
                 needReadReceipt = AppBuilderConfig.enableReadReceipt
             )

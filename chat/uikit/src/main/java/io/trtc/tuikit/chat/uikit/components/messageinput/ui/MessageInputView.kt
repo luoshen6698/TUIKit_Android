@@ -198,10 +198,20 @@ class MessageInputView @JvmOverloads constructor(
         viewScope?.launch {
             SearchMessageVisibility.revision.collectLatest {
                 val quote = coordinator.state.value.overlay.quoteMessage
-                val conversationID = viewModel?.conversationID
-                if (quote != null && conversationID != null && SearchMessageVisibility.isDeleted(conversationID, quote.messageId)) {
+                val sourceVm = viewModel
+                val conversationID = sourceVm?.conversationID
+                if (quote != null && conversationID?.startsWith("group_") == true) {
+                    if (sourceVm == null || !sourceVm.isSourceSessionCurrent()) { renderQuotePreview(null); return@collectLatest }
+                    if (SearchMessageVisibility.isQuoteHidden(conversationID, quote.messageId)) renderQuotePreview(null)
+                    SearchMessageVisibility.authoritativeMessages(conversationID,
+                        listOf(io.trtc.tuikit.atomicxcore.api.message.MessageInfo(msgID = quote.messageId)))
+                    if (viewModel !== sourceVm || !sourceVm.isSourceSessionCurrent()) return@collectLatest
+                    if (coordinator.state.value.overlay.quoteMessage?.messageId == quote.messageId &&
+                        !SearchMessageVisibility.isQuoteHidden(conversationID, quote.messageId)) renderQuotePreview(quote)
+                }
+                if (quote != null && conversationID != null && SearchMessageVisibility.isConfirmedDeleted(conversationID, quote.messageId)) {
                     // Keep the user's typed text; only the deleted reference is cleared.
-                    coordinator.dispatch(OverlayEvent.ClearQuote)
+                    if (coordinator.state.value.overlay.quoteMessage?.messageId == quote.messageId) coordinator.dispatch(OverlayEvent.ClearQuote)
                 }
             }
         }
@@ -343,7 +353,9 @@ class MessageInputView @JvmOverloads constructor(
     }
 
     private fun renderQuotePreview(quoteInfo: QuoteInfo?) {
-        if (quoteInfo == null) {
+        if (quoteInfo == null || viewModel?.conversationID?.let {
+                it.startsWith("group_") && SearchMessageVisibility.isQuoteHidden(it, quoteInfo.messageId)
+            } == true) {
             quoteContainer.visibility = View.GONE
             quoteSummaryView.setTag(R.id.emoji_span_bind_token_tag, null)
             quoteSummaryView.text = ""

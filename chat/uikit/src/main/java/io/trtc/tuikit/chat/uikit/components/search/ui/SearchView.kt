@@ -3,6 +3,10 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.TextView
+import android.view.Gravity
+import io.trtc.tuikit.chat.uikit.R
+import io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import io.trtc.tuikit.chat.uikit.components.common.findViewModelStoreOwner
@@ -65,6 +69,14 @@ class SearchView @JvmOverloads constructor(
 
     private var viewScope: CoroutineScope? = null
     private val themeStore = ThemeStore.shared(context)
+    private val deletionRetryStatus = TextView(context).apply {
+        setText(R.string.group_deletion_search_retry)
+        gravity = Gravity.CENTER
+        val density = resources.displayMetrics.density
+        setPadding((12 * density).toInt(), (10 * density).toInt(), (12 * density).toInt(), (10 * density).toInt())
+        visibility = View.GONE
+        setOnClickListener { SearchMessageVisibility.invalidate() }
+    }
 
     private var onContactSelect: ((FriendSearchInfo) -> Unit)? = null
     private var onGroupSelect: ((GroupSearchInfo) -> Unit)? = null
@@ -113,6 +125,14 @@ class SearchView @JvmOverloads constructor(
         scope.launch {
             themeStore.themeState.collectLatest { applyTheme() }
         }
+        scope.launch {
+            SearchMessageVisibility.searchVerificationFailed.collectLatest { failed ->
+                deletionRetryStatus.visibility = if (failed) View.VISIBLE else View.GONE
+                deletionRetryStatus.setBackgroundColor(themeStore.themeState.value.currentTheme.tokens.color.bgColorInput)
+                deletionRetryStatus.setTextColor(themeStore.themeState.value.currentTheme.tokens.color.textColorLink)
+                deletionRetryStatus.bringToFront()
+            }
+        }
 
         navigateTo(SearchFlowStep.GLOBAL_SEARCH)
     }
@@ -136,6 +156,9 @@ class SearchView @JvmOverloads constructor(
             SearchFlowStep.MESSAGE_IN_CONVERSATION_DETAIL -> showMessageInConversationDetail()
             else -> showGlobalSearch()
         }
+        if (deletionRetryStatus.parent == null) addView(deletionRetryStatus,
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+        deletionRetryStatus.bringToFront()
     }
 
     private fun showGlobalSearch() {

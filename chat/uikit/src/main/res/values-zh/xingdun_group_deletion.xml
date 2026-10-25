@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="group_deletion_search_retry">部分消息暂时无法核对，点此重试</string>
+    <string name="group_deletion_quote_omitted">引用内容暂不可用，正文将不带引用发送</string>
+    <string name="group_deletion_forward_unavailable">原消息已删除或暂时无法核对，请重试</string>
+</resources>

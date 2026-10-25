@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="xingdun_group_delete_for_me">为自己删除</string>
+    <string name="xingdun_group_delete_action">为全员删除</string>
+    <string name="xingdun_group_delete_confirm_title">删除群消息？</string>
+    <string name="xingdun_group_delete_confirm_message">此消息将对群内所有成员删除，删除后无法恢复。</string>
+    <string name="xingdun_group_delete_success">已为全员删除</string>
+    <string name="xingdun_group_delete_failed">删除失败，请检查网络及当前权限后重试。</string>
+    <string name="xingdun_group_delete_check_retry">暂时无法核对消息，点此重试</string>
+</resources>

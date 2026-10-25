@@ -19,6 +19,8 @@ import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
 import android.view.View
+import android.view.ViewGroup
+import android.view.Gravity
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -65,6 +67,10 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunCustomMessageParser
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunC2CDeletionController
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunC2CDeletionActions
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunC2CDeletionRepository
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupDeletionActions
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupDeletionController
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupDeletionRepository
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageDeletionVisibility
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactDetailActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactForwardPickerActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
@@ -125,6 +131,8 @@ class ChatActivity : BaseActivity() {
     private var autoDeleteController: io.trtc.tuikit.chat.demo.xingdun.features.XingDunAutoDeleteController? = null
     private var c2cDeletionController: XingDunC2CDeletionController? = null
     private var c2cDeletionActions: XingDunC2CDeletionActions? = null
+    private var groupDeletionActions: XingDunGroupDeletionActions? = null
+    private var groupDeletionController: XingDunGroupDeletionController? = null
     private var groupPermissionJob: Job? = null
     private var groupPermissionRevision = 0L
     private val groupPermissionListener = object : V2TIMAdvancedMsgListener() {
@@ -232,6 +240,7 @@ class ChatActivity : BaseActivity() {
         private const val REPORT_ACTION_ID = "xingdun.message.report"
         private const val MANAGEMENT_RECALL_ACTION_ID = "xingdun.message.managementRecall"
         private const val C2C_DELETE_ACTION_ID = "xingdun.message.c2cDelete"
+        private const val GROUP_DELETE_ACTION_ID = "xingdun.message.groupDelete"
         private const val CONTACT_CARD_ACTION_ID = "xingdun.messageInput.contactCard"
         private const val REDPACKET_ACTION_ID = "xingdun.messageInput.redpacket"
         private const val MENTION_ACTION_ID = "xingdun.messageInput.mention"
@@ -352,6 +361,9 @@ class ChatActivity : BaseActivity() {
         if (isC2CConversation) messageListConfig.addMessageExclusion(MessageMatcher { message ->
             message.msgID in XingDunC2CDeletionRepository.deletedIDs(this, conversationID)
         })
+        if (isGroupConversation) messageListConfig.addMessageExclusion(MessageMatcher { message ->
+            !XingDunGroupDeletionRepository.canDisplay(conversationID, message)
+        })
         configureBusinessMessageActions(messageListConfig)
         messageInputConfig = ChatMessageInputConfig(
             isShowAudioCall = featureAvailability.audioCall,
@@ -404,6 +416,26 @@ class ChatActivity : BaseActivity() {
             c2cDeletionController = XingDunC2CDeletionController(
                 this, conversationID, requireNotNull(activityScope), requireNotNull(chatPageView.messageStore()),
             )
+        }
+        if (isGroupConversation) {
+            val retryStatus = TextView(this).apply {
+                setText(R.string.xingdun_group_delete_check_retry)
+                gravity = Gravity.CENTER
+                val density = resources.displayMetrics.density
+                setPadding((12 * density).toInt(), (8 * density).toInt(), (12 * density).toInt(), (8 * density).toInt())
+                setBackgroundColor(themeStore.themeState.value.currentTheme.tokens.color.bgColorInput)
+                setTextColor(themeStore.themeState.value.currentTheme.tokens.color.textColorLink)
+                visibility = View.GONE
+                setOnClickListener { groupDeletionController?.retry() }
+            }
+            chatPageContainer.addView(retryStatus, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP,
+            ))
+            groupDeletionActions = XingDunGroupDeletionActions(this, requireNotNull(activityScope), conversationID)
+            groupDeletionController = XingDunGroupDeletionController(
+                this, conversationID, requireNotNull(activityScope), requireNotNull(chatPageView.messageStore()),
+                requireNotNull(groupDeletionActions),
+            ) { failed -> retryStatus.visibility = if (failed) View.VISIBLE else View.GONE }
         }
         if (XingDunSessionManager.currentSession()?.features?.autoDelete == true) {
             autoDeleteController = io.trtc.tuikit.chat.demo.xingdun.features.XingDunAutoDeleteController(
@@ -498,6 +530,9 @@ class ChatActivity : BaseActivity() {
             if (editorContext.conversationID.startsWith("c2c_")) {
                 replace(MessageActionIDs.DELETE) { it.copy(title = getString(R.string.xingdun_c2c_delete_for_me)) }
             }
+            if (editorContext.conversationID.startsWith("group_")) {
+                replace(MessageActionIDs.DELETE) { it.copy(title = getString(R.string.xingdun_group_delete_for_me)) }
+            }
             val message = editorContext.message
             val messageID = message.msgID.takeIf(String::isNotBlank) ?: return@customizeActions
             if (XingDunCustomMessageParser.parse(message)?.isControl == true) return@customizeActions
@@ -509,6 +544,16 @@ class ChatActivity : BaseActivity() {
                     title = getString(R.string.xingdun_c2c_delete_action),
                     iconResID = android.R.drawable.ic_menu_delete,
                     action = { c2cDeletionActions?.confirm(it) },
+                    dangerous = true,
+                )
+                if (!insertBefore(MessageActionIDs.DELETE, deleteAction)) add(deleteAction)
+            }
+            if (groupDeletionActions?.canOffer(message) == true) {
+                val deleteAction = MessageCustomAction(
+                    ID = GROUP_DELETE_ACTION_ID,
+                    title = getString(R.string.xingdun_group_delete_action),
+                    iconResID = android.R.drawable.ic_menu_delete,
+                    action = { groupDeletionActions?.confirm(it) },
                     dangerous = true,
                 )
                 if (!insertBefore(MessageActionIDs.DELETE, deleteAction)) add(deleteAction)
@@ -907,6 +952,7 @@ class ChatActivity : BaseActivity() {
 
     private fun locatePinnedMessage(messageID: String, messageSequence: Long?, pinVersion: Int) {
         if (!::chatPageView.isInitialized || messageID.isBlank()) return
+        if (XingDunMessageDeletionVisibility.isDeleted(conversationID, messageID)) return
         chatPageView.post {
             chatPageView.locateMessageByID(
                 messageID = messageID,
@@ -1289,6 +1335,7 @@ class ChatActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         c2cDeletionController?.start()
+        groupDeletionController?.start()
         autoDeleteController?.start()
         intent?.getStringExtra(EXTRA_CONVERSATION_ID)?.let(XingDunForegroundNotificationManager::enterConversation)
         if (::conversationID.isInitialized && ::chatPageView.isInitialized) {
@@ -1298,6 +1345,7 @@ class ChatActivity : BaseActivity() {
 
     override fun onPause() {
         c2cDeletionController?.stop()
+        groupDeletionController?.stop()
         autoDeleteController?.stop()
         intent?.getStringExtra(EXTRA_CONVERSATION_ID)?.let(XingDunForegroundNotificationManager::leaveConversation)
         super.onPause()
@@ -1329,6 +1377,7 @@ class ChatActivity : BaseActivity() {
 
     override fun onDestroy() {
         c2cDeletionController?.stop()
+        groupDeletionController?.stop()
         V2TIMManager.getMessageManager().removeAdvancedMsgListener(groupPermissionListener)
         if (messagePinEnabled) XingDunPinnedMessageRepository.removeListener(pinnedRepositoryListener)
         activityScope?.cancel()

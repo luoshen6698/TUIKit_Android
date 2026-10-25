@@ -64,6 +64,9 @@ object ImageViewer {
             private set
         internal var isVisible: Boolean = false
 
+        /** Close this exact preview session when its app-owned source is no longer visible. */
+        fun dismiss() { requestClose() }
+
         internal fun requestClose() {
             if (isClosed) return
             isCloseRequested = true

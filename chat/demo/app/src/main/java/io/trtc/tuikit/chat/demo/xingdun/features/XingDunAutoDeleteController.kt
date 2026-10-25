@@ -63,13 +63,15 @@ internal class XingDunAutoDeleteController(
             val custom = XingDunCustomMessageParser.parse(message) ?: return@forEach
             when (custom.type) {
                 "auto_delete_config" -> XingDunAutoDeleteRepository.applyRemote(conversationID, custom.values)
-                "remote_delete" -> if (!conversationID.startsWith("c2c_")) {
-                    XingDunAutoDeleteRepository.applyRemoteDeletion(context, conversationID, custom.values)
+                "remote_delete" -> if (conversationID.startsWith("group_")) {
+                    XingDunGroupDeletionSync.onHint(context, conversationID,
+                        (message.messagePayload as? io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload)?.customData)
                 }
             }
         }
         val configuration = XingDunAutoDeleteRepository.cached(conversationID)
-        val deletedIDs = XingDunAutoDeleteRepository.deletedIDs(context, conversationID)
+        val deletedIDs = if (conversationID.startsWith("group_")) XingDunGroupDeletionRepository.deletedIDs(context, conversationID)
+            else XingDunAutoDeleteRepository.deletedIDs(context, conversationID)
         val due = messages.filter { message ->
             val custom = XingDunCustomMessageParser.parse(message)
             val removableControl = XingDunConversationPreviewPolicy.shouldRemoveFromLocalHistory(custom)

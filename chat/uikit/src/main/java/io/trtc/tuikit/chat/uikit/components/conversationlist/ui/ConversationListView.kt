@@ -211,6 +211,13 @@ class ConversationListView @JvmOverloads constructor(
         viewScope = scope
 
         scope.launch {
+            io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility.revision.collectLatest {
+                // A confirmed tombstone or a targeted hint can change only the preview, not the SDK conversation object.
+                adapter.notifyDataSetChanged()
+            }
+        }
+
+        scope.launch {
             combine(
                 viewModel.conversationList,
                 viewModel.initialLoadFinished

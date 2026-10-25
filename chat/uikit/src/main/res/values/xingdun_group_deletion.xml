@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="group_deletion_search_retry">Some messages could not be verified. Tap to retry.</string>
+    <string name="group_deletion_quote_omitted">The reference is unavailable. Your message will be sent without it.</string>
+    <string name="group_deletion_forward_unavailable">The source message was deleted or could not be verified. Please try again.</string>
+</resources>
