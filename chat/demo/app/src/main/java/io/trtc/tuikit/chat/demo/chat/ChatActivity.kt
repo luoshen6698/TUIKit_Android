@@ -172,6 +172,7 @@ class ChatActivity : BaseActivity() {
 
     private var isPeerTyping = false
     private var latestChatTitle: String = ""
+    private var peerPresence = io.trtc.tuikit.chat.uikit.components.presence.UserPresence.UNKNOWN
     private lateinit var conversationID: String
     private var messageFavoriteEnabled = false
     private var messagePinEnabled = false
@@ -388,11 +389,7 @@ class ChatActivity : BaseActivity() {
             },
             onTypingStatusChanged = { isTyping ->
                 isPeerTyping = isTyping
-                tvChatTitle.text = if (isTyping) {
-                    getString(R.string.demo_chat_typing_indicator)
-                } else {
-                    latestChatTitle
-                }
+                renderPresenceTitle()
             }
         )
         if (isGroupConversation) {
@@ -1251,7 +1248,7 @@ class ChatActivity : BaseActivity() {
                     Toast.makeText(this@ChatActivity, R.string.xingdun_group_member_card_restricted, Toast.LENGTH_LONG).show()
                     return@launch
                 }
-                XingDunContactDetailActivity.start(this@ChatActivity, memberUserID, null, null)
+                XingDunContactDetailActivity.startFromGroup(this@ChatActivity, groupID, memberUserID, null, null)
             }
             return
         }
@@ -1318,9 +1315,19 @@ class ChatActivity : BaseActivity() {
 
     private fun updateChatTitle(title: String) {
         latestChatTitle = title
-        if (!isPeerTyping) {
-            tvChatTitle.text = title
-        }
+        renderPresenceTitle()
+    }
+
+    private fun renderPresenceTitle() {
+        if (!::tvChatTitle.isInitialized) return
+        tvChatTitle.text = if (isPeerTyping) getString(R.string.demo_chat_typing_indicator)
+        else if (::conversationID.isInitialized && getUserID(conversationID) != null) {
+            latestChatTitle + " · " + getString(when (peerPresence) {
+                io.trtc.tuikit.chat.uikit.components.presence.UserPresence.ONLINE -> R.string.xingdun_presence_online
+                io.trtc.tuikit.chat.uikit.components.presence.UserPresence.OFFLINE -> R.string.xingdun_presence_offline
+                else -> R.string.xingdun_presence_unknown
+            })
+        } else latestChatTitle
     }
 
     override fun onBackPressed() {
@@ -1334,6 +1341,13 @@ class ChatActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (::conversationID.isInitialized) getUserID(conversationID)?.let { peer ->
+            io.trtc.tuikit.chat.uikit.components.presence.UserPresenceStore.observe(this, peer) {
+                peerPresence = it
+                renderPresenceTitle()
+            }
+            io.trtc.tuikit.chat.uikit.components.presence.UserPresenceStore.refresh()
+        }
         c2cDeletionController?.start()
         groupDeletionController?.start()
         autoDeleteController?.start()
@@ -1344,6 +1358,8 @@ class ChatActivity : BaseActivity() {
     }
 
     override fun onPause() {
+        if (::chatPageView.isInitialized) chatPageView.stopTyping()
+        io.trtc.tuikit.chat.uikit.components.presence.UserPresenceStore.release(this)
         c2cDeletionController?.stop()
         groupDeletionController?.stop()
         autoDeleteController?.stop()

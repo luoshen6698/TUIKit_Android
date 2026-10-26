@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="xingdun_reset_code_requested">如果该联系方式符合条件，我们将发送验证码，请在%1$d分钟内完成验证。</string>
+    <string name="xingdun_profile_privacy_title">资料可见性</string>
+    <string name="xingdun_account_type_title">账户类型</string>
+    <string name="xingdun_account_type_normal">普通</string>
+    <string name="xingdun_account_type_internal">内部</string>
+    <string name="xingdun_account_type_unknown">未知</string>
+    <string name="xingdun_privacy_account">显示账号</string>
+    <string name="xingdun_privacy_phone">显示手机号</string>
+    <string name="xingdun_privacy_email">显示邮箱</string>
+    <string name="xingdun_privacy_birthday">显示生日</string>
+    <string name="xingdun_privacy_signature">显示个性签名</string>
+    <string name="xingdun_privacy_loading">正在核对已保存的隐私设置…</string>
+    <string name="xingdun_privacy_description">选择他人在资料中可见的字段。这些设置不影响通过搜索发现账号。</string>
+    <string name="xingdun_privacy_pending">设置已保存，即时通讯资料仍待同步。可点击“重试资料同步”再次尝试。</string>
+    <string name="xingdun_privacy_read_failed">无法确认已保存的设置，请先刷新再进行修改。</string>
+    <string name="xingdun_privacy_write_failed_read_back">本次修改未能确认，开关显示从服务器重新读取的实际设置。</string>
+    <string name="xingdun_privacy_refresh">刷新已保存设置</string>
+    <string name="xingdun_privacy_retry_sync">重试资料同步</string>
+    <string name="xingdun_contact_private_name">联系人</string>
+    <string name="xingdun_presence_online">在线</string>
+    <string name="xingdun_presence_offline">离线</string>
+    <string name="xingdun_presence_unknown">状态未知</string>
+    <string name="xingdun_group_access_denied">群设置不允许此操作，或无法核验权限，请刷新后重试。</string>
+    <string name="xingdun_group_private_chat_setting">从群成员发起私聊</string>
+    <string name="xingdun_group_history_setting">谁可进入群历史查询</string>
+    <string name="xingdun_group_recall_setting">谁可管理撤回普通成员消息</string>
+    <string name="xingdun_group_policy_unknown">未知</string>
+    <string name="xingdun_group_policy_allowed">允许</string>
+    <string name="xingdun_group_policy_forbidden">禁止</string>
+    <string name="xingdun_group_access_settings">群访问权限</string>
+    <string name="xingdun_group_policy_scope">私聊规则仅控制从本群成员入口发起聊天。历史规则控制业务查询入口，不改变实时投递。管理撤回范围不会授予为全群删除他人消息的权限，相关动作仍分别鉴权。</string>
+    <string name="xingdun_group_policy_conflict">设置已被其他端修改，正在刷新实际保存值，请核对后重试。</string>
+    <string name="xingdun_group_policy_update_unknown">本次修改结果未能确认，正在核对已保存的设置，请稍后再修改。</string>
+    <string name="xingdun_login_ip_restricted">当前网络不在该账号允许的登录范围，请切换网络或联系管理员。</string>
+</resources>

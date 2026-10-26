@@ -151,8 +151,9 @@ open class XingDunGroupManagementActivity : BaseActivity() {
         applyHeaderTheme(colors())
     }
 
-    private fun load() {
+    private fun load(preserveWarning: Boolean = false) {
         val scope = activityScope ?: return
+        val generation = XingDunSessionManager.currentAuthenticationGeneration()
         scope.launch {
             val result = runCatching {
                 val session = XingDunSessionManager.currentSession()
@@ -171,11 +172,12 @@ open class XingDunGroupManagementActivity : BaseActivity() {
                 )
                 loadedDetail to members.count { it.role == "administrator" }
             }
+            if (!isDebugPreview && (generation == null || generation != XingDunSessionManager.currentAuthenticationGeneration())) { finish(); return@launch }
             refresh.isRefreshing = false
             result.onSuccess { (loadedDetail, loadedAdministratorCount) ->
                 detail = loadedDetail
                 administratorCount = loadedAdministratorCount
-                warningMessage = null
+                if (!preserveWarning) warningMessage = null
                 render(loadedDetail)
             }.onFailure(::showLoadError)
         }
@@ -271,6 +273,40 @@ open class XingDunGroupManagementActivity : BaseActivity() {
             ))
         }
         addCardSection(getString(R.string.xingdun_group_permission_settings), permissions)
+
+        val access = card(current)
+        listOf(
+            Triple("member_private_chat", R.string.xingdun_group_private_chat_setting, value.memberPrivateChat),
+            Triple("history_query_mode", R.string.xingdun_group_history_setting, value.historyQueryMode),
+            Triple("delete_message_mode", R.string.xingdun_group_recall_setting, value.deleteMessageMode),
+        ).forEachIndexed { index, (field, title, mode) ->
+            if (index > 0) access.addView(rowDivider(current))
+            access.addView(navigateRow(getString(title), getString(when {
+                mode !in listOf(1, 2) -> R.string.xingdun_group_policy_unknown
+                field == "member_private_chat" && mode == 1 -> R.string.xingdun_group_policy_allowed
+                field == "member_private_chat" -> R.string.xingdun_group_policy_forbidden
+                mode == 1 -> R.string.xingdun_group_permission_everyone
+                else -> R.string.xingdun_group_permission_administrators
+            }), current, enabled = mode in listOf(1, 2) && value.canManagePolicies && !isOperating) {
+                val labels = if (field == "member_private_chat") arrayOf(
+                    getString(R.string.xingdun_group_policy_allowed), getString(R.string.xingdun_group_policy_forbidden))
+                else arrayOf(getString(R.string.xingdun_group_permission_everyone), getString(R.string.xingdun_group_permission_administrators))
+                var selected = mode ?: return@navigateRow
+                AlertDialog.Builder(this).setTitle(title)
+                    .setSingleChoiceItems(labels, selected - 1) { _, which -> selected = which + 1 }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(R.string.xingdun_group_permission_save) { _, _ ->
+                        if (selected != mode) updatePolicy(field, selected)
+                    }.show()
+            })
+        }
+        addCardSection(getString(R.string.xingdun_group_access_settings), access)
+        content.addView(TextView(this).apply {
+            setText(R.string.xingdun_group_policy_scope)
+            textSize = 12f
+            setTextColor(current.textColorSecondary)
+            setPadding(4.dp(), 8.dp(), 4.dp(), 0)
+        })
 
         val join = card(current)
         join.addView(toggleRow(
@@ -508,7 +544,7 @@ open class XingDunGroupManagementActivity : BaseActivity() {
                 XingDunSessionManager.apiClient().postEmpty(
                     session,
                     "team/update",
-                    mapOf("team_id" to groupID, field to value),
+                    mapOf("team_id" to groupID, field to value, "expected_fields" to mapOf(field to previous.policyValue(field))),
                 )
             },
             successMessage = getString(R.string.xingdun_group_management_updated),
@@ -563,8 +599,11 @@ open class XingDunGroupManagementActivity : BaseActivity() {
         warningMessage = null
         detail = optimistic
         render(optimistic)
+        val generation = XingDunSessionManager.currentAuthenticationGeneration()
         activityScope?.launch {
-            runCatching { action() }
+            val result = runCatching { action() }
+            if (generation == null || generation != XingDunSessionManager.currentAuthenticationGeneration()) { finish(); return@launch }
+            result
                 .onSuccess {
                     isOperating = false
                     Toast.makeText(this@XingDunGroupManagementActivity, successMessage, Toast.LENGTH_SHORT).show()
@@ -573,8 +612,10 @@ open class XingDunGroupManagementActivity : BaseActivity() {
                 .onFailure { error ->
                     isOperating = false
                     detail = previous
-                    warningMessage = error.localizedMessage ?: getString(R.string.xingdun_group_management_action_failed)
+                    warningMessage = getString(if ((error as? io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiException)?.businessCode == 409)
+                        R.string.xingdun_group_policy_conflict else R.string.xingdun_group_policy_update_unknown)
                     render(previous)
+                    load(preserveWarning = true)
                 }
         }
     }
@@ -623,6 +664,9 @@ open class XingDunGroupManagementActivity : BaseActivity() {
     }
 
     private fun XingDunGroupDetail.withPolicy(field: String, value: Int): XingDunGroupDetail = when (field) {
+        "member_private_chat" -> copy(memberPrivateChat = value)
+        "history_query_mode" -> copy(historyQueryMode = value)
+        "delete_message_mode" -> copy(deleteMessageMode = value)
         "join_mode" -> copy(joinMode = value)
         "invite_mode" -> copy(inviteMode = value)
         "update_team_mode" -> copy(updateTeamMode = value)
@@ -631,6 +675,20 @@ open class XingDunGroupManagementActivity : BaseActivity() {
         "pin_message_mode" -> copy(pinMessageMode = value)
         "be_invite_mode" -> copy(beInviteMode = value)
         else -> this
+    }
+
+    private fun XingDunGroupDetail.policyValue(field: String): Int? = when (field) {
+        "member_private_chat" -> memberPrivateChat
+        "history_query_mode" -> historyQueryMode
+        "delete_message_mode" -> deleteMessageMode
+        "update_team_mode" -> updateTeamMode
+        "invite_mode" -> inviteMode
+        "at_all_mode" -> atAllMode
+        "view_member_card_mode" -> viewMemberCardMode
+        "pin_message_mode" -> pinMessageMode
+        "be_invite_mode" -> beInviteMode
+        "join_mode" -> joinMode
+        else -> null
     }
 
     private fun previewDetail() = XingDunGroupDetail(

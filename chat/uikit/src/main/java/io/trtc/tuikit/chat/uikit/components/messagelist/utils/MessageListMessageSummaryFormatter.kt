@@ -97,6 +97,7 @@ class MessageListMessageSummaryFormatter(
         message: MessageInfo,
         conversationID: String? = null
     ): String {
+        if (io.trtc.tuikit.chat.uikit.components.messagelist.typing.TypingMessageProtocol.isTypingMessage(message)) return ""
         RecalledMessageDisplayPolicy.format(context, message)?.let { return it }
         if (message.status == MessageStatus.VIOLATION) {
             return context.getString(R.string.message_list_violation_message)

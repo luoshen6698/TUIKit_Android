@@ -376,7 +376,7 @@ open class XingDunGroupMembersActivity : BaseActivity() {
             Toast.makeText(this, R.string.xingdun_group_member_card_restricted, Toast.LENGTH_LONG).show()
             return
         }
-        XingDunContactDetailActivity.start(this, member.userId, member.nickname, member.avatar)
+        XingDunContactDetailActivity.startFromGroup(this, groupID, member.userId, member.nickname, member.avatar)
     }
 
     private fun confirmRemove(member: XingDunGroupMember) {

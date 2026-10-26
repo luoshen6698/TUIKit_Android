@@ -98,6 +98,7 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     private lateinit var content: LinearLayout
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
+    private var historyStarted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,7 +128,22 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
             }
         }
         activityScope?.launch { themeStore.themeState.collectLatest { applyColors(it.currentTheme.tokens.color) } }
-        if (mode == MODE_DATE) showDatePicker() else loadMessages()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!::status.isInitialized || isFinishing) return
+        io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupSettingsAccess.history(this, conversationID) {
+            if (!historyStarted) {
+                historyStarted = true
+                if (mode == MODE_DATE) showDatePicker() else loadMessages()
+            }
+        }
+    }
+
+    override fun onPause() {
+        io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupSettingsAccess.stopHistory(this)
+        super.onPause()
     }
 
     override fun onDestroy() {

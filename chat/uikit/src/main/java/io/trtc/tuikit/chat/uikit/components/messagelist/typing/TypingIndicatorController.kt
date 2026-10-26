@@ -3,12 +3,11 @@ package io.trtc.tuikit.chat.uikit.components.messagelist.typing
 import io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.MessageEvent
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
-import io.trtc.tuikit.atomicxcore.api.message.MessageInputStore
 import io.trtc.tuikit.atomicxcore.api.message.MessageListStore
 import io.trtc.tuikit.atomicxcore.api.message.MessageLoadOption
 import io.trtc.tuikit.atomicxcore.api.message.MessageType
-import io.trtc.tuikit.atomicxcore.api.message.SendMessageOption
-import io.trtc.tuikit.atomicxcore.api.message.SendMessagePayload
+import com.tencent.imsdk.v2.V2TIMManager
+import com.tencent.imsdk.v2.V2TIMMessage
 import io.trtc.tuikit.chat.uikit.components.common.ConversationIDUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +19,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.json.JSONObject
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 
 object TypingMessageProtocol {
     const val BUSINESS_ID = "user_typing_status"
@@ -30,12 +30,12 @@ object TypingMessageProtocol {
     private const val ACTION_PARAM_TYPING_END = "EIMAMSG_InputStatus_End"
 
     fun buildTypingMessageData(isTyping: Boolean): String {
-        val json = JSONObject()
-        json.put("businessID", BUSINESS_ID)
-        json.put("typingStatus", if (isTyping) 1 else 0)
-        json.put("version", 0)
-        json.put("userAction", if (isTyping) USER_ACTION_TYPING else 0)
-        json.put("actionParam", if (isTyping) ACTION_PARAM_TYPING_START else ACTION_PARAM_TYPING_END)
+        val json = JsonObject()
+        json.addProperty("businessID", BUSINESS_ID)
+        json.addProperty("typingStatus", if (isTyping) 1 else 0)
+        json.addProperty("version", 0)
+        json.addProperty("userAction", if (isTyping) USER_ACTION_TYPING else 0)
+        json.addProperty("actionParam", if (isTyping) ACTION_PARAM_TYPING_START else ACTION_PARAM_TYPING_END)
         return json.toString()
     }
 
@@ -51,12 +51,15 @@ object TypingMessageProtocol {
 
     fun parseTypingStatus(data: String): Boolean? {
         return try {
-            val json = JSONObject(data)
-            if (json.optString("businessID") != BUSINESS_ID) return null
+            val json = JsonParser.parseString(data).asJsonObject
+            val businessID = json.get("businessID")
+            if (businessID?.isJsonPrimitive != true || !businessID.asJsonPrimitive.isString || businessID.asString != BUSINESS_ID) return null
             if (json.has("typingStatus")) {
-                json.optInt("typingStatus", 0) == 1
+                val value = json.get("typingStatus")
+                if (!value.isJsonPrimitive || !value.asJsonPrimitive.isNumber) return null
+                when (value.asDouble) { 1.0 -> true; 0.0 -> false; else -> null }
             } else {
-                when (json.optString("actionParam")) {
+                when (json.get("actionParam")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString) {
                     ACTION_PARAM_TYPING_START -> true
                     ACTION_PARAM_TYPING_END -> false
                     else -> null
@@ -92,9 +95,15 @@ internal class TypingIndicatorController private constructor(
         fun release(controller: TypingIndicatorController) {
             controller.retainCount--
             if (controller.retainCount <= 0) {
-                controllers.remove(controller.conversationID)
+                if (controllers[controller.conversationID] === controller) controllers.remove(controller.conversationID)
                 controller.destroy()
             }
+        }
+
+        @Synchronized
+        fun resetAll() {
+            controllers.values.toList().forEach { it.destroy() }
+            controllers.clear()
         }
     }
 
@@ -114,11 +123,12 @@ internal class TypingIndicatorController private constructor(
 
     @Volatile
     private var hasSentTypingStart = false
+    private var destroyed = false
 
     @Volatile
     private var lastPeerMessageTimeMs = 0L
 
-    private val messageInputStore = MessageInputStore.create(conversationID)
+    private val loginIdentity = "${io.trtc.tuikit.atomicxcore.api.login.LoginStore.shared.sdkAppID}:${V2TIMManager.getInstance().loginUser.orEmpty()}"
     private val listenStore = if (peerUserID != null) MessageListStore.create(conversationID) else null
 
     init {
@@ -144,7 +154,7 @@ internal class TypingIndicatorController private constructor(
     }
 
     private fun handleNewMessage(message: MessageInfo) {
-        if (message.isSentBySelf) return
+        if (destroyed || message.isSentBySelf || message.from.userID != peerUserID) return
         lastPeerMessageTimeMs = System.currentTimeMillis()
         TypingMessageProtocol.parseTypingStatus(message)?.let { updatePeerTyping(it) }
     }
@@ -164,6 +174,7 @@ internal class TypingIndicatorController private constructor(
     }
 
     fun sendTypingStatus(isTyping: Boolean) {
+        if (destroyed) return
         if (peerUserID == null) return
         if (!isPeerActive()) return
         if (isTyping) {
@@ -178,13 +189,16 @@ internal class TypingIndicatorController private constructor(
     }
 
     private fun dispatchTypingMessage(isTyping: Boolean) {
-        messageInputStore.sendMessage(
-            payload = SendMessagePayload.CustomSendMessagePayload(
-                customData = TypingMessageProtocol.buildTypingMessageData(isTyping),
-                description = ""
-            ),
-            option = SendMessageOption(onlineUserOnly = true)
-        )
+        val currentIdentity = "${io.trtc.tuikit.atomicxcore.api.login.LoginStore.shared.sdkAppID}:${V2TIMManager.getInstance().loginUser.orEmpty()}"
+        if (currentIdentity != loginIdentity || V2TIMManager.getInstance().loginStatus != V2TIMManager.V2TIM_STATUS_LOGINED) return
+        val peer = peerUserID ?: return
+        val message = V2TIMManager.getMessageManager().createCustomMessage(
+            TypingMessageProtocol.buildTypingMessageData(isTyping).toByteArray(Charsets.UTF_8))
+        message.isExcludedFromUnreadCount = true
+        message.isExcludedFromLastMessage = true
+        // SDK transport only; never send through a business Outbox or generate offline push.
+        V2TIMManager.getMessageManager().sendMessage(message, peer, null,
+            V2TIMMessage.V2TIM_PRIORITY_NORMAL, true, null, null)
     }
 
     private fun isPeerActive(): Boolean {
@@ -199,6 +213,14 @@ internal class TypingIndicatorController private constructor(
             hasSentTypingStart = false
             dispatchTypingMessage(false)
         }
+        destroyed = true
         scope.cancel()
+    }
+
+    fun stop() {
+        sendTypingStatus(false)
+        typingTimeoutJob?.cancel()
+        typingTimeoutJob = null
+        _typingState.value = false
     }
 }

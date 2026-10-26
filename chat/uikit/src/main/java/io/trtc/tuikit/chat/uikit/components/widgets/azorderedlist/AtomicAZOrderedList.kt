@@ -35,7 +35,8 @@ data class AZOrderedListItem<T>(
     val key: String,
     val label: String,
     val avatarUrl: Any? = null,
-    val extraData: T
+    val extraData: T,
+    val presenceUserID: String? = null
 )
 
 data class AZOrderedListConfig(
@@ -286,6 +287,7 @@ class AtomicAZOrderedList @JvmOverloads constructor(
                 }
 
                 holder is DataItemViewHolder && item is FlatItem.DataItem -> {
+                    holder.presence.bind(item.item.presenceUserID)
                     holder.textView.text = item.item.label
                     holder.textView.setTextColor(colors.textColorPrimary)
                     holder.itemView.setBackgroundColor(colors.bgColorOperate)
@@ -316,6 +318,7 @@ class AtomicAZOrderedList @JvmOverloads constructor(
 
     private class DataItemViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val avatar: Avatar = view.findViewWithTag("avatar")
+        val presence = io.trtc.tuikit.chat.uikit.components.presence.PresenceAvatarBinding(avatar)
         val textView: TextView = view.findViewWithTag("label")
         val disclosureView: ImageView = view.findViewWithTag("disclosure")
     }

@@ -30,6 +30,9 @@ class ChatPageView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
+    companion object {
+        fun resetTransientState() { TypingIndicatorController.resetAll() }
+    }
 
     private val messageListView: MessageListView
     private val messageInputView: MessageInputView
@@ -146,6 +149,8 @@ class ChatPageView @JvmOverloads constructor(
     fun exitMultiSelectMode() {
         messageListView.exitMultiSelectMode()
     }
+
+    fun stopTyping() { typingController?.stop() }
 
     fun isInMultiSelectMode(): Boolean {
         return messageListView.isInMultiSelectMode()

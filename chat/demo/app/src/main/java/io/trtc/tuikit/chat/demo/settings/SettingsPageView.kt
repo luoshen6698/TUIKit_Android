@@ -334,6 +334,7 @@ class SettingsPageView @JvmOverloads constructor(
 
         val entries = listOf(
             Triple(R.string.xingdun_account_security, R.drawable.xingdun_ic_settings_account, XingDunFeatureActivity.MODE_ACCOUNT_SECURITY),
+            Triple(R.string.xingdun_profile_privacy_title, R.drawable.xingdun_ic_mine_privacy, "profile_privacy"),
             Triple(R.string.xingdun_notification_settings, R.drawable.xingdun_ic_notification_bell, XingDunFeatureActivity.MODE_NOTIFICATIONS),
             Triple(R.string.demo_settings_language, R.drawable.demo_ic_login_language, XingDunFeatureActivity.MODE_LANGUAGE),
             Triple(R.string.xingdun_storage_management, R.drawable.xingdun_ic_storage_file, XingDunFeatureActivity.MODE_STORAGE),
@@ -368,7 +369,11 @@ class SettingsPageView @JvmOverloads constructor(
                     LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT),
                 )
             }
-            row.setOnClickListener { XingDunFeatureActivity.start(context, mode) }
+            row.setOnClickListener {
+                if (mode == "profile_privacy") context.startActivity(android.content.Intent(context,
+                    io.trtc.tuikit.chat.demo.xingdun.features.XingDunProfilePrivacyActivity::class.java))
+                else XingDunFeatureActivity.start(context, mode)
+            }
             settingsGroupVoice.addView(row)
             systemSettingsRows += row
             if (index < entries.lastIndex) {

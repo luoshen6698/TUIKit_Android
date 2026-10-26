@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="xingdun_reset_code_requested">If this contact is eligible, a verification code will be sent. Complete verification within %1$d minutes.</string>
+    <string name="xingdun_profile_privacy_title">Profile visibility</string>
+    <string name="xingdun_account_type_title">Account type</string>
+    <string name="xingdun_account_type_normal">Standard</string>
+    <string name="xingdun_account_type_internal">Internal</string>
+    <string name="xingdun_account_type_unknown">Unknown</string>
+    <string name="xingdun_privacy_account">Show account</string>
+    <string name="xingdun_privacy_phone">Show phone number</string>
+    <string name="xingdun_privacy_email">Show email address</string>
+    <string name="xingdun_privacy_birthday">Show birthday</string>
+    <string name="xingdun_privacy_signature">Show signature</string>
+    <string name="xingdun_privacy_loading">Checking your saved privacy settings…</string>
+    <string name="xingdun_privacy_description">Choose which fields other people can see in your profile. These settings do not prevent people from finding your account.</string>
+    <string name="xingdun_privacy_pending">Your settings are saved. Messaging profile synchronization is pending. Use Retry profile synchronization to try again.</string>
+    <string name="xingdun_privacy_read_failed">Unable to confirm your saved settings. Refresh before making more changes.</string>
+    <string name="xingdun_privacy_write_failed_read_back">The update could not be confirmed. The switches show the settings read back from the server.</string>
+    <string name="xingdun_privacy_refresh">Refresh saved settings</string>
+    <string name="xingdun_privacy_retry_sync">Retry profile synchronization</string>
+    <string name="xingdun_contact_private_name">Contact</string>
+    <string name="xingdun_presence_online">Online</string>
+    <string name="xingdun_presence_offline">Offline</string>
+    <string name="xingdun_presence_unknown">Status unknown</string>
+    <string name="xingdun_group_access_denied">This group does not allow this action, or permission could not be verified. Refresh and try again.</string>
+    <string name="xingdun_group_private_chat_setting">Private chats from group members</string>
+    <string name="xingdun_group_history_setting">Who can open group history</string>
+    <string name="xingdun_group_recall_setting">Who can recall ordinary members’ messages</string>
+    <string name="xingdun_group_policy_unknown">Unknown</string>
+    <string name="xingdun_group_policy_allowed">Allowed</string>
+    <string name="xingdun_group_policy_forbidden">Not allowed</string>
+    <string name="xingdun_group_access_settings">Group access</string>
+    <string name="xingdun_group_policy_scope">Private chat rules apply to chats started from this group. History rules control business history entry points and do not change live delivery. Recall rules do not grant group-wide deletion of other people’s messages; those actions have separate authorization.</string>
+    <string name="xingdun_group_policy_conflict">These settings changed on another client. The saved values will be refreshed. Review them before trying again.</string>
+    <string name="xingdun_group_policy_update_unknown">The update could not be confirmed. Checking the saved settings before further changes.</string>
+    <string name="xingdun_login_ip_restricted">This network is not allowed for this account. Change networks or contact your administrator.</string>
+</resources>

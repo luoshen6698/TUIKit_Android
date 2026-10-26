@@ -84,6 +84,7 @@ open class SelfDetailActivity : BaseActivity() {
     private lateinit var errorBanner: TextView
 
     private lateinit var accountItem: SettingsEntry
+    private lateinit var accountTypeItem: SettingsEntry
     private lateinit var nicknameItem: SettingsEntry
     private lateinit var statusItem: SettingsEntry
     private lateinit var genderItem: SettingsEntry
@@ -246,6 +247,9 @@ open class SelfDetailActivity : BaseActivity() {
         )
 
         buildAvatarRow()
+        accountTypeItem = SettingsEntry(context = this, title = getString(R.string.xingdun_account_type_title),
+            showArrow = false, showDivider = true)
+        accountTypeItem.setValue(getString(R.string.xingdun_account_type_unknown))
         nicknameItem = SettingsEntry(
             context = this,
             title = getString(R.string.demo_settings_self_detail_nickname),
@@ -270,6 +274,7 @@ open class SelfDetailActivity : BaseActivity() {
 
         identityContainer.addView(nicknameItem.view, entryLayoutParams())
         identityContainer.addView(accountItem.view, entryLayoutParams())
+        identityContainer.addView(accountTypeItem.view, entryLayoutParams())
         identityContainer.addView(statusItem.view, entryLayoutParams())
 
         detailsTitle = TextView(this).apply {
@@ -409,6 +414,7 @@ open class SelfDetailActivity : BaseActivity() {
         avatarDivider.setBackgroundColor(colors.strokeColorPrimary)
 
         accountItem.applyColors(colors)
+        accountTypeItem.applyColors(colors)
         nicknameItem.applyColors(colors)
         statusItem.applyColors(colors)
         genderItem.applyColors(colors)
@@ -448,6 +454,7 @@ open class SelfDetailActivity : BaseActivity() {
             endOperation()
             return
         }
+        val authenticationGeneration = XingDunSessionManager.currentAuthenticationGeneration()
         runCatching {
             val profile = XingDunSessionManager.apiClient().get<JsonObject>(
                 session, "user/profile", emptyMap(), JsonObject::class.java
@@ -462,6 +469,9 @@ open class SelfDetailActivity : BaseActivity() {
             }
             profile
         }.onSuccess { profile ->
+            if (authenticationGeneration == null || authenticationGeneration != XingDunSessionManager.currentAuthenticationGeneration()) return@onSuccess
+            val accountType = if (profile.has("account_type")) profile.string("account_type") else "normal"
+            accountTypeItem.setValue(getString(io.trtc.tuikit.chat.demo.xingdun.features.XingDunAccountType.label(accountType)))
             cachedCustomID = profile.string("custom_id").orEmpty()
             cachedNickname = profile.string("nickname") ?: cachedNickname
             cachedSignature = profile.string("signature").orEmpty()

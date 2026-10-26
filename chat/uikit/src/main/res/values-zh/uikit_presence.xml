@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="uikit_presence_online">在线</string>
+    <string name="uikit_presence_offline">离线</string>
+    <string name="uikit_presence_unknown">状态未知</string>
+</resources>

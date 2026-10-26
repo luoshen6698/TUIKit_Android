@@ -19,6 +19,9 @@
         android:supportsRtl="true"
         android:theme="@style/demo_Theme_ChatView">
 
+        <activity android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunProfilePrivacyActivity"
+            android:exported="false" android:theme="@style/Chat_UIKit_Theme" />
+
         <!-- SDK business initialization begins only after the first-launch privacy decision. -->
         <provider android:name="com.tencent.qcloud.tuicore.ServiceInitializer" tools:node="remove" />
         <provider android:name="com.tencent.qcloud.tuikit.tuicallkit.manager.bridge.Initializer" tools:node="remove" />

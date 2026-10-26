@@ -164,6 +164,7 @@ class ConversationListAdapter(
 class ConversationItemLayout(context: Context) : FrameLayout(context) {
 
     private val avatar: Avatar
+    private val presenceBinding: io.trtc.tuikit.chat.uikit.components.presence.PresenceAvatarBinding
     private val titleView: TextView
     private val subtitleView: TextView
     private val timeView: TextView
@@ -213,6 +214,7 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
         avatar = Avatar(context).apply {
             setSize(Avatar.AvatarSize.L)
         }
+        presenceBinding = io.trtc.tuikit.chat.uikit.components.presence.PresenceAvatarBinding(avatar)
         contentRow.addView(avatar, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ))
@@ -333,6 +335,7 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
         context: Context,
         summaryFormatter: MessageListMessageSummaryFormatter = MessageListMessageSummaryFormatter()
     ) {
+        presenceBinding.bind(ConversationIDUtil.userIdOrNull(conversation.conversationID))
         avatar.setContent(
             Avatar.AvatarContent.Image(
                 url = conversation.avatarURL,

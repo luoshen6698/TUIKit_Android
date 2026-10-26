@@ -4,6 +4,7 @@ import android.app.Activity
 import android.graphics.Color
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.os.SystemClock
 import android.text.InputType
 import android.view.View
 import android.widget.Button
@@ -12,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
+import androidx.core.widget.doAfterTextChanged
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.login.BaseLoginActivity
@@ -36,6 +38,8 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
     private var phoneMode = true
     private var loading = false
     private var cooldown: CountDownTimer? = null
+    private lateinit var codeCooldown: XingDunResetCodeCooldown
+    private var requestGeneration = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,11 +49,33 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
             return
         }
         bootstrap = selected
+        val deadlines = savedInstanceState?.getBundle("reset_code_deadlines")
+        val now = SystemClock.elapsedRealtime()
+        codeCooldown = XingDunResetCodeCooldown(deadlines?.keySet()?.associateWith { deadlines.getLong(it) }
+            ?.filterValues { it > now && it <= now + 60_000L }?.toMutableMap() ?: mutableMapOf())
         setContentView(R.layout.xingdun_activity_password_reset)
         bindViews()
         bindBrand()
         bindActions()
-        updateMode(true)
+        updateMode(savedInstanceState?.getBoolean("reset_phone_mode", true) ?: true)
+        target.doAfterTextChanged {
+            requestGeneration++
+            setLoading(false, "")
+            refreshCooldown()
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean("reset_phone_mode", phoneMode)
+        outState.putBundle("reset_code_deadlines", Bundle().apply {
+            codeCooldown.snapshot(SystemClock.elapsedRealtime()).forEach { (key, deadline) -> putLong(key, deadline) }
+        })
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::codeCooldown.isInitialized && ::getCode.isInitialized) refreshCooldown()
     }
 
     override fun onDestroy() {
@@ -96,6 +122,7 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
     }
 
     private fun updateMode(usePhone: Boolean) {
+        requestGeneration++
         phoneMode = usePhone
         phoneTab.background = AppCompatResources.getDrawable(this, if (phoneMode) R.drawable.xingdun_bg_enterprise_segment_selected else R.drawable.xingdun_bg_enterprise_segment)
         emailTab.background = AppCompatResources.getDrawable(this, if (phoneMode) R.drawable.xingdun_bg_enterprise_segment else R.drawable.xingdun_bg_enterprise_segment_selected)
@@ -107,12 +134,11 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
         target.setAutofillHints(if (phoneMode) View.AUTOFILL_HINT_PHONE else View.AUTOFILL_HINT_EMAIL_ADDRESS)
         code.text.clear()
         status.text = ""
-        cooldown?.cancel()
-        getCode.isEnabled = true
-        getCode.setText(R.string.xingdun_get_verification_code)
+        refreshCooldown()
     }
 
     private fun requestCode() {
+        if (loading) return
         val targetValue = target.text.toString().trim()
         val targetError = if (phoneMode) {
             XingDunAuthenticationInputValidator.phoneError(targetValue)
@@ -123,39 +149,55 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
             status.setText(targetError.messageResource())
             return
         }
-        if (phoneMode) {
-            status.setText(R.string.xingdun_phone_reset_code_placeholder)
-            return
-        }
+        val channel = if (phoneMode) "phone" else "email"
+        val requestKey = codeCooldown.key(bootstrap.companyCode, channel, targetValue)
+        if (codeCooldown.remaining(requestKey, SystemClock.elapsedRealtime()) > 0) return
+        val generation = ++requestGeneration
+        codeCooldown.begin(requestKey, SystemClock.elapsedRealtime())
         setLoading(true, getString(R.string.xingdun_sending_verification_code))
+        refreshCooldown()
         lifecycleScope.launch {
             runCatching {
-                XingDunSessionManager.sendResetCode(bootstrap.companyCode, "email", targetValue)
+                XingDunSessionManager.sendResetCode(bootstrap.companyCode, channel, targetValue)
             }.onSuccess { response ->
-                setLoading(false, getString(R.string.xingdun_verification_code_sent, ((response.expiresIn ?: 300L) + 59L) / 60L))
-                startCooldown()
+                if (!ownsRequest(generation, requestKey)) return@onSuccess
+                setLoading(false, getString(R.string.xingdun_reset_code_requested, ((response.expiresIn ?: 300L) + 59L) / 60L))
             }.onFailure { error ->
+                if (!ownsRequest(generation, requestKey)) return@onFailure
                 setLoading(false, getString(XingDunAuthenticationErrorPresenter.reset(error)))
             }
         }
     }
 
-    private fun startCooldown() {
+    private fun ownsRequest(generation: Long, key: String): Boolean =
+        generation == requestGeneration && key == currentCooldownKey() &&
+            XingDunSessionManager.currentEnterprise()?.companyCode == bootstrap.companyCode
+
+    private fun currentCooldownKey(): String = codeCooldown.key(
+        bootstrap.companyCode, if (phoneMode) "phone" else "email", target.text.toString()
+    )
+
+    private fun refreshCooldown() {
         cooldown?.cancel()
-        cooldown = object : CountDownTimer(60_000L, 1_000L) {
+        val remaining = codeCooldown.remaining(currentCooldownKey(), SystemClock.elapsedRealtime())
+        getCode.isEnabled = !loading && remaining == 0L
+        getCode.text = if (remaining > 0) getString(R.string.xingdun_resend_seconds, (remaining + 999L) / 1_000L)
+            else getString(R.string.xingdun_get_verification_code)
+        if (remaining == 0L) return
+        cooldown = object : CountDownTimer(remaining, 1_000L) {
             override fun onTick(millisUntilFinished: Long) {
                 getCode.isEnabled = false
                 getCode.text = getString(R.string.xingdun_resend_seconds, (millisUntilFinished + 999L) / 1_000L)
             }
 
             override fun onFinish() {
-                getCode.isEnabled = true
-                getCode.setText(R.string.xingdun_get_verification_code)
+                refreshCooldown()
             }
         }.start()
     }
 
     private fun resetPassword() {
+        if (loading) return
         val targetValue = target.text.toString().trim()
         val validationError = (if (phoneMode) {
             XingDunAuthenticationInputValidator.phoneError(targetValue)
@@ -196,7 +238,8 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
         primaryAction.isEnabled = !value
         phoneTab.isEnabled = !value
         emailTab.isEnabled = !value
-        getCode.isEnabled = !value
+        target.isEnabled = !value
+        refreshCooldown()
     }
 
     private fun XingDunAuthenticationInputError.messageResource(): Int = when (this) {

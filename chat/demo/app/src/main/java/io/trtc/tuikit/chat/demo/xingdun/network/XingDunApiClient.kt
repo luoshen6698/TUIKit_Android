@@ -359,7 +359,7 @@ class XingDunApiClient(
                 throw XingDunApiException(null, response.code, appContext.getString(R.string.xingdun_error_response_format))
             }
             if (envelope.code != 0 && envelope.code != 200) {
-                throw XingDunApiException(envelope.code, response.code, envelope.message, envelope.traceId)
+                throw apiException(payload, response.code)
             }
             envelope.data ?: throw XingDunApiException(
                 envelope.code,
@@ -390,7 +390,7 @@ class XingDunApiClient(
                 throw XingDunApiException(null, response.code, appContext.getString(R.string.xingdun_error_response_format))
             }
             if (envelope.code != 0 && envelope.code != 200) {
-                throw XingDunApiException(envelope.code, response.code, envelope.message, envelope.traceId)
+                throw apiException(payload, response.code)
             }
             envelope.data
         }
@@ -412,12 +412,7 @@ class XingDunApiClient(
                 ?: throw XingDunApiException(null, response.code, appContext.getString(R.string.xingdun_error_response_format))
             val code = envelope.get("code")?.takeUnless { it.isJsonNull }?.asInt ?: -1
             if (code != 0 && code != 200) {
-                throw XingDunApiException(
-                    code,
-                    response.code,
-                    envelope.get("message")?.takeUnless { it.isJsonNull }?.asString.orEmpty(),
-                    envelope.get("trace_id")?.takeUnless { it.isJsonNull }?.asString
-                )
+                throw apiException(payload, response.code)
             }
         }
 
@@ -443,7 +438,8 @@ class XingDunApiClient(
             businessCode = json?.get("code")?.takeUnless { it.isJsonNull }?.asInt,
             httpStatus = status,
             message = message,
-            traceId = json?.get("trace_id")?.takeUnless { it.isJsonNull }?.asString
+            traceId = json?.get("trace_id")?.takeUnless { it.isJsonNull }?.asString,
+            reason = XingDunApiFailureReason.from(json)
         )
     }
 

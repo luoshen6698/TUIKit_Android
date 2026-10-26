@@ -115,6 +115,7 @@ internal class MessageInputTextController(
     }
 
     fun resetInputText() {
+        onTypingContentChanged(false)
         inputText = ""
         hasUserEditedText = false
         runProgrammaticTextEdit {

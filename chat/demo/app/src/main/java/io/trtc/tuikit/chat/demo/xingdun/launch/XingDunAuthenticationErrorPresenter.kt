@@ -34,6 +34,7 @@ internal object XingDunAuthenticationErrorPresenter {
         val apiError = error as? XingDunApiException ?: return R.string.xingdun_authentication_failed
         val message = apiError.message.trim()
         return when {
+            apiError.reason == "login_ip_restricted" -> R.string.xingdun_login_ip_restricted
             apiError.httpStatus == 429 || message.contains("频繁") || message.contains("尝试过多") ->
                 R.string.xingdun_auth_rate_limited
             apiError.businessCode == 40010 -> R.string.xingdun_enterprise_lookup_required

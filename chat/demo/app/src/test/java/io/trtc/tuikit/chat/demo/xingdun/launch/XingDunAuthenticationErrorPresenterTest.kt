@@ -6,6 +6,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class XingDunAuthenticationErrorPresenterTest {
+    @Test fun ipRestrictionUsesExplicitReasonInsteadOfAllForbiddenResponses() {
+        assertEquals(R.string.xingdun_login_ip_restricted,
+            XingDunAuthenticationErrorPresenter.login(XingDunApiException(403, 403, "denied", reason = "login_ip_restricted")))
+        assertEquals(R.string.xingdun_authentication_failed,
+            XingDunAuthenticationErrorPresenter.login(XingDunApiException(403, 403, "unrelated permission")))
+    }
     @Test
     fun loginMapsStableBusinessErrorsWithoutExposingUnknownServerText() {
         assertEquals(

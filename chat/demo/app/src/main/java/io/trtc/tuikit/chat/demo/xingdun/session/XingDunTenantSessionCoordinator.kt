@@ -33,6 +33,10 @@ internal object XingDunTenantSessionCoordinator {
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
+        io.trtc.tuikit.chat.uikit.components.presence.UserPresenceStore.configureAccountScope {
+            val session = XingDunSessionManager.currentSession()
+            "${session?.companyCode.orEmpty()}:${XingDunSessionManager.currentAuthenticationGeneration()}"
+        }
     }
 
     fun isLeaving(): Boolean = synchronized(lock) { running }
@@ -56,6 +60,8 @@ internal object XingDunTenantSessionCoordinator {
             }
         }
         if (!shouldStart) return
+        io.trtc.tuikit.chat.uikit.components.presence.UserPresenceStore.reset()
+        io.trtc.tuikit.chat.uikit.pages.ChatPageView.resetTransientState()
 
         // Remove actionable call alerts as soon as this identity starts leaving, before network cleanup.
         XingDunCallSessionInitializer.reset()

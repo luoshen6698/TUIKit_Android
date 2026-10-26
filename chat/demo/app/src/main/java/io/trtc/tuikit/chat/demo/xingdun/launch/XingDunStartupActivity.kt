@@ -178,6 +178,11 @@ class XingDunStartupActivity : AppCompatActivity() {
                     } catch (error: CancellationException) {
                         throw error
                     } catch (error: Exception) {
+                        if (error is io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiException &&
+                            error.reason == "login_ip_restricted") {
+                            XingDunCredentialRecoveryCoordinator.redirectToLogin(R.string.xingdun_login_ip_restricted)
+                            break
+                        }
                         failStartupAuthentication()
                         if (!isStartupActive() ||
                             XingDunCredentialRecoveryCoordinator.state.value == XingDunCredentialRecoveryState.REDIRECTING

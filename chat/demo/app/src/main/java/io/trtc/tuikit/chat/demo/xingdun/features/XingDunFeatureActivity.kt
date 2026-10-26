@@ -2096,7 +2096,8 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun renderFriendSearchProfile(container: LinearLayout, profile: JsonObject) {
         val localUserID = profile.int("id") ?: 0
         val timUserID = profile.string("tim_user_id").orEmpty()
-        val nickname = profile.string("nickname") ?: timUserID
+        val nickname = profile.string("nickname") ?: getString(R.string.xingdun_contact_private_name)
+        val visibility = profile.get("profile_visibility")?.takeIf { it.isJsonObject }?.asJsonObject
         val relationship = if (profile.boolean("is_self")) "self" else profile.string("relationship_status").orEmpty()
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2130,7 +2131,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                 setTextColor(0xFF1C1C1E.toInt())
                 maxLines = 1
             })
-            profile.string("signature")?.let { signature ->
+            profile.string("signature")?.takeIf { XingDunProfileVisibility.visible(visibility, "signature") }?.let { signature ->
                 addView(TextView(context).apply {
                     text = signature
                     textSize = 13f
@@ -2149,7 +2150,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             }
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         card.addView(header)
-        profile.string("custom_id")?.let { customID ->
+        profile.string("custom_id")?.takeIf { XingDunProfileVisibility.visible(visibility, "account") }?.let { customID ->
             card.addView(TextView(this).apply {
                 text = getString(R.string.xingdun_friend_account_value, customID)
                 textSize = 14f

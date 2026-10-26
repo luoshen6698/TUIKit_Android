@@ -231,6 +231,9 @@ internal object XingDunCredentialRecoveryCoordinator {
             }
             RefreshResult.Success(session)
         } catch (error: Throwable) {
+            if (error is XingDunApiException && error.reason == "login_ip_restricted") {
+                return RefreshResult.Terminal(R.string.xingdun_login_ip_restricted)
+            }
             if (error is CancellationException) throw error
             // Only restore's explicit rejection clears a session. A malformed or
             // temporarily unavailable response must not revoke local authentication.

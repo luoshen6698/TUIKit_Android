@@ -157,7 +157,8 @@ data class XingDunUserProfile(
     val phone: String? = null,
     val email: String? = null,
     val companyCode: String? = null,
-    val status: String? = null
+    val status: String? = null,
+    val accountType: String? = "normal"
 )
 
 /** Tenant-scoped business profile returned by `/user/detail`. */
@@ -174,7 +175,9 @@ data class XingDunContactDetail(
     val alias: String? = null,
     val isBlacklist: Boolean = false,
     val isBlockedByPeer: Boolean = false,
-    val departmentPath: List<String> = emptyList()
+    val departmentPath: List<String> = emptyList(),
+    val profileVisibility: com.google.gson.JsonObject? = null,
+    val accountType: String? = "normal"
 )
 
 /** Business metadata merged into the Tencent IM joined-group list. */
@@ -206,6 +209,9 @@ data class XingDunGroupDetail(
     val beInviteMode: Int = BE_INVITE_CONFIRM,
     val viewMemberCardMode: Int = MODE_ADMINISTRATORS,
     val pinMessageMode: Int = MODE_ADMINISTRATORS,
+    val memberPrivateChat: Int? = null,
+    val historyQueryMode: Int? = null,
+    val deleteMessageMode: Int? = null,
     val muteAll: Boolean = false,
     val muteAllLevel: Int = 0,
     val isOfficial: Boolean = false,
@@ -383,7 +389,8 @@ class XingDunApiException(
     val businessCode: Int?,
     val httpStatus: Int?,
     override val message: String,
-    val traceId: String? = null
+    val traceId: String? = null,
+    val reason: String? = null
 ) : Exception(message) {
     val isUnauthorized: Boolean
         get() = httpStatus == 401 || businessCode == 401 || businessCode == 40100 || businessCode == 40101

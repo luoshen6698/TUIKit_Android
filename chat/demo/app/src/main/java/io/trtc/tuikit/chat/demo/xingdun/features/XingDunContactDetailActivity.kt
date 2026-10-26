@@ -61,6 +61,7 @@ class XingDunContactDetailActivity : BaseActivity() {
 
     private val timUserID: String by lazy { intent.getStringExtra(EXTRA_USER_ID).orEmpty().trim() }
     private val fallbackCustomID: String? by lazy { intent.getStringExtra(EXTRA_CUSTOM_ID).normalized() }
+    private val sourceGroupID: String? by lazy { intent.getStringExtra("source_group_id").normalized() }
     private var detail: XingDunContactDetail? = null
     private var isOperating = false
     private var operationError: String? = null
@@ -200,6 +201,7 @@ class XingDunContactDetailActivity : BaseActivity() {
             return
         }
         lifecycleScope.launch {
+            val generation = XingDunSessionManager.currentAuthenticationGeneration()
             val detailResult = runCatching {
                 XingDunSessionManager.apiClient().get<XingDunContactDetail>(
                     session,
@@ -209,12 +211,14 @@ class XingDunContactDetailActivity : BaseActivity() {
                 )
             }
             detailResult.onSuccess { response ->
+                if (generation == null || generation != XingDunSessionManager.currentAuthenticationGeneration() ||
+                    XingDunSessionManager.currentSession()?.let { it.companyCode == session.companyCode && it.timUserId == session.timUserId && it.sdkAppId == session.sdkAppId } != true) return@launch
                 if (relationshipState == RELATIONSHIP_FRIEND || relationshipState == RELATIONSHIP_BLOCKED) {
                     relationshipState = if (response.isBlacklist) RELATIONSHIP_BLOCKED else RELATIONSHIP_FRIEND
                 }
                 detail = response.copy(
                     timUserId = response.timUserId.trim().ifEmpty { timUserID },
-                    customId = response.customId.normalized() ?: detail?.customId ?: fallbackCustomID,
+                    customId = response.customId,
                     nickname = response.nickname.normalized() ?: detail?.nickname,
                     avatar = response.avatar.normalized() ?: detail?.avatar
                 )
@@ -254,6 +258,8 @@ class XingDunContactDetailActivity : BaseActivity() {
             nickname = profile.string("nickname") ?: current.nickname,
             avatar = profile.string("avatar") ?: current.avatar,
             signature = profile.string("signature") ?: current.signature,
+            profileVisibility = if (profile.has("profile_visibility")) profile.get("profile_visibility")?.takeIf { it.isJsonObject }?.asJsonObject else current.profileVisibility,
+            accountType = if (profile.has("account_type")) profile.string("account_type") else "normal",
             timUserId = profile.string("tim_user_id") ?: current.timUserId.ifBlank { timUserID },
             isBlacklist = relationshipState == RELATIONSHIP_BLOCKED,
         )
@@ -289,20 +295,26 @@ class XingDunContactDetailActivity : BaseActivity() {
 
         content.addView(sectionLabel(R.string.xingdun_contact_detail_user_information))
         content.addView(card().apply {
+            addView(valueRow(R.string.xingdun_account_type_title, getString(XingDunAccountType.label(current.accountType))))
             if (friendRelationship) {
+                addView(divider())
                 addView(disclosureRow(
                     R.string.xingdun_contact_detail_remark,
                     current.alias.displayValue()
                 ) { showRemarkEditor() })
                 addView(divider())
             }
-            addView(valueRow(R.string.xingdun_contact_detail_birthday, current.birthday.displayValue()))
-            addView(divider())
-            addView(valueRow(R.string.xingdun_contact_detail_phone, current.phone.displayValue()))
-            addView(divider())
-            addView(valueRow(R.string.xingdun_contact_detail_email, current.email.displayValue()))
-            addView(divider())
-            addView(valueRow(R.string.xingdun_contact_detail_signature, current.signature.displayValue()))
+            listOf(
+                Triple("birthday", R.string.xingdun_contact_detail_birthday, current.birthday),
+                Triple("phone", R.string.xingdun_contact_detail_phone, current.phone),
+                Triple("email", R.string.xingdun_contact_detail_email, current.email),
+                Triple("signature", R.string.xingdun_contact_detail_signature, current.signature),
+            ).forEach { (field, label, value) ->
+                if (XingDunProfileVisibility.visible(current.profileVisibility, field)) {
+                    if (childCount > 0) addView(divider())
+                    addView(valueRow(label, value.displayValue()))
+                }
+            }
         }, cardParams(top = 6))
 
         if (friendRelationship) {
@@ -321,7 +333,7 @@ class XingDunContactDetailActivity : BaseActivity() {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         setPadding(16.dp(), 14.dp(), 16.dp(), 14.dp())
-        val name = current.nickname.normalized() ?: timUserID
+        val name = current.nickname.normalized() ?: getString(R.string.xingdun_contact_private_name)
         addView(Avatar(context).apply {
             setSize(Avatar.AvatarSize.L)
             setShape(Avatar.AvatarShape.Round)
@@ -337,7 +349,7 @@ class XingDunContactDetailActivity : BaseActivity() {
                 setTextColor(TEXT_PRIMARY)
                 maxLines = 1
             })
-            addView(TextView(context).apply {
+            if (XingDunProfileVisibility.visible(current.profileVisibility, "account")) addView(TextView(context).apply {
                 text = getString(
                     R.string.xingdun_contact_detail_account_id,
                     current.customId.normalized() ?: current.timUserId.ifBlank { timUserID }
@@ -374,7 +386,21 @@ class XingDunContactDetailActivity : BaseActivity() {
 
     private fun openBottomAction() {
         if (isFriendRelationship()) {
-            ChatActivity.start(this, "c2c_$timUserID")
+            val group = sourceGroupID
+            if (group == null) ChatActivity.start(this, "c2c_$timUserID")
+            else {
+                if (isOperating) return
+                isOperating = true
+                render()
+                lifecycleScope.launch {
+                    val result = runCatching { XingDunGroupSettingsAccess.authorize(group, "private_chat", timUserID) }
+                    isOperating = false
+                    if (isFinishing || isDestroyed) return@launch
+                    result.onSuccess { ChatActivity.start(this@XingDunContactDetailActivity, "c2c_$timUserID") }
+                        .onFailure { operationError = getString(R.string.xingdun_group_access_denied) }
+                    render()
+                }
+            }
         } else if (canAddFriend()) {
             val keyword = detail?.customId.normalized() ?: timUserID
             XingDunFeatureActivity.start(
@@ -728,7 +754,7 @@ class XingDunContactDetailActivity : BaseActivity() {
 
     private fun fallbackDetail(): XingDunContactDetail = XingDunContactDetail(
         customId = fallbackCustomID,
-        nickname = intent.getStringExtra(EXTRA_NICKNAME).normalized() ?: timUserID,
+        nickname = intent.getStringExtra(EXTRA_NICKNAME).normalized() ?: getString(R.string.xingdun_contact_private_name),
         avatar = intent.getStringExtra(EXTRA_AVATAR).normalized(),
         signature = intent.getStringExtra(EXTRA_SIGNATURE).normalized(),
         timUserId = timUserID,
@@ -786,6 +812,15 @@ class XingDunContactDetailActivity : BaseActivity() {
 
         fun start(context: Context, userID: String, nickname: String?, avatar: String?) {
             start(context, userID, null, nickname, avatar)
+        }
+
+        fun startFromGroup(context: Context, groupID: String, userID: String, nickname: String?, avatar: String?) {
+            context.startActivity(Intent(context, XingDunContactDetailActivity::class.java).apply {
+                putExtra(EXTRA_USER_ID, userID)
+                putExtra(EXTRA_NICKNAME, nickname)
+                putExtra(EXTRA_AVATAR, avatar)
+                putExtra("source_group_id", groupID)
+            })
         }
 
         fun start(context: Context, userID: String, customID: String?, nickname: String?, avatar: String?) {

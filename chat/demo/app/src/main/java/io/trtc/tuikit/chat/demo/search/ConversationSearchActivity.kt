@@ -42,6 +42,7 @@ open class ConversationSearchActivity : BaseActivity() {
     private lateinit var back: ImageView
     private lateinit var divider: View
     private lateinit var page: SearchMessageInConversationPage
+    private var historyStarted = false
 
     companion object {
         private const val EXTRA_CONVERSATION_ID = "conversation_id"
@@ -112,14 +113,28 @@ open class ConversationSearchActivity : BaseActivity() {
             page,
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
-        page.start(
-            conversationID = conversationID,
-            displayName = intent.getStringExtra(EXTRA_DISPLAY_NAME).orEmpty(),
-            avatarURL = intent.getStringExtra(EXTRA_AVATAR_URL)
-        )
         lifecycleScope.launch {
             themeStore.themeState.collectLatest { applyColors(it.currentTheme.tokens.color) }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!::page.isInitialized || isFinishing) return
+        io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupSettingsAccess.history(
+            this, intent.getStringExtra(EXTRA_CONVERSATION_ID).orEmpty()
+        ) {
+            if (!historyStarted) {
+                historyStarted = true
+                page.start(intent.getStringExtra(EXTRA_CONVERSATION_ID).orEmpty(),
+                    intent.getStringExtra(EXTRA_DISPLAY_NAME).orEmpty(), intent.getStringExtra(EXTRA_AVATAR_URL))
+            }
+        }
+    }
+
+    override fun onPause() {
+        io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupSettingsAccess.stopHistory(this)
+        super.onPause()
     }
 
     private fun buildCategoryLanding(conversationID: String): View = LinearLayout(this).apply {

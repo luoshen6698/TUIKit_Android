@@ -377,7 +377,8 @@ class ContactListView @JvmOverloads constructor(
                     key = contact.userID,
                     label = contact.displayName,
                     avatarUrl = contact.avatarURL,
-                    extraData = contact
+                    extraData = contact,
+                    presenceUserID = contact.userID
                 )
             }
         )
