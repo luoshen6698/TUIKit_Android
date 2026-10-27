@@ -49,6 +49,9 @@ import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionResult
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Android counterpart of iOS `XingDunContactDetailView`. */
@@ -66,6 +69,46 @@ class XingDunContactDetailActivity : BaseActivity() {
     private var isOperating = false
     private var operationError: String? = null
     private var relationshipState: String = RELATIONSHIP_UNKNOWN
+    private var groupSourceResumed = false
+    private var groupSourcePageScope: XingDunGroupMemberPreviewScope? = null
+    private var groupSourceState: XingDunGroupSourceProfileState = XingDunGroupSourceProfileState.Loading
+    private var groupSourceRefreshJob: Job? = null
+    private var groupSourceViewRevision = 0L
+    private val groupSourceLoader by lazy {
+        XingDunGroupSourceProfileLoader(
+            groupID = sourceGroupID.orEmpty(),
+            targetUserID = timUserID,
+            currentScope = ::profileScope,
+            loadGroup = { group ->
+                XingDunSessionManager.apiClient().get(
+                    checkNotNull(XingDunSessionManager.currentSession()), "team/detail",
+                    mapOf("team_id" to group), io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail::class.java,
+                )
+            },
+            loadProfile = { target ->
+                XingDunSessionManager.apiClient().get(
+                    checkNotNull(XingDunSessionManager.currentSession()), "user/detail",
+                    mapOf("tim_user_id" to target), XingDunContactDetail::class.java,
+                )
+            },
+            loadRelationship = { keyword ->
+                XingDunSessionManager.apiClient().getNullable(
+                    checkNotNull(XingDunSessionManager.currentSession()), "user/searchForFriend",
+                    mapOf("keyword" to keyword), JsonObject::class.java,
+                )
+            },
+            publish = ::applyGroupSourceState,
+            isActive = { groupSourceResumed && !isFinishing && !isDestroyed },
+            recommend = { conversation -> sendContactCard(listOf(conversation)) },
+            showRecommendationFailure = { Toast.makeText(this, R.string.xingdun_contact_detail_recommend_failed, Toast.LENGTH_SHORT).show() },
+        )
+    }
+
+    private fun profileScope(): XingDunGroupMemberPreviewScope? {
+        val session = XingDunSessionManager.currentSession() ?: return null
+        val generation = XingDunSessionManager.currentAuthenticationGeneration() ?: return null
+        return XingDunGroupMemberPreviewScope(session.companyCode, session.sdkAppId, session.timUserId, generation)
+    }
     private val remarkEditor = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
         val remark = result.data?.getStringExtra(XingDunContactRemarkActivity.EXTRA_RESULT_REMARK).orEmpty()
@@ -79,7 +122,13 @@ class XingDunContactDetailActivity : BaseActivity() {
         val conversationID = result.data
             ?.getStringExtra(XingDunContactForwardPickerActivity.EXTRA_RESULT_CONVERSATION_ID)
             .orEmpty()
-        if (conversationID.isNotBlank()) sendContactCard(listOf(conversationID))
+        if (conversationID.isNotBlank()) {
+            if (sourceGroupID == null) sendContactCard(listOf(conversationID))
+            else {
+                groupSourceLoader.queueRecommendation(conversationID)
+                if (groupSourceResumed) startGroupSourceRefresh()
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,8 +141,94 @@ class XingDunContactDetailActivity : BaseActivity() {
         relationshipState = intent.getStringExtra(EXTRA_RELATIONSHIP).orEmpty().ifBlank { RELATIONSHIP_UNKNOWN }
         detail = fallbackDetail()
         buildPage()
+        if (sourceGroupID == null) {
+            render()
+            loadIndependentDetail()
+        } else {
+            groupSourcePageScope = profileScope()
+            // Capture this page's owner before returning from onCreate.
+            groupSourceLoader
+            applyGroupSourceState(XingDunGroupSourceProfileState.Loading)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (sourceGroupID != null && ::content.isInitialized && !isFinishing) {
+            groupSourceResumed = true
+            startGroupSourceRefresh()
+        }
+    }
+
+    override fun onPause() {
+        if (sourceGroupID != null && ::content.isInitialized) {
+            groupSourceResumed = false
+            groupSourceViewRevision++
+            groupSourceRefreshJob?.cancel()
+            groupSourceRefreshJob = null
+            groupSourceLoader.invalidate()
+            applyGroupSourceState(XingDunGroupSourceProfileState.Loading)
+        }
+        super.onPause()
+    }
+
+    private fun startGroupSourceRefresh() {
+        if (!groupSourceResumed || isFinishing || isDestroyed) return
+        groupSourceViewRevision++
+        groupSourceRefreshJob?.cancel()
+        // refresh() advances its request before awaiting; preserve an ON_START picker result.
+        groupSourceRefreshJob = lifecycleScope.launch {
+            while (isActive && groupSourceResumed) {
+                groupSourceLoader.refresh()
+                // Business policies have no reliable shared SDK invalidation stream here.
+                // One foreground job also rechecks while the same profile stays open.
+                delay(10_000L)
+            }
+        }
+    }
+
+    private fun applyGroupSourceState(state: XingDunGroupSourceProfileState) {
+        groupSourceState = state
+        operationError = null
+        if (state is XingDunGroupSourceProfileState.Loaded) {
+            detail = state.profile.copy(timUserId = state.profile.timUserId.trim().ifEmpty { timUserID })
+            relationshipState = RELATIONSHIP_UNKNOWN
+            state.relationship?.let(::applyRelationshipProfile)
+        } else {
+            // Remove both rendered fields and cached data before checking authority again.
+            detail = null
+            relationshipState = RELATIONSHIP_UNKNOWN
+        }
         render()
-        loadDetail()
+        loading.visibility = if (state === XingDunGroupSourceProfileState.Loading) View.VISIBLE else View.GONE
+        detailRefresh.isRefreshing = false
+    }
+
+    private fun renderGroupSourceRestriction() {
+        content.removeAllViews()
+        chatButton.visibility = View.GONE
+        more.isEnabled = false
+        more.alpha = 0f
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(30.dp(), 80.dp(), 30.dp(), 30.dp())
+            addView(TextView(context).apply {
+                setText(when (groupSourceState) {
+                    XingDunGroupSourceProfileState.Loading -> R.string.xingdun_group_info_loading
+                    XingDunGroupSourceProfileState.Restricted -> R.string.xingdun_group_member_card_restricted
+                    else -> R.string.xingdun_contact_detail_load_failed
+                })
+                textSize = 16f
+                gravity = Gravity.CENTER
+                setTextColor(TEXT_PRIMARY)
+            })
+            if (groupSourceState !== XingDunGroupSourceProfileState.Loading) {
+                addView(primaryButton(R.string.xingdun_retry) { loadDetail() }, LinearLayout.LayoutParams(150.dp(), 46.dp()).apply {
+                    topMargin = 20.dp()
+                })
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
     private fun buildPage() {
@@ -192,6 +327,10 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun loadDetail() {
+        if (sourceGroupID != null) startGroupSourceRefresh() else loadIndependentDetail()
+    }
+
+    private fun loadIndependentDetail() {
         loading.visibility = View.VISIBLE
         val session = XingDunSessionManager.currentSession()
         if (session == null) {
@@ -266,6 +405,10 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun render() {
+        if (sourceGroupID != null && groupSourceState !is XingDunGroupSourceProfileState.Loaded) {
+            renderGroupSourceRestriction()
+            return
+        }
         val current = detail ?: return
         content.removeAllViews()
         content.addView(profileCard(current), cardParams())
@@ -385,6 +528,11 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun openBottomAction() {
+        if (sourceGroupID != null && (!groupSourceResumed ||
+            groupSourceState !is XingDunGroupSourceProfileState.Loaded || profileScope() != groupSourcePageScope)) {
+            loadDetail()
+            return
+        }
         if (isFriendRelationship()) {
             val group = sourceGroupID
             if (group == null) ChatActivity.start(this, "c2c_$timUserID")
@@ -392,10 +540,14 @@ class XingDunContactDetailActivity : BaseActivity() {
                 if (isOperating) return
                 isOperating = true
                 render()
+                val scope = profileScope()
+                val revision = groupSourceViewRevision
                 lifecycleScope.launch {
                     val result = runCatching { XingDunGroupSettingsAccess.authorize(group, "private_chat", timUserID) }
                     isOperating = false
-                    if (isFinishing || isDestroyed) return@launch
+                    if (isFinishing || isDestroyed || !groupSourceResumed || scope == null || revision != groupSourceViewRevision ||
+                        scope != groupSourcePageScope || profileScope() != scope ||
+                        groupSourceState !is XingDunGroupSourceProfileState.Loaded) return@launch
                     result.onSuccess { ChatActivity.start(this@XingDunContactDetailActivity, "c2c_$timUserID") }
                         .onFailure { operationError = getString(R.string.xingdun_group_access_denied) }
                     render()
