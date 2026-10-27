@@ -8,6 +8,7 @@ import io.trtc.tuikit.atomicxcore.api.message.MessageLoadOption
 import io.trtc.tuikit.atomicxcore.api.message.MessageType
 import com.tencent.imsdk.v2.V2TIMManager
 import com.tencent.imsdk.v2.V2TIMMessage
+import com.tencent.imsdk.v2.V2TIMAdvancedMsgListener
 import io.trtc.tuikit.chat.uikit.components.common.ConversationIDUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,6 +72,28 @@ object TypingMessageProtocol {
     }
 }
 
+// Kept independent of SDK callbacks so the same source/lifetime checks guard
+// receipt and the later Main dispatch. A closed controller cannot accept work again.
+internal class TypingReceiveGate(private val peerUserID: String?, private val loginIdentity: String) {
+    @Volatile private var closed = false
+
+    fun isCurrent(identity: String, loggedIn: Boolean): Boolean =
+        !closed && !peerUserID.isNullOrBlank() && loginIdentity.substringAfter(':', "").isNotBlank() &&
+            loggedIn && identity == loginIdentity
+
+    fun rawStatus(data: String, sender: String?, groupID: String?, self: Boolean,
+                  identity: String, loggedIn: Boolean): Boolean? {
+        if (!isCurrent(identity, loggedIn) || self || sender != peerUserID || !groupID.isNullOrEmpty()) return null
+        return TypingMessageProtocol.parseTypingStatus(data)
+    }
+
+    fun acceptsStoreActivity(sender: String?, self: Boolean, typingStatus: Boolean?,
+                             identity: String, loggedIn: Boolean): Boolean =
+        isCurrent(identity, loggedIn) && !self && sender == peerUserID && typingStatus == null
+
+    fun close() { closed = true }
+}
+
 internal class TypingIndicatorController private constructor(
     private val conversationID: String
 ) {
@@ -123,15 +146,40 @@ internal class TypingIndicatorController private constructor(
 
     @Volatile
     private var hasSentTypingStart = false
+    @Volatile
     private var destroyed = false
 
     @Volatile
     private var lastPeerMessageTimeMs = 0L
 
     private val loginIdentity = "${io.trtc.tuikit.atomicxcore.api.login.LoginStore.shared.sdkAppID}:${V2TIMManager.getInstance().loginUser.orEmpty()}"
+    private val receiveGate = TypingReceiveGate(peerUserID, loginIdentity)
     private val listenStore = if (peerUserID != null) MessageListStore.create(conversationID) else null
+    private val rawTypingListener = object : V2TIMAdvancedMsgListener() {
+        override fun onRecvNewMessage(message: V2TIMMessage?) {
+            val incoming = message ?: return
+            if (incoming.elemType != V2TIMMessage.V2TIM_ELEM_TYPE_CUSTOM) return
+            val data = incoming.customElem?.data ?: return
+            if (destroyed) return
+            val status = receiveGate.rawStatus(data.toString(Charsets.UTF_8), incoming.sender,
+                incoming.groupID, incoming.isSelf, currentLoginIdentity(), isLoggedIn()) ?: return
+            // Transient controls must not wait for AtomicX's history/list pipeline.
+            scope.launch(Dispatchers.Main.immediate) {
+                if (destroyed || !receiveGate.isCurrent(currentLoginIdentity(), isLoggedIn())) return@launch
+                lastPeerMessageTimeMs = System.currentTimeMillis()
+                updatePeerTyping(status)
+            }
+        }
+    }
+
+    private fun currentLoginIdentity(): String =
+        "${io.trtc.tuikit.atomicxcore.api.login.LoginStore.shared.sdkAppID}:${V2TIMManager.getInstance().loginUser.orEmpty()}"
+
+    private fun isLoggedIn(): Boolean =
+        V2TIMManager.getInstance().loginStatus == V2TIMManager.V2TIM_STATUS_LOGINED
 
     init {
+        if (peerUserID != null) V2TIMManager.getMessageManager().addAdvancedMsgListener(rawTypingListener)
         listenStore?.let { store ->
             store.loadMessages(MessageLoadOption(pageCount = RECENT_MESSAGE_LOAD_COUNT))
             scope.launch {
@@ -143,7 +191,13 @@ internal class TypingIndicatorController private constructor(
             }
             scope.launch {
                 store.state.messageList.collect { list ->
-                    val lastPeerMessageTimeSec = list.lastOrNull { !it.isSentBySelf }?.timestamp ?: return@collect
+                    if (destroyed) return@collect
+                    val identity = currentLoginIdentity()
+                    val loggedIn = isLoggedIn()
+                    val lastPeerMessageTimeSec = list.lastOrNull {
+                        receiveGate.acceptsStoreActivity(it.from.userID, it.isSentBySelf,
+                            TypingMessageProtocol.parseTypingStatus(it), identity, loggedIn)
+                    }?.timestamp ?: return@collect
                     val timeMs = lastPeerMessageTimeSec * 1000L
                     if (timeMs > lastPeerMessageTimeMs) {
                         lastPeerMessageTimeMs = timeMs
@@ -154,9 +208,9 @@ internal class TypingIndicatorController private constructor(
     }
 
     private fun handleNewMessage(message: MessageInfo) {
-        if (destroyed || message.isSentBySelf || message.from.userID != peerUserID) return
+        if (destroyed || !receiveGate.acceptsStoreActivity(message.from.userID, message.isSentBySelf,
+                TypingMessageProtocol.parseTypingStatus(message), currentLoginIdentity(), isLoggedIn())) return
         lastPeerMessageTimeMs = System.currentTimeMillis()
-        TypingMessageProtocol.parseTypingStatus(message)?.let { updatePeerTyping(it) }
     }
 
     private fun updatePeerTyping(isTyping: Boolean) {
@@ -164,7 +218,7 @@ internal class TypingIndicatorController private constructor(
         typingTimeoutJob = null
         if (isTyping) {
             _typingState.value = true
-            typingTimeoutJob = scope.launch {
+            typingTimeoutJob = scope.launch(Dispatchers.Main.immediate) {
                 delay(TYPING_DISPLAY_TIMEOUT_MS)
                 _typingState.value = false
             }
@@ -207,13 +261,16 @@ internal class TypingIndicatorController private constructor(
     }
 
     private fun destroy() {
+        destroyed = true
+        receiveGate.close()
+        if (peerUserID != null) V2TIMManager.getMessageManager().removeAdvancedMsgListener(rawTypingListener)
         typingTimeoutJob?.cancel()
         typingTimeoutJob = null
+        _typingState.value = false
         if (hasSentTypingStart) {
             hasSentTypingStart = false
             dispatchTypingMessage(false)
         }
-        destroyed = true
         scope.cancel()
     }
 

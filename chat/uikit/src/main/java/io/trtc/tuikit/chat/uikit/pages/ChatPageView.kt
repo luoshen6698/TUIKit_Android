@@ -23,6 +23,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 class ChatPageView @JvmOverloads constructor(
@@ -97,8 +98,8 @@ class ChatPageView @JvmOverloads constructor(
         typingCollectJob = null
         val controller = typingController ?: return
         val scope = viewScope ?: return
-        typingCollectJob = scope.launch {
-            controller.typingState.collectLatest { isTyping ->
+        typingCollectJob = scope.launch(Dispatchers.Main.immediate) {
+            controller.typingState.collect { isTyping ->
                 onTypingStatusChanged(isTyping)
             }
         }
