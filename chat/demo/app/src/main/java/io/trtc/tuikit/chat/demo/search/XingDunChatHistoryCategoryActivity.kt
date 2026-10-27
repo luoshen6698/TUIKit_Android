@@ -519,7 +519,6 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         is FileMessagePayload -> payload.fileName?.takeIf { it.isNotBlank() }
             ?: getString(R.string.xingdun_chat_history_file)
         else -> message.getMessageAbstract(this).takeIf { it.isNotBlank() }
-            ?: message.messageSender.takeIf { it.isNotBlank() }
             ?: getString(R.string.xingdun_chat_history_message)
     }
 

@@ -3,6 +3,7 @@ import android.content.Context
 import io.trtc.tuikit.chat.uikit.R
 import io.trtc.tuikit.chat.uikit.components.messagelist.utils.getCreateGroupDisplayString
 import io.trtc.tuikit.chat.uikit.components.messagelist.utils.getSystemInfoDisplayString
+import io.trtc.tuikit.chat.uikit.components.messagelist.utils.MessageListMessageSummaryFormatter
 import io.trtc.tuikit.chat.uikit.components.common.jsonData2Dictionary
 import io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
@@ -50,8 +51,7 @@ fun MessageInfo.getMessageAbstract(context: Context): String {
             if (customInfo?.get("businessID") == "group_create") {
                 getCreateGroupDisplayString(context, this)
             } else {
-                payload?.description?.takeIf { it.isNotEmpty() }
-                    ?: customData?.takeIf { it.isNotEmpty() }
+                MessageListMessageSummaryFormatter().format(context, this).takeIf { it.isNotBlank() }
                     ?: context.getString(R.string.message_list_message_tips_unsupport_custom_message)
             }
         }
