@@ -79,12 +79,23 @@ object SearchMessageVisibility {
 
     /** Synchronous removal closes the hint-to-network window in an already displayed search list. */
     fun filterKnown(results: List<MessageSearchResultItem>): List<MessageSearchResultItem> = results.mapNotNull { result ->
-        val rows = redactQuotes(result.conversationID, result.messageList.filterNot { isDeleted(result.conversationID, it.msgID) })
+        val rows = mapForDisplay(result.conversationID, result.messageList) { it }
         if (rows.isEmpty()) null else result.copy(messageList = rows,
             messageCount = (result.messageCount - (result.messageList.size - rows.size)).coerceAtLeast(rows.size))
     }
 
-    suspend fun filter(results: List<MessageSearchResultItem>, sourceSession: String? = currentSessionKey()): List<MessageSearchResultItem> {
+    suspend fun filter(results: List<MessageSearchResultItem>, sourceSession: String? = currentSessionKey()): List<MessageSearchResultItem> =
+        filterResults(results, sourceSession, publishFailure = true)
+
+    internal suspend fun filterHistoryUnit(results: List<MessageSearchResultItem>, sourceSession: String?): List<MessageSearchResultItem> =
+        filterResults(results, sourceSession, publishFailure = false)
+
+    internal fun batchVerificationFailed(results: List<MessageSearchResultItem>): Boolean =
+        results.any { verificationFailureProvider(it.conversationID) }
+
+    internal fun publishVerificationFailure(failed: Boolean) { searchVerificationFailedState.value = failed }
+
+    private suspend fun filterResults(results: List<MessageSearchResultItem>, sourceSession: String?, publishFailure: Boolean): List<MessageSearchResultItem> {
         val filter = provider ?: return results
         val groupBatch = results.any { it.conversationID.startsWith("group_") }
         fun isCurrent() = !groupBatch || (sourceSession != null && sourceSession == currentSessionKey())
@@ -99,7 +110,7 @@ object SearchMessageVisibility {
             )
         }
         if (!isCurrent()) return emptyList()
-        searchVerificationFailedState.value = results.any { verificationFailureProvider(it.conversationID) }
+        if (publishFailure) publishVerificationFailure(batchVerificationFailed(results))
         return visible
     }
 }

@@ -78,10 +78,39 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     private var activeMediaIDs = emptySet<String>()
     private var mediaRevision = 0L
     private var sourceSession: String? = null
+    private var historyActive = false
+    private var historyRevision = 0L
+    private var historyReadJob: kotlinx.coroutines.Job? = null
+    private fun isReadCurrent(ticket: Long): Boolean {
+        if (isDestroyed || isFinishing) return false
+        if (!conversationID.startsWith("group_")) return true
+        if (!historyActive || ticket != historyRevision) return false
+        if (isSourceCurrent()) return true
+        messages = emptyList()
+        loadedMessages = emptyList()
+        content.removeAllViews()
+        activeMediaSession?.dismiss()
+        finish()
+        return false
+    }
+    private suspend fun allowsHistory(ticket: Long): Boolean =
+        io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchGroupHistoryAccess.allows(conversationID, sourceSession) {
+            isReadCurrent(ticket)
+        }
+    private fun rejectHistory(ticket: Long) {
+        if (!isReadCurrent(ticket)) return
+        messages = emptyList()
+        loadedMessages = emptyList()
+        content.removeAllViews()
+        activeMediaSession?.dismiss()
+        android.widget.Toast.makeText(this, R.string.xingdun_group_access_denied, android.widget.Toast.LENGTH_LONG).show()
+        finish()
+    }
     private fun isSourceCurrent() = !conversationID.startsWith("group_") ||
-        (sourceSession != null && sourceSession == SearchMessageVisibility.currentSessionKey())
+        (historyActive && sourceSession != null && sourceSession == SearchMessageVisibility.currentSessionKey())
     private val deletionListener: (String) -> Unit = { changed ->
         if (changed == conversationID) runOnUiThread {
+            activeMediaSession?.takeIf { it.isSourceBound }?.invalidateSource()
             if (!isDestroyed && isSourceCurrent()) {
                 closeDeletedMedia()
                 renderLoaded(messages)
@@ -115,13 +144,18 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         XingDunMessageDeletionVisibility.addListener(deletionListener)
         activityScope?.launch {
             SearchMessageVisibility.revision.collectLatest {
+                activeMediaSession?.takeIf { it.isSourceBound }?.invalidateSource()
+                if (conversationID.startsWith("group_") && !historyActive) return@collectLatest
                 if (!isSourceCurrent()) { activeMediaSession?.dismiss(); finish(); return@collectLatest }
                 closeDeletedMedia()
                 if (conversationID.startsWith("group_") && loadedMessages.isNotEmpty()) {
+                    val ticket = historyRevision
                     val checked = XingDunMessageDeletionVisibility.filterMessages(
                         this@XingDunChatHistoryCategoryActivity, conversationID, loadedMessages,
                     )
-                    if (!isSourceCurrent()) return@collectLatest
+                    if (!isReadCurrent(ticket)) return@collectLatest
+                    if (!allowsHistory(ticket)) { rejectHistory(ticket); return@collectLatest }
+                    if (!isReadCurrent(ticket)) return@collectLatest
                     renderLoaded(checked)
                     closeDeletedMedia()
                 }
@@ -133,7 +167,11 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         if (!::status.isInitialized || isFinishing) return
+        historyActive = true
+        historyRevision++
+        if (!isSourceCurrent()) { finish(); return }
         io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupSettingsAccess.history(this, conversationID) {
+            if (!isReadCurrent(historyRevision)) return@history
             if (!historyStarted) {
                 historyStarted = true
                 if (mode == MODE_DATE) showDatePicker() else loadMessages()
@@ -142,8 +180,24 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     }
 
     override fun onPause() {
+        if (conversationID.startsWith("group_")) {
+            historyActive = false
+            historyRevision++
+            historyReadJob?.cancel()
+            historyReadJob = null
+            historyStarted = false
+            messages = emptyList()
+            loadedMessages = emptyList()
+            activeMediaSession?.onSourceParentPaused()
+            if (::content.isInitialized) content.removeAllViews()
+        }
         io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupSettingsAccess.stopHistory(this)
         super.onPause()
+    }
+
+    override fun onStop() {
+        activeMediaSession?.onSourceParentStopped()
+        super.onStop()
     }
 
     override fun onDestroy() {
@@ -235,10 +289,9 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
 
     private fun loadMessages() {
         if (!isSourceCurrent() && !isDebugPreview) return
-        if (isDebugPreview) {
-            renderLoaded(emptyList())
-            return
-        }
+        if (isDebugPreview) { renderLoaded(emptyList()); return }
+        historyReadJob?.cancel()
+        val ticket = ++historyRevision
         showLoading()
         val types = when (mode) {
             MODE_IMAGE -> listOf(MessageType.IMAGE)
@@ -246,29 +299,37 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
             MODE_FILE -> listOf(MessageType.FILE)
             else -> emptyList()
         }
-        messageStore.loadMessages(
-            MessageLoadOption(
-                messageListType = MessageListType.HISTORY,
-                direction = MessageLoadDirection.OLDER,
-                pageCount = PAGE_COUNT,
-                messageTypeList = types,
-            ),
-            object : CompletionHandler {
-                override fun onSuccess() {
-                    if (!isSourceCurrent()) return
-                    activityScope?.launch {
-                        loadedMessages = messageStore.state.messageList.value.toList()
-                        val checked = XingDunMessageDeletionVisibility.filterMessages(
-                            this@XingDunChatHistoryCategoryActivity, conversationID, loadedMessages,
-                        )
-                        if (!isSourceCurrent()) return@launch
-                        renderLoaded(checked)
-                        if (conversationID.startsWith("group_") && XingDunGroupDeletionRepository.verificationFailed(conversationID)) showLoadError()
+        historyReadJob = activityScope?.launch {
+            if (!allowsHistory(ticket)) { rejectHistory(ticket); return@launch }
+            if (!isReadCurrent(ticket)) return@launch
+            messageStore.loadMessages(
+                MessageLoadOption(
+                    messageListType = MessageListType.HISTORY,
+                    direction = MessageLoadDirection.OLDER,
+                    pageCount = PAGE_COUNT,
+                    messageTypeList = types,
+                ),
+                object : CompletionHandler {
+                    override fun onSuccess() {
+                        activityScope?.launch {
+                            if (!isReadCurrent(ticket)) return@launch
+                            historyReadJob = coroutineContext[kotlinx.coroutines.Job]
+                            val snapshot = messageStore.state.messageList.value.toList()
+                            val checked = XingDunMessageDeletionVisibility.filterMessages(
+                                this@XingDunChatHistoryCategoryActivity, conversationID, snapshot,
+                            )
+                            if (!isReadCurrent(ticket)) return@launch
+                            if (!allowsHistory(ticket)) { rejectHistory(ticket); return@launch }
+                            if (!isReadCurrent(ticket)) return@launch
+                            loadedMessages = snapshot
+                            renderLoaded(checked)
+                            if (conversationID.startsWith("group_") && XingDunGroupDeletionRepository.verificationFailed(conversationID)) showLoadError()
+                        }
                     }
-                }
-                override fun onFailure(code: Int, desc: String) = runOnUiThread { showLoadError() }
-            },
-        )
+                    override fun onFailure(code: Int, desc: String) = runOnUiThread { if (isReadCurrent(ticket)) showLoadError() }
+                },
+            )
+        }
     }
 
     private fun showLoading() {
@@ -464,19 +525,49 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     private fun showMedia(selected: MessageInfo) {
         if (!isSourceCurrent()) return
         val revision = ++mediaRevision
+        val ticket = historyRevision
+        val snapshot = messages.toList()
+        val sourceOwner = sourceSession
+        val sourceContext = applicationContext
         activityScope?.launch {
-            val checked = XingDunMessageDeletionVisibility.filterMessages(this@XingDunChatHistoryCategoryActivity, conversationID, messages)
-            if (revision != mediaRevision || isDestroyed || !isSourceCurrent() || checked.none { it.msgID == selected.msgID }) return@launch
+            val checked = XingDunHistoryMediaGate.checked(
+                conversationID = conversationID,
+                selectedID = selected.msgID,
+                isCurrent = { revision == mediaRevision && isReadCurrent(ticket) },
+                filter = { kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    if (conversationID.startsWith("group_")) SearchMessageVisibility.messagesForAction(conversationID, snapshot)
+                    else XingDunMessageDeletionVisibility.filterMessages(sourceContext, conversationID, snapshot)
+                } },
+                authorize = { kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchGroupHistoryAccess.allows(conversationID, sourceOwner)
+                } },
+                onDenied = { rejectHistory(ticket) },
+            ) ?: return@launch
+            if (revision != mediaRevision || !isReadCurrent(ticket)) return@launch
             val entries = checked.mapNotNull { message -> imageElement(message)?.let { message to it } }
             val index = entries.indexOfFirst { (message) -> message.msgID == selected.msgID }
             if (index < 0) return@launch
             activeMediaSession?.dismiss()
             activeMediaIDs = entries.map { it.first.msgID }.toSet()
-            activeMediaSession = ImageViewer.view(entries.map { it.second }, index, null)
+            val sourceConversation = conversationID
+            val mediaSnapshot = entries.map { it.first }
+            val mediaIDs = activeMediaIDs
+            val session = if (sourceConversation.startsWith("group_")) {
+                ImageViewer.viewFromSource(entries.map { it.second }, index,
+                    XingDunHistoryMediaGate.sourcePolicy(sourceConversation, sourceOwner, mediaSnapshot, mediaIDs))
+            } else ImageViewer.view(entries.map { it.second }, index, null)
+            activeMediaSession = session
+            session?.addOnClosedListener {
+                if (activeMediaSession === session) {
+                    activeMediaSession = null
+                    activeMediaIDs = emptySet()
+                }
+            }
         }
     }
 
     private fun closeDeletedMedia() {
+        if (activeMediaSession?.isSourceBound == true) { activeMediaSession?.invalidateSource(); return }
         if (activeMediaIDs.any { XingDunMessageDeletionVisibility.isDeleted(conversationID, it) }) {
             mediaRevision++
             activeMediaSession?.dismiss()
@@ -701,4 +792,49 @@ internal object XingDunChatHistoryMediaPolicy {
         val file = if (path.startsWith("file://", ignoreCase = true)) File(URI(path)) else File(path)
         file.isFile
     }.getOrDefault(false)
+}
+
+/** The actual media-admission gate rechecks current group history after deletion verification. */
+internal object XingDunHistoryMediaGate {
+    /** The exact viewer owns this immutable snapshot, independently of the paused parent Activity. */
+    fun sourcePolicy(conversationID: String, owner: String?, snapshot: List<MessageInfo>, mediaIDs: Set<String>) =
+        ImageViewer.SourcePolicy(
+            ownerIsCurrent = { owner != null && owner == SearchMessageVisibility.currentSessionKey() },
+            revalidate = { kotlinx.coroutines.withContext(Dispatchers.IO) {
+                if (owner == null || owner != SearchMessageVisibility.currentSessionKey()) return@withContext false
+                // One app-owned deletion snapshot for the whole source; no per-message credential reads.
+                val known = SearchMessageVisibility.mapForDisplay(conversationID, snapshot) { it }
+                if (!known.map { it.msgID }.toSet().containsAll(mediaIDs)) return@withContext false
+                val fresh = SearchMessageVisibility.messagesForAction(conversationID, snapshot)
+                fresh.map { it.msgID }.toSet().containsAll(mediaIDs) &&
+                    io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchGroupHistoryAccess.allows(conversationID, owner)
+            } },
+        )
+
+    suspend fun checked(
+        conversationID: String,
+        selectedID: String,
+        isCurrent: () -> Boolean,
+        filter: suspend () -> List<MessageInfo>,
+        authorize: suspend () -> Boolean,
+        onDenied: () -> Unit,
+    ): List<MessageInfo>? {
+        if (!isCurrent()) return null
+        val group = conversationID.startsWith("group_")
+        val checked = try { filter() }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (group && isCurrent()) onDenied()
+                return null
+            }
+        if (!isCurrent() || checked.none { it.msgID == selectedID }) return null
+        if (group) {
+            val allowed = try { authorize() }
+                catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                catch (_: Exception) { false }
+            if (!isCurrent()) return null
+            if (!allowed) { onDenied(); return null }
+        }
+        return checked
+    }
 }

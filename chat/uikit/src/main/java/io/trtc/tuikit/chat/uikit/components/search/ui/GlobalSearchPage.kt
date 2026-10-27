@@ -47,6 +47,8 @@ class GlobalSearchPage(
     private val emptyStateMessage: TextView
     private val loadingView: ProgressBar
     private var viewScope: CoroutineScope? = null
+    private lateinit var historyLifecycle: SearchHistoryPageLifecycle
+    init { historyLifecycle = SearchHistoryPageLifecycle(this, viewModel::setHistoryActive) }
     private var searchQuery = ""
     private var latestCategories: List<SearchCategory> = emptyList()
     private var latestExtensionSections: List<GlobalSearchExtensionSection> = emptyList()
@@ -163,7 +165,18 @@ class GlobalSearchPage(
         viewScope = null
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        historyLifecycle.attach()
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (::historyLifecycle.isInitialized) historyLifecycle.update()
+    }
+
     override fun onDetachedFromWindow() {
+        historyLifecycle.detach()
         super.onDetachedFromWindow()
         stopCollectingUiState()
     }

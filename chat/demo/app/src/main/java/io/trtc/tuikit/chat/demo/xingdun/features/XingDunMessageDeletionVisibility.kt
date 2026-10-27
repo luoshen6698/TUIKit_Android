@@ -24,6 +24,10 @@ internal object XingDunMessageDeletionVisibility {
             val generation = io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager.currentAuthenticationGeneration()
             if (account == null || generation == null) null else "$account:$generation"
         }
+        io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchGroupHistoryAccess.setProvider { conversation ->
+            XingDunGroupSettingsAccess.authorize(conversation.removePrefix("group_"), "history")
+            true
+        }
         SearchMessageVisibility.setProvider { conversation, messages -> filterMessages(context, conversation, messages) }
     }
     fun isDeleted(conversation: String, id: String) = if (conversation.startsWith("group_"))

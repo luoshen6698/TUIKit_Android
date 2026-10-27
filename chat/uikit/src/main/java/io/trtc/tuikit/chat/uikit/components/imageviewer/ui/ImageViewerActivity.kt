@@ -32,6 +32,7 @@ import io.trtc.tuikit.chat.uikit.components.common.ChatPermissionHelper
 import io.trtc.tuikit.chat.uikit.components.common.expandTouchTarget
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageElement
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageViewer
+import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageViewerSourceLifecycle
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageViewerBoundaryLoadState
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageViewerBoundaryLoadPolicy
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageViewerGallerySaver
@@ -45,6 +46,7 @@ import io.trtc.tuikit.atomicx.theme.ThemeStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 class ImageViewerActivity : AppCompatActivity() {
@@ -65,6 +67,7 @@ class ImageViewerActivity : AppCompatActivity() {
 
     private var currentPage = 0
     private var currentLogicalItem: ImageElement? = null
+    private var sourceResumeStableID: String? = null
     private var hasAppliedInitialPage = false
     private var session: ImageViewer.Session? = null
     private var activeForCallbacks = true
@@ -120,16 +123,10 @@ class ImageViewerActivity : AppCompatActivity() {
         }
         setContentView(R.layout.image_viewer_activity)
 
-        val sessionId = intent.getLongExtra(ImageViewer.EXTRA_SESSION_ID, -1L)
-        session = ImageViewer.acquireSession(sessionId)
-        if (session == null) {
-            session = ImageViewer.Session(
-                id = -1L,
-                eventHandler = ImageViewer.eventHandler,
-                initDataInternal = ImageViewer.initDataInternal,
-                mediaListFlow = ImageViewer.mediaList
-            )
-        }
+        val sessionId = if (intent.hasExtra(ImageViewer.EXTRA_SESSION_ID))
+            intent.getLongExtra(ImageViewer.EXTRA_SESSION_ID, -1L) else null
+        session = ImageViewer.sessionForLaunch(sessionId)
+        if (session == null) { finish(); return }
 
         bindViews()
         installOverlays()
@@ -138,26 +135,41 @@ class ImageViewerActivity : AppCompatActivity() {
         setupPager()
         observeThemeChanges()
         observeMediaList()
+        observeSourceLifecycle()
     }
 
     override fun onStart() {
         super.onStart()
         session?.isVisible = true
-        if (shouldResumeInlineVideoPlayback) {
+        session?.onViewerStarted()
+        if (session?.isSourceBound != true && shouldResumeInlineVideoPlayback) {
             currentVideoPageView()?.resumeInlinePlayback()
             shouldResumeInlineVideoPlayback = false
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        session?.onViewerResumed()
+    }
+
+    override fun onPause() {
+        session?.onViewerPaused()
+        if (session?.isSourceBound == true && ::viewPager.isInitialized) maskSourceContent()
+        super.onPause()
+    }
+
     override fun onStop() {
         session?.isVisible = false
+        session?.onViewerStopped()
+        if (session?.isSourceBound == true) finish()
         shouldResumeInlineVideoPlayback = currentVideoPageView()?.pauseInlinePlaybackForHostStop() == true
         super.onStop()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) {
+        if (hasFocus && ::rootView.isInitialized) {
             enterImmersiveMode()
         }
     }
@@ -165,7 +177,7 @@ class ImageViewerActivity : AppCompatActivity() {
     override fun onDestroy() {
         activeForCallbacks = false
         releaseAllVideoPages()
-        viewPager.unregisterOnPageChangeCallback(pageChangeCallback)
+        if (::viewPager.isInitialized) viewPager.unregisterOnPageChangeCallback(pageChangeCallback)
         mainHandler.removeCallbacks(showLoadingRunnable)
         mainHandler.removeCallbacks(hideToastRunnable)
         mainHandler.removeCallbacks(loadMoreTimeoutRunnable)
@@ -174,10 +186,39 @@ class ImageViewerActivity : AppCompatActivity() {
             if (current != null && current.id >= 0) {
                 ImageViewer.releaseSession(current.id)
             } else {
-                ImageViewer.clearRuntimeState()
+                if (current != null) ImageViewer.releaseLegacySession(current)
             }
         }
         super.onDestroy()
+    }
+
+    private fun maskSourceContent() {
+        currentVideoPageView()?.pauseInlinePlaybackForHostStop()
+        releaseAllVideoPages()
+        sourceResumeStableID = currentLogicalItem?.stableId ?: sourceResumeStableID
+        adapter.submitItems(emptyList())
+        currentLogicalItem = null
+        viewPager.visibility = View.INVISIBLE
+        saveButton.visibility = View.GONE
+        hideToast()
+        showLoadingIndicator()
+    }
+
+    private fun observeSourceLifecycle() {
+        val state = session?.sourceState ?: return
+        maskSourceContent()
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                state.collectLatest { value ->
+                    if (value == ImageViewerSourceLifecycle.State.CLOSED) { maskSourceContent(); finish(); return@collectLatest }
+                    if (value == ImageViewerSourceLifecycle.State.VISIBLE) {
+                        viewPager.visibility = View.VISIBLE
+                        hideLoadingIndicator()
+                        updateSaveButtonVisibility()
+                    } else maskSourceContent()
+                }
+            }
+        }
     }
 
     private fun bindViews() {
@@ -359,7 +400,9 @@ class ImageViewerActivity : AppCompatActivity() {
 
     private fun applyMediaList(mediaList: List<ImageElement>) {
         val current = session
-        val previousItem = currentLogicalItem ?: current?.initDataInternal
+        val previousItem = if (current?.isSourceBound == true)
+            mediaList.firstOrNull { sourceResumeStableID != null && it.stableId == sourceResumeStableID } ?: currentLogicalItem ?: current.initDataInternal
+            else currentLogicalItem ?: current?.initDataInternal
         val previousIndex = viewPager.currentItem
         val previousSize = adapter.itemCount
         val isResponseToLoadMore = boundaryLoadState.hasActiveLoad()
@@ -367,6 +410,8 @@ class ImageViewerActivity : AppCompatActivity() {
             "previousIndex=$previousIndex activeLoad=$isResponseToLoadMore " +
             "videos=${mediaList.count { it.type == MEDIA_TYPE_VIDEO }} " +
             "playableVideos=${mediaList.count { it.type == MEDIA_TYPE_VIDEO && it.videoData != null }}")
+        if (current?.isSourceBound == true && mediaList.isEmpty())
+            sourceResumeStableID = previousItem?.stableId ?: sourceResumeStableID
         adapter.submitItems(mediaList)
         if (mediaList.isEmpty()) {
             if (current?.isCloseRequested == true) { finish(); return }
@@ -487,6 +532,7 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun handleDownloadRequested(element: ImageElement) {
+        if (!canHandleUiCallbacks()) return
         val handler = session?.eventHandler ?: return
         val currentSession = session ?: return
         val key = elementKey(element) ?: return
@@ -525,6 +571,7 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun handleSaveCurrentMedia() {
+        if (!canHandleUiCallbacks()) return
         val element = currentLogicalItem ?: adapter.getItemOrNull(viewPager.currentItem) ?: return
         requestStoragePermissionIfNeeded(element)
     }
@@ -534,7 +581,11 @@ class ImageViewerActivity : AppCompatActivity() {
             ChatPermissionHelper.PERMISSION_STORAGE,
             object : PermissionCallback() {
                 override fun onGranted() {
-                    startSaveMedia(element)
+                    val current = session ?: return
+                    lifecycleScope.launch {
+                        if (current.authorizeSourceAction(element) && session === current && canHandleUiCallbacks())
+                            startSaveMedia(element)
+                    }
                 }
 
                 override fun onDenied() {
@@ -607,12 +658,17 @@ class ImageViewerActivity : AppCompatActivity() {
         key: String,
         source: ImageViewerGallerySaver.MediaSource
     ) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val success = if (element.type == MEDIA_TYPE_VIDEO) {
+        lifecycleScope.launch {
+            val current = session ?: return@launch
+            if (!current.authorizeSourceAction(element) || session !== current || !canHandleUiCallbacks()) {
+                current.savingKeys.remove(key)
+                return@launch
+            }
+            val success = withContext(Dispatchers.IO) { if (element.type == MEDIA_TYPE_VIDEO) {
                 ImageViewerGallerySaver.saveVideoToGallery(this@ImageViewerActivity, source)
             } else {
                 ImageViewerGallerySaver.saveImageToGallery(this@ImageViewerActivity, source)
-            }
+            } }
             mainHandler.post {
                 finishSaveMedia(key, success)
             }
@@ -679,7 +735,7 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun updateSaveButtonVisibility() {
-        val visible = currentLogicalItem != null
+        val visible = currentLogicalItem != null && session?.isSourceAuthorized != false
         saveButton.visibility = if (visible) View.VISIBLE else View.GONE
         if (visible) {
             saveButton.expandTouchTarget()
@@ -692,11 +748,13 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun currentVideoPageView(): VideoMediaPageView? {
+        if (!::adapter.isInitialized || !::viewPager.isInitialized) return null
         val element = currentLogicalItem ?: adapter.getItemOrNull(viewPager.currentItem) ?: return null
         return findVideoPageViewFor(element)
     }
 
     private fun ensureCurrentVideoPagePlayerReady(position: Int) {
+        if (session?.isSourceAuthorized == false) return
         val element = adapter.getItemOrNull(position) ?: return
         if (!ImageViewerVideoPageRefreshPolicy.shouldRefreshOnPageSelected(element.type)) {
             return
@@ -722,6 +780,7 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun releaseAllVideoPages() {
+        if (!::viewPager.isInitialized) return
         val recyclerView = pagerRecyclerView() ?: return
         for (index in 0 until recyclerView.childCount) {
             val holder = recyclerView.getChildViewHolder(recyclerView.getChildAt(index))
@@ -790,7 +849,7 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun canHandleUiCallbacks(): Boolean {
-        return activeForCallbacks && !isFinishing && !isDestroyed
+        return activeForCallbacks && !isFinishing && !isDestroyed && session?.isSourceAuthorized != false
     }
 
     companion object {

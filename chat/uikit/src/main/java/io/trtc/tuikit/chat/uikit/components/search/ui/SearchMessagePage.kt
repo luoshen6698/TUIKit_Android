@@ -32,6 +32,8 @@ class SearchMessagePage(
     private val emptyText: TextView
     private val headerText: TextView
     private var viewScope: CoroutineScope? = null
+    private lateinit var historyLifecycle: SearchHistoryPageLifecycle
+    init { historyLifecycle = SearchHistoryPageLifecycle(this, viewModel::setHistoryActive) }
     private var searchQuery = ""
     private val themeStore = ThemeStore.shared(context)
 
@@ -158,7 +160,18 @@ class SearchMessagePage(
         viewScope = null
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        historyLifecycle.attach()
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (::historyLifecycle.isInitialized) historyLifecycle.update()
+    }
+
     override fun onDetachedFromWindow() {
+        historyLifecycle.detach()
         super.onDetachedFromWindow()
         stopCollectingUiState()
     }

@@ -1,122 +1,49 @@
 package io.trtc.tuikit.chat.uikit.components.search.viewmodel
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.trtc.tuikit.atomicxcore.api.search.SearchOption
-import io.trtc.tuikit.atomicxcore.api.search.SearchState
 import io.trtc.tuikit.atomicxcore.api.search.SearchType
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-data class SearchCategory(
-    val type: SearchType,
-    val results: List<Any>,
-    val hasMore: Boolean = false,
-    val totalCount: Int = 0
-)
+data class SearchCategory(val type: SearchType, val results: List<Any>, val hasMore: Boolean = false, val totalCount: Int = 0)
 
-class SearchAllViewModel internal constructor(
-    private val searchStore: SearchStoreGateway
-) : ViewModel() {
-
-    constructor() : this(DefaultSearchStoreGateway())
-
-    private val state: SearchState = searchStore.state
-    private var lastSubmittedQuery: String = ""
-    private val ownerSession = SearchMessageVisibility.currentSessionKey()
-    private var messageQuerySession: String? = null
-
-    private val _isSearching = MutableStateFlow(false)
-    val isSearching: StateFlow<Boolean> = _isSearching
-
-    private val _searchError = MutableStateFlow<SearchError?>(null)
-    val searchError: StateFlow<SearchError?> = _searchError
-
-    private val _searchCategories = MutableStateFlow<List<SearchCategory>>(emptyList())
-    val searchCategories: StateFlow<List<SearchCategory>> = _searchCategories
-
+class SearchAllViewModel internal constructor(createStore: () -> SearchStoreGateway, scope: CoroutineScope? = null, pollIntervalMillis: Long = 10_000L, verificationBudgetMillis: Long = 10_000L, sourceDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO) : ViewModel() {
+    internal constructor(store: SearchStoreGateway, scope: CoroutineScope) : this({ store }, scope, sourceDispatcher = kotlinx.coroutines.Dispatchers.Unconfined)
+    constructor() : this({ DefaultSearchStoreGateway() })
+    private val executionScope = scope ?: viewModelScope
+    private val history = SearchMessageHistoryQuery(executionScope, createStore, listOf(SearchType.FRIEND, SearchType.GROUP, SearchType.MESSAGE), pollIntervalMillis, verificationBudgetMillis, sourceDispatcher)
+    private val directory = MutableStateFlow<List<SearchCategory>>(emptyList())
+    private val categories = MutableStateFlow<List<SearchCategory>>(emptyList())
+    val searchCategories: StateFlow<List<SearchCategory>> = categories
+    val isSearching: StateFlow<Boolean> = history.isSearching
+    val searchError: StateFlow<SearchError?> = history.error
     init {
-        viewModelScope.launch {
-            SearchMessageVisibility.revision.collectLatest {
-                _searchCategories.value = _searchCategories.value.mapNotNull { category ->
-                    if (category.type != SearchType.MESSAGE) category
-                    else if (ownerSession != SearchMessageVisibility.currentSessionKey()) null else {
-                        val original = category.results.filterIsInstance<io.trtc.tuikit.atomicxcore.api.search.MessageSearchResultItem>()
-                        val rows = SearchMessageVisibility.filterKnown(original)
-                        val removed = original.sumOf { it.messageList.size } - rows.sumOf { it.messageList.size }
-                        category.copy(results = rows, totalCount = (category.totalCount - removed).coerceAtLeast(rows.sumOf { it.messageList.size }))
-                            .takeIf { rows.isNotEmpty() }
+        executionScope.launch {
+            history.storeState.collectLatest { state ->
+                directory.value = emptyList()
+                if (state != null) {
+                    val friends = combine(state.friendList, state.friendTotalCount, state.hasMoreFriends) { rows, count, more ->
+                        SearchCategory(SearchType.FRIEND, rows.take(3), more || rows.size > 3, count)
                     }
+                    val groups = combine(state.groupList, state.groupTotalCount, state.hasMoreGroups) { rows, count, more ->
+                        SearchCategory(SearchType.GROUP, rows.take(3), more || rows.size > 3, count)
+                    }
+                    combine(friends, groups) { friend, group -> listOf(friend, group).filter { it.results.isNotEmpty() } }
+                        .collect { directory.value = it }
                 }
             }
         }
-        val friendSource = combine(
-            state.friendList,
-            state.friendTotalCount,
-            state.hasMoreFriends
-        ) { results, totalCount, hasMore ->
-            SearchCategory(SearchType.FRIEND, results.take(3), hasMore || results.size > 3, totalCount)
-        }
-        val groupSource = combine(
-            state.groupList,
-            state.groupTotalCount,
-            state.hasMoreGroups
-        ) { results, totalCount, hasMore ->
-            SearchCategory(SearchType.GROUP, results.take(3), hasMore || results.size > 3, totalCount)
-        }
-        val messageSource = combine(
-            state.messageResults,
-            state.messageResultTotalCount,
-            state.hasMoreMessageResults,
-            SearchMessageVisibility.revision
-        ) { results, totalCount, hasMore, _ ->
-            val visible = SearchMessageVisibility.filter(results, messageQuerySession)
-            SearchCategory(SearchType.MESSAGE, visible.take(3), hasMore || visible.size > 3,
-                (totalCount - (results.sumOf { it.messageList.size } - visible.sumOf { it.messageList.size })).coerceAtLeast(0))
-        }
-
-        viewModelScope.launch {
-            combine(friendSource, groupSource, messageSource) { friend, group, message ->
-                listOf(friend, group, message).filter { it.results.isNotEmpty() }
-            }.collect { categories ->
-                _searchCategories.value = if (ownerSession == SearchMessageVisibility.currentSessionKey()) categories
-                    else categories.filterNot { it.type == SearchType.MESSAGE }
-            }
+        executionScope.launch {
+            combine(directory, history.results) { entries, rows ->
+                entries + if (rows.isEmpty()) emptyList() else listOf(SearchCategory(SearchType.MESSAGE,
+                    rows.take(3), rows.size > 3 || history.storeState.value?.hasMoreMessageResults?.value == true,
+                    rows.sumOf { it.messageCount }))
+            }.collect { categories.value = it }
         }
     }
-
-    fun updateSearchQuery(query: String) {
-        if (ownerSession != SearchMessageVisibility.currentSessionKey()) { clearSearch(); return }
-        if (query.isBlank()) {
-            clearSearch()
-            return
-        }
-        if (query == lastSubmittedQuery && (_isSearching.value || _searchCategories.value.isNotEmpty())) return
-
-        lastSubmittedQuery = query
-        messageQuerySession = SearchMessageVisibility.currentSessionKey()
-        _isSearching.value = true
-        _searchError.value = null
-        searchStore.search(
-            listOf(query),
-            SearchOption(
-                searchScope = listOf(
-                    SearchType.FRIEND,
-                    SearchType.GROUP,
-                    SearchType.MESSAGE
-                )
-            ),
-            searchCompletion(_isSearching, _searchError)
-        )
-    }
-
-    private fun clearSearch() {
-        messageQuerySession = null
-        lastSubmittedQuery = ""
-        _isSearching.value = false
-        _searchError.value = null
-        _searchCategories.value = emptyList()
-    }
+    fun updateSearchQuery(query: String) = history.submit("", query)
+    fun setHistoryActive(active: Boolean) = history.setActive(active)
+    override fun onCleared() { history.close(); super.onCleared() }
 }
