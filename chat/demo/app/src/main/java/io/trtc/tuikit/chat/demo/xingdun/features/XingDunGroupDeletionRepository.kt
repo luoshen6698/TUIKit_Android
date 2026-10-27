@@ -10,6 +10,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArraySet
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionReadStamp
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
@@ -99,20 +101,41 @@ internal object XingDunGroupDeletionRepository {
         requests(context).delete(XingDunGroupDeletionPolicy.group(conversationID) ?: error("Not a group conversation"), id, sender)
     }
 
-    suspend fun filterMessages(context: Context, conversationID: String, messages: List<MessageInfo>): List<MessageInfo> {
-        if (XingDunGroupDeletionPolicy.group(conversationID) == null) return messages
-        val key = scopeKey(conversationID)
-        val ids = SearchMessageVisibility.candidateIDs(messages).filter(XingDunGroupDeletionPolicy::validMessage).toSet()
-        try { ids.chunked(100).forEach {
-            check(key == scopeKey(conversationID)) { "Authentication instance changed" }
-            check(context, conversationID, it.toSet())
-            check(key == scopeKey(conversationID)) { "Authentication instance changed" }
-        } }
-        catch (error: CancellationException) { throw error }
-        catch (_: Exception) { failedQueries.add(key) /* Keep previously authorized rows, never authorize a failed lookup. */ }
-        if (key != scopeKey(conversationID)) return emptyList()
-        return SearchMessageVisibility.redactQuotes(conversationID, messages.filter { canDisplay(conversationID, it) })
+    internal fun currentReadScope(): XingDunGroupDeletionReadScope? {
+        val read = XingDunSessionManager.readMessageSessionSnapshot() ?: return null
+        val account = XingDunC2CDeletionRepository.accountKey(read.second) ?: return null
+        return XingDunGroupDeletionReadScope(
+            XingDunMessageDisplayScope(account, read.first.authenticationGeneration, read.second.timUserId), read.first,
+        )
     }
+
+    internal fun mapReadScope(context: Context, source: XingDunGroupDeletionReadScope, conversationID: String,
+                              messages: List<MessageInfo>): List<MessageInfo> = XingDunMessageDisplayFilter(
+        currentScope = { source.display.takeIf { source.stamp == XingDunSessionManager.currentMessageReadStamp() } },
+        deletedIDs = { conversation, display ->
+            val group = XingDunGroupDeletionPolicy.group(conversation)
+            if (group != null) preferences(context).getStringSet("${display.account}:$group", emptySet()).orEmpty().toSet()
+            else XingDunC2CDeletionRepository.displayDeletedIDs(context, conversation, display.selfUserID, display.account)
+        },
+        visibility = visibility, revision = { SearchMessageVisibility.revision.value },
+    ).map(conversationID, messages) { it }
+
+    suspend fun filterMessages(context: Context, conversationID: String, messages: List<MessageInfo>): List<MessageInfo> =
+        XingDunGroupDeletionBatchFilter(
+            loadScope = ::currentReadScope,
+            currentStamp = XingDunSessionManager::currentMessageReadStamp,
+            deletedIDs = { conversation, source ->
+                val group = requireNotNull(XingDunGroupDeletionPolicy.group(conversation))
+                preferences(context).getStringSet("${source.display.account}:$group", emptySet()).orEmpty().toSet()
+            },
+            verify = { conversation, source, ids ->
+                check(source.stamp == XingDunSessionManager.currentMessageReadStamp()) { "Authentication instance changed" }
+                check(context, conversation, ids)
+                check(source.stamp == XingDunSessionManager.currentMessageReadStamp()) { "Authentication instance changed" }
+            },
+            markFailed = { conversation, source -> failedQueries.add(source.display.groupKey(conversation)) },
+            visibility = visibility, revision = { SearchMessageVisibility.revision.value },
+        ).filter(conversationID, messages)
 
     fun addListener(listener: (String) -> Unit) { listeners += listener }
     fun removeListener(listener: (String) -> Unit) { listeners -= listener }
@@ -162,5 +185,53 @@ internal object XingDunGroupDeletionRepository {
             },
             commit = { generation, action -> XingDunSessionManager.commitIfAuthenticationGeneration(generation as Long, action) },
         ).also { coordinator = it }
+    }
+}
+
+/** Bound identity and revision only; credentials never leave the short-lived read function. */
+internal data class XingDunGroupDeletionReadScope(val display: XingDunMessageDisplayScope, val stamp: XingDunSessionReadStamp)
+
+/** Extracted provider batch used directly by the Repository and its JVM regression. */
+internal class XingDunGroupDeletionBatchFilter(
+    private val loadScope: () -> XingDunGroupDeletionReadScope?,
+    private val currentStamp: () -> XingDunSessionReadStamp?,
+    private val deletedIDs: (String, XingDunGroupDeletionReadScope) -> Set<String>,
+    private val verify: suspend (String, XingDunGroupDeletionReadScope, Set<String>) -> Unit,
+    private val markFailed: (String, XingDunGroupDeletionReadScope) -> Unit,
+    private val visibility: XingDunGroupDeletionVisibilityState,
+    private val revision: () -> Long,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+) {
+    suspend fun filter(conversationID: String, messages: List<MessageInfo>): List<MessageInfo> {
+        if (XingDunGroupDeletionPolicy.group(conversationID) == null) return messages
+        // Freeze mutable SDK rows before leaving the caller, without touching credential storage.
+        val snapshot = messages.map { it.copy(quoteInfo = it.quoteInfo?.copy()) }
+        val result = withContext(io) {
+            val source = try { loadScope() }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { null }
+                ?: return@withContext null
+            val ids = SearchMessageVisibility.candidateIDs(snapshot).filter(XingDunGroupDeletionPolicy::validMessage).toSet()
+            try { ids.chunked(100).forEach {
+                check(source.stamp == currentStamp()) { "Authentication instance changed" }
+                verify(conversationID, source, it.toSet())
+                check(source.stamp == currentStamp()) { "Authentication instance changed" }
+            } }
+            catch (error: CancellationException) { throw error }
+            catch (_: Exception) {
+                if (source.stamp == currentStamp()) markFailed(conversationID, source)
+            }
+            if (source.stamp != currentStamp()) return@withContext null
+            // Successful verification may itself invalidate display state. Capture only after it finishes.
+            val displayRevision = revision()
+            val mapped = XingDunMessageDisplayFilter(
+                currentScope = { source.display.takeIf { source.stamp == currentStamp() } },
+                deletedIDs = { conversation, _ -> deletedIDs(conversation, source) },
+                visibility = visibility, revision = revision,
+            ).map(conversationID, snapshot) { it }
+            Triple(source.stamp, displayRevision, mapped)
+        } ?: return emptyList()
+        // IO may complete before the caller's dispatcher can resume. No decrypt/Keystore access here.
+        return if (result.first == currentStamp() && result.second == revision()) result.third else emptyList()
     }
 }

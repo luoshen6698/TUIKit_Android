@@ -63,6 +63,21 @@ object XingDunSessionManager {
     internal fun currentAuthenticationGeneration(): Long? =
         if (currentSession() != null) authenticationCommitGate.currentGeneration() else null
 
+    /** Non-secret publication stamp. Reads never enter the authentication writer monitor or Keystore. */
+    internal fun currentMessageReadStamp(): XingDunSessionReadStamp? {
+        if (!::store.isInitialized || XingDunTenantSessionCoordinator.isLeaving()) return null
+        val revision = store.currentReadRevision() ?: return null
+        val generation = authenticationCommitGate.currentReadGeneration() ?: return null
+        return if (revision == store.currentReadRevision() && generation == authenticationCommitGate.currentReadGeneration())
+            XingDunSessionReadStamp(revision, generation) else null
+    }
+
+    /** Caller uses IO. The credentials exist only in this local return value, never a global cache. */
+    internal fun readMessageSessionSnapshot(): Pair<XingDunSessionReadStamp, XingDunStoredSession>? {
+        if (!::store.isInitialized) return null
+        return readConsistentSessionSnapshot(::currentMessageReadStamp, store::loadDisplayBoundSession)
+    }
+
     internal fun commitIfAuthenticationGeneration(generation: Long, action: () -> Unit) {
         authenticationCommitGate.commit(generation) {
             check(currentSession() != null) { "Session ended" }
@@ -590,4 +605,17 @@ internal object XingDunSessionRejectionPolicy {
             reject()
         }
     }
+}
+
+/** Changes on every secure-store write and on authentication begin, including same-account replacement. */
+internal data class XingDunSessionReadStamp(val storageRevision: Long, val authenticationGeneration: Long)
+
+/** A stamp obtained only after a read cannot establish that the read belonged to that stamp. */
+internal fun <T> readConsistentSessionSnapshot(
+    stamp: () -> XingDunSessionReadStamp?,
+    read: () -> T?,
+): Pair<XingDunSessionReadStamp, T>? {
+    val before = stamp() ?: return null
+    val value = read() ?: return null
+    return if (before == stamp()) before to value else null
 }

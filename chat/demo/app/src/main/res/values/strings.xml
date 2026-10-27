@@ -212,7 +212,7 @@
     <string name="demo_group_event_kicked">You have been kicked out of the group: %1$s</string>
     <string name="demo_group_event_dismissed">Your group %1$s is disbanded.</string>
     <string name="demo_group_event_unknown_group">Unknown group</string>
-    <string name="demo_force_offline">Your account has logged in on another device. Please log in again.</string>
+    <string name="demo_force_offline">Your session has ended. Please sign in again.</string>
     <string name="demo_login_expired">Your login has expired. Please log in again.</string>
 
     <string name="demo_settings_theme">Theme</string>

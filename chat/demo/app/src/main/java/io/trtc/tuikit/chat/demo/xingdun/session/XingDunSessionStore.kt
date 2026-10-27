@@ -1,6 +1,7 @@
 package io.trtc.tuikit.chat.demo.xingdun.session
 
 import android.content.Context
+import java.util.concurrent.ConcurrentHashMap
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -20,6 +21,12 @@ class XingDunSessionStore(context: Context) {
     private val securePreferences = appContext.getSharedPreferences(SECURE_PREFERENCES, Context.MODE_PRIVATE)
     private val devicePreferences = appContext.getSharedPreferences(DEVICE_PREFERENCES, Context.MODE_PRIVATE)
     private val gson = Gson()
+    // Same preference namespace shares one process-local write barrier across Store instances.
+    private val readRevision = XingDunSessionStorageRevision.forStore(
+        "${appContext.applicationInfo.dataDir}:${android.os.Build.VERSION.SDK_INT >= 24 && appContext.isDeviceProtectedStorage}:$SECURE_PREFERENCES"
+    )
+    internal fun currentReadRevision(): Long? = readRevision.current()
+
 
     fun save(session: XingDunStoredSession) {
         saveEncrypted(KEY_SESSION_IV, KEY_SESSION_DATA, session)
@@ -38,6 +45,10 @@ class XingDunSessionStore(context: Context) {
         clearMismatchedSession = ::clearSession,
     )
 
+    /** Read-only display snapshot: a mixed/unreadable binding must never clear new credentials. */
+    internal fun loadDisplayBoundSession(): XingDunStoredSession? =
+        XingDunSessionBindingPolicy.resolveForDisplay(load(), loadEnterprise())
+
     fun isBoundToCurrentEnterprise(session: XingDunStoredSession): Boolean =
         runCatching { XingDunTenantBoundary.matches(session, loadEnterprise()) }.getOrDefault(false)
 
@@ -50,18 +61,20 @@ class XingDunSessionStore(context: Context) {
 
     fun clear() = clearSession()
 
-    fun clearSession() {
+    fun clearSession() = readRevision.write {
         securePreferences.edit()
             .remove(KEY_SESSION_IV)
             .remove(KEY_SESSION_DATA)
             .apply()
+        Unit
     }
 
-    fun clearEnterprise() {
+    fun clearEnterprise() = readRevision.write {
         securePreferences.edit()
             .remove(KEY_ENTERPRISE_IV)
             .remove(KEY_ENTERPRISE_DATA)
             .apply()
+        Unit
     }
 
     fun deviceId(): String {
@@ -74,7 +87,7 @@ class XingDunSessionStore(context: Context) {
         return created
     }
 
-    private fun saveEncrypted(ivKey: String, dataKey: String, value: Any) {
+    private fun saveEncrypted(ivKey: String, dataKey: String, value: Any) = readRevision.write {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
         val encrypted = cipher.doFinal(gson.toJson(value).toByteArray(Charsets.UTF_8))
@@ -139,6 +152,9 @@ class XingDunSessionStore(context: Context) {
 
 /** Unavailable or malformed snapshots must not be treated as a confirmed enterprise switch. */
 internal object XingDunSessionBindingPolicy {
+    fun resolveForDisplay(session: XingDunStoredSession?, enterprise: XingDunBootstrapConfiguration?): XingDunStoredSession? =
+        resolve(session, enterprise, clearMismatchedSession = {})
+
     fun resolve(
         session: XingDunStoredSession?,
         enterprise: XingDunBootstrapConfiguration?,
@@ -151,5 +167,24 @@ internal object XingDunSessionBindingPolicy {
             return null
         }
         return session
+    }
+}
+
+/** Metadata only: no session/token/key cache, and its monitor never surrounds storage or Cipher work.
+ * This process-local barrier is not a cross-process SharedPreferences protocol. */
+internal class XingDunSessionStorageRevision private constructor() {
+    private val metadata = Any()
+    private var version = 0L
+    private var writers = 0
+    fun current(): Long? = synchronized(metadata) { if (writers == 0) version else null }
+    fun <T> write(action: () -> T): T {
+        synchronized(metadata) { version++; writers++ }
+        try { return action() }
+        finally { synchronized(metadata) { version++; writers-- } }
+    }
+    companion object {
+        private val stores = ConcurrentHashMap<String, XingDunSessionStorageRevision>()
+        fun forStore(namespace: String): XingDunSessionStorageRevision =
+            stores.getOrPut(namespace) { XingDunSessionStorageRevision() }
     }
 }

@@ -208,7 +208,7 @@
     <string name="demo_group_event_kicked">您已被踢出群: %1$s</string>
     <string name="demo_group_event_dismissed">您所在的群%1$s已解散</string>
     <string name="demo_group_event_unknown_group">未知群组</string>
-    <string name="demo_force_offline">您的账号已在其他设备登录，请重新登录</string>
+    <string name="demo_force_offline">当前会话已结束，请重新登录。</string>
     <string name="demo_login_expired">登录已过期，请重新登录</string>
 
     <string name="demo_settings_theme">主题</string>
