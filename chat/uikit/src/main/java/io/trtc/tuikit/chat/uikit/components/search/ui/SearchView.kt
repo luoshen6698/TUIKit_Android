@@ -85,6 +85,7 @@ class SearchView @JvmOverloads constructor(
     private var onBack: (() -> Unit)? = null
     private var onGlobalQueryChange: ((String) -> Unit)? = null
     private var onExtensionResultSelect: ((GlobalSearchExtensionResult) -> Unit)? = null
+    private var onMessageSelectionInvalidated: (() -> Unit)? = null
 
     init {
         applyTheme()
@@ -97,7 +98,8 @@ class SearchView @JvmOverloads constructor(
         onMessageSelect: ((MessageInfo) -> Unit)? = null,
         onGlobalQueryChange: ((String) -> Unit)? = null,
         onExtensionResultSelect: ((GlobalSearchExtensionResult) -> Unit)? = null,
-        onBack: (() -> Unit)? = null
+        onBack: (() -> Unit)? = null,
+        onMessageSelectionInvalidated: (() -> Unit)? = null,
     ) {
         this.onContactSelect = onContactSelect
         this.onGroupSelect = onGroupSelect
@@ -106,6 +108,7 @@ class SearchView @JvmOverloads constructor(
         this.onGlobalQueryChange = onGlobalQueryChange
         this.onExtensionResultSelect = onExtensionResultSelect
         this.onBack = onBack
+        this.onMessageSelectionInvalidated = onMessageSelectionInvalidated
     }
 
     fun updateExtensionResults(
@@ -138,12 +141,14 @@ class SearchView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
+        onMessageSelectionInvalidated?.invoke()
         super.onDetachedFromWindow()
         viewScope?.cancel()
         viewScope = null
     }
 
     private fun navigateTo(step: SearchFlowStep) {
+        onMessageSelectionInvalidated?.invoke()
         hideAllPages()
         prevStep = currentStep
         currentStep = step
@@ -254,7 +259,10 @@ class SearchView @JvmOverloads constructor(
             messageInConversationPage = SearchMessageInConversationPage(context, searchViewModel()).apply {
                 onMessageClick = { message -> this@SearchView.onMessageSelect?.invoke(message) }
                 onConversationSelect = { conv -> this@SearchView.onConversationSelect?.invoke(conv) }
-                onQueryChange = { query -> searchAllQuery = query }
+                onQueryChange = { query ->
+                    this@SearchView.onMessageSelectionInvalidated?.invoke()
+                    searchAllQuery = query
+                }
                 onBack = {
                     if (prevStep == SearchFlowStep.GLOBAL_SEARCH) {
                         navigateTo(SearchFlowStep.GLOBAL_SEARCH)

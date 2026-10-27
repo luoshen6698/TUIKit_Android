@@ -19,16 +19,23 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicx.theme.ThemeStore
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageDeletionVisibility
 import io.trtc.tuikit.chat.uikit.components.search.ui.SearchMessageInConversationPage
+import io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchGroupHistoryAccess
 import io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageInConversationViewModel
+import io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 open class ConversationSearchActivity : BaseActivity() {
 
@@ -43,6 +50,8 @@ open class ConversationSearchActivity : BaseActivity() {
     private lateinit var divider: View
     private lateinit var page: SearchMessageInConversationPage
     private var historyStarted = false
+    private var sourceSession: String? = null
+    private var locateRevision = 0L
 
     companion object {
         private const val EXTRA_CONVERSATION_ID = "conversation_id"
@@ -70,6 +79,7 @@ open class ConversationSearchActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (isFinishing) return
+        sourceSession = SearchMessageVisibility.currentSessionKey()
 
         val conversationID = intent.getStringExtra(EXTRA_CONVERSATION_ID).orEmpty()
         if (conversationID.isBlank()) {
@@ -100,10 +110,8 @@ open class ConversationSearchActivity : BaseActivity() {
             viewModel = ViewModelProvider(this)[SearchMessageInConversationViewModel::class.java]
         ).apply {
             onBack = { finish() }
-            onMessageClick = { message ->
-                ChatActivity.start(this@ConversationSearchActivity, conversationID, message)
-                finish()
-            }
+            onMessageClick = ::locateSearchMessage
+            onQueryChange = { locateRevision++ }
         }
         page.configureHistoryLanding(
             buildCategoryLanding(conversationID),
@@ -133,8 +141,41 @@ open class ConversationSearchActivity : BaseActivity() {
     }
 
     override fun onPause() {
+        locateRevision++
         io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupSettingsAccess.stopHistory(this)
         super.onPause()
+    }
+
+    private fun locateSearchMessage(message: MessageInfo) {
+        val conversationID = intent.getStringExtra(EXTRA_CONVERSATION_ID).orEmpty()
+        if (conversationID.isBlank() || message.msgID.isBlank()) return
+        val selected = message.copy(quoteInfo = message.quoteInfo?.copy())
+        val owner = sourceSession
+        val selection = ++locateRevision
+        val rows = ViewModelProvider(this)[SearchMessageInConversationViewModel::class.java].messagesInConversation
+        fun isCurrent() = !isDestroyed && !isFinishing && selection == locateRevision &&
+            lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+            owner != null && owner == SearchMessageVisibility.currentSessionKey() &&
+            rows.value.any { it.msgID == selected.msgID } &&
+            !XingDunMessageDeletionVisibility.isDeleted(conversationID, selected.msgID)
+        lifecycleScope.launch {
+            val checked = XingDunHistoryMediaGate.checked(conversationID, selected.msgID, ::isCurrent,
+                filter = { withContext(Dispatchers.IO) {
+                    if (conversationID.startsWith("group_")) SearchMessageVisibility.messagesForAction(conversationID, listOf(selected))
+                    else XingDunMessageDeletionVisibility.filterMessages(applicationContext, conversationID, listOf(selected))
+                } },
+                authorize = { withContext(Dispatchers.IO) { SearchGroupHistoryAccess.allows(conversationID, owner) } },
+                onDenied = {
+                    android.widget.Toast.makeText(this@ConversationSearchActivity, R.string.xingdun_group_access_denied,
+                        android.widget.Toast.LENGTH_LONG).show()
+                    finish()
+                },
+            ) ?: return@launch
+            val target = checked.firstOrNull { it.msgID == selected.msgID } ?: return@launch
+            if (!isCurrent()) return@launch
+            ChatActivity.start(this@ConversationSearchActivity, conversationID, target)
+            finish()
+        }
     }
 
     private fun buildCategoryLanding(conversationID: String): View = LinearLayout(this).apply {

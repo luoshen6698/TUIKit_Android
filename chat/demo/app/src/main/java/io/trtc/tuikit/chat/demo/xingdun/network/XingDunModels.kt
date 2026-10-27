@@ -200,7 +200,7 @@ data class XingDunGroupDetail(
     val intro: String? = null,
     val memberCount: Int = 0,
     val ownerUserId: String? = null,
-    val currentUserRole: String = "member",
+    val currentUserRole: String = "unknown",
     val groupType: String = "unknown",
     val joinMode: Int = JOIN_MODE_APPROVAL,
     val inviteMode: Int = MODE_ADMINISTRATORS,
@@ -224,10 +224,8 @@ data class XingDunGroupDetail(
             ?: groupId.trim().takeIf { value -> value.isNotEmpty() && value.all(Char::isDigit) }
 
     val canEditGroupInfo: Boolean
-        get() = currentUserIsAssignedCs ||
-            currentUserRole == "owner" ||
-            currentUserRole == "administrator" ||
-            updateTeamMode == MODE_ALL
+        get() = currentUserRole == "owner" || currentUserRole == "administrator" ||
+            (currentUserRole == "member" && updateTeamMode == MODE_ALL)
 
     /** Matches the iOS group-announcement screen: members can view, owners/admins can save. */
     val canEditAnnouncement: Boolean
@@ -395,3 +393,26 @@ class XingDunApiException(
     val isUnauthorized: Boolean
         get() = httpStatus == 401 || businessCode == 401 || businessCode == 40100 || businessCode == 40101
 }
+
+
+internal class XingDunGroupNameChangedException : Exception()
+
+/** The editor's opened name is the server CAS baseline; a fresh read alone is not atomic. */
+internal fun groupNameUpdatePayload(
+    groupID: String,
+    openedName: String,
+    latestName: String,
+    candidate: String,
+): Map<String, Any>? {
+    if (latestName == candidate) return null
+    if (latestName != openedName) throw XingDunGroupNameChangedException()
+    return mapOf(
+        "team_id" to groupID,
+        "name" to candidate,
+        "expected_fields" to mapOf("name" to openedName),
+    )
+}
+
+internal fun isGroupNameChangeConflict(error: Exception): Boolean =
+    error is XingDunGroupNameChangedException ||
+        (error is XingDunApiException && (error.httpStatus == 409 || error.businessCode == 409))

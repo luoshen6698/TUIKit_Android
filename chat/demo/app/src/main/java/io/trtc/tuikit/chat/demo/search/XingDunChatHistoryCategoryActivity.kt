@@ -24,6 +24,7 @@ import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.lifecycle.Lifecycle
 import io.trtc.tuikit.atomicx.common.imageloader.ImageLoader
 import io.trtc.tuikit.atomicx.common.imageloader.ImageOptions
 import io.trtc.tuikit.atomicx.theme.ThemeStore
@@ -180,6 +181,7 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     }
 
     override fun onPause() {
+        mediaRevision++
         if (conversationID.startsWith("group_")) {
             historyActive = false
             historyRevision++
@@ -422,8 +424,7 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
             if (message.messageType == MessageType.IMAGE || message.messageType == MessageType.VIDEO) {
                 showMedia(message)
             } else {
-                ChatActivity.start(this@XingDunChatHistoryCategoryActivity, conversationID, message)
-                finish()
+                locateSearchMessage(message)
             }
         }
         addView(messageThumbnail(message), LinearLayout.LayoutParams(60.dp(), 60.dp()))
@@ -520,6 +521,35 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         else -> message.getMessageAbstract(this).takeIf { it.isNotBlank() }
             ?: message.messageSender.takeIf { it.isNotBlank() }
             ?: getString(R.string.xingdun_chat_history_message)
+    }
+
+    private fun locateSearchMessage(message: MessageInfo) {
+        if (!isSourceCurrent() || message.msgID.isBlank()) return
+        val selected = message.copy(quoteInfo = message.quoteInfo?.copy())
+        val revision = ++mediaRevision
+        val ticket = historyRevision
+        val owner = sourceSession
+        fun isCurrent() = revision == mediaRevision && !isDestroyed && !isFinishing &&
+            lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+            owner != null && owner == SearchMessageVisibility.currentSessionKey() && isReadCurrent(ticket) &&
+            messages.any { it.msgID == selected.msgID } &&
+            !XingDunMessageDeletionVisibility.isDeleted(conversationID, selected.msgID)
+        activityScope?.launch {
+            val checked = XingDunHistoryMediaGate.checked(conversationID, selected.msgID, ::isCurrent,
+                filter = { kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    if (conversationID.startsWith("group_")) SearchMessageVisibility.messagesForAction(conversationID, listOf(selected))
+                    else XingDunMessageDeletionVisibility.filterMessages(applicationContext, conversationID, listOf(selected))
+                } },
+                authorize = { kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchGroupHistoryAccess.allows(conversationID, owner)
+                } },
+                onDenied = { rejectHistory(ticket) },
+            ) ?: return@launch
+            val target = checked.firstOrNull { it.msgID == selected.msgID } ?: return@launch
+            if (!isCurrent()) return@launch
+            ChatActivity.start(this@XingDunChatHistoryCategoryActivity, conversationID, target)
+            finish()
+        }
     }
 
     private fun showMedia(selected: MessageInfo) {

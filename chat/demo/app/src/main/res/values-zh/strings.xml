@@ -1248,6 +1248,7 @@
     <string name="xingdun_group_info_name_required">请输入群名称。</string>
     <string name="xingdun_group_info_name_too_long">群名称不能超过100个UTF-8字节。</string>
     <string name="xingdun_group_info_name_updated">群名称已更新</string>
+    <string name="xingdun_group_info_name_changed">群名称已被修改，请刷新后重试。</string>
     <string name="xingdun_group_info_intro">群简介</string>
     <string name="xingdun_group_info_intro_hint">请输入群简介</string>
     <string name="xingdun_group_info_id">群ID</string>

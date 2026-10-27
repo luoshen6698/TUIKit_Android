@@ -33,9 +33,11 @@ import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiException
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunUploadFile
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,6 +71,16 @@ class XingDunGroupAvatarActivity : BaseActivity() {
     private var selectedBytes: ByteArray? = null
     private var selectedPreset = -1
     private var isSaving = false
+    private var authorityAvailable = false
+    @Volatile private var resumed = false
+    private var pendingPhotoUri: Uri? = null
+    private var authorityRevoked = false
+    private var resultPending = false
+    private var authorityRequest = 0L
+    private var profileOwner: XingDunGroupProfileOperationOwner? = null
+    private lateinit var choosePhoto: Button
+    private lateinit var authorityNotice: TextView
+    private var authorityMessage: String? = null
 
     private val groupID by lazy { intent.getStringExtra(EXTRA_GROUP_ID).orEmpty() }
     private val groupName by lazy { intent.getStringExtra(EXTRA_GROUP_NAME).orEmpty() }
@@ -77,7 +89,8 @@ class XingDunGroupAvatarActivity : BaseActivity() {
 
     private val avatarPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
-        result.data?.data?.let(::prepareSelectedAvatar)
+        pendingPhotoUri = result.data?.data
+        if (resumed) consumePendingPhoto()
     }
 
     private fun openAvatarPicker() {
@@ -97,9 +110,31 @@ class XingDunGroupAvatarActivity : BaseActivity() {
         buildContent()
         applyTheme(colors())
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        profileOwner = XingDunGroupProfileOperationOwner(getString(R.string.xingdun_session_expired))
+        authorityAvailable = isDebugPreview
+        updateAuthorityControls()
         activityScope?.launch {
             themeStore.themeState.collectLatest { applyTheme(it.currentTheme.tokens.color) }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        resumed = true
+        if (::content.isInitialized) {
+            consumePendingPhoto()
+            if (isDebugPreview) updateAuthorityControls() else if (!isSaving) refreshAuthority()
+        }
+    }
+
+    override fun onPause() {
+        resumed = false
+        if (::content.isInitialized && !isDebugPreview) {
+            authorityRequest++
+            authorityAvailable = false
+            updateAuthorityControls()
+        }
+        super.onPause()
     }
 
     override fun onDestroy() {
@@ -170,10 +205,11 @@ class XingDunGroupAvatarActivity : BaseActivity() {
         }
         preview.addView(selectedPreview, FrameLayout.LayoutParams(96.dp(), 96.dp(), Gravity.CENTER))
         previewCard.addView(preview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 112.dp()))
-        previewCard.addView(Button(this).apply {
+        choosePhoto = Button(this).apply {
             setText(R.string.xingdun_group_info_choose_photo)
-            setOnClickListener { if (!isSaving) openAvatarPicker() }
-        })
+            setOnClickListener { if (canEditSelection()) openAvatarPicker() }
+        }
+        previewCard.addView(choosePhoto)
         content.addView(previewCard, matchWrap())
 
         val presetsCard = LinearLayout(this).apply {
@@ -193,7 +229,62 @@ class XingDunGroupAvatarActivity : BaseActivity() {
         }
         presetsCard.addView(presetRow, matchWrap())
         content.addView(presetsCard, matchWrap().apply { topMargin = 12.dp() })
+        authorityNotice = TextView(this).apply {
+            visibility = View.GONE
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(current.textColorSecondary)
+            setPadding(4.dp(), 12.dp(), 4.dp(), 0)
+        }
+        content.addView(authorityNotice, matchWrap())
         renderPresets()
+    }
+
+    private fun ownerIsCurrent(): Boolean =
+        resumed && !isFinishing && !isDestroyed && (isDebugPreview || profileOwner?.isCurrent() == true)
+
+    private fun canEditSelection(): Boolean = ownerIsCurrent() && authorityAvailable &&
+        !authorityRevoked && !resultPending && !isSaving
+
+    private fun updateAuthorityControls() {
+        if (!::saveAction.isInitialized) return
+        val editable = canEditSelection()
+        saveAction.isEnabled = editable && selectedBytes != null
+        saveAction.setTextColor(if (saveAction.isEnabled) BRAND else colors().textColorTertiary)
+        choosePhoto.isEnabled = editable
+        leftAction.isEnabled = !isSaving
+        for (index in 0 until presetRow.childCount) presetRow.getChildAt(index).isEnabled = editable
+        authorityNotice.text = authorityMessage
+        authorityNotice.visibility = if (authorityMessage.isNullOrBlank()) View.GONE else View.VISIBLE
+    }
+
+    private fun refreshAuthority() {
+        val scope = activityScope ?: return
+        val owner = profileOwner ?: return
+        val ticket = ++authorityRequest
+        authorityAvailable = false
+        authorityMessage = getString(if (resultPending) R.string.xingdun_pending else R.string.xingdun_group_info_loading)
+        updateAuthorityControls()
+        scope.launch {
+            try {
+                val latest = owner.detail(groupID)
+                if (ticket != authorityRequest || !ownerIsCurrent()) return@launch
+                authorityAvailable = true
+                if (!latest.canEditGroupInfo) authorityRevoked = true
+                authorityMessage = when {
+                    resultPending -> getString(R.string.xingdun_pending)
+                    authorityRevoked -> getString(R.string.xingdun_group_permission_update_info_administrators_detail)
+                    else -> null
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (ticket != authorityRequest) return@launch
+                authorityAvailable = false
+                authorityMessage = getString(R.string.xingdun_group_info_load_failed_message)
+            } finally {
+                if (ticket == authorityRequest && !isFinishing && !isDestroyed) updateAuthorityControls()
+            }
+        }
     }
 
     private fun renderPresets() {
@@ -216,7 +307,7 @@ class XingDunGroupAvatarActivity : BaseActivity() {
                     clipToOutline = true
                 }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                 setOnClickListener {
-                    if (!isSaving) selectPreset(index, bitmap)
+                    if (canEditSelection()) selectPreset(index, bitmap)
                 }
             }, LinearLayout.LayoutParams(56.dp(), 56.dp()).apply {
                 if (index > 0) marginStart = 8.dp()
@@ -225,6 +316,7 @@ class XingDunGroupAvatarActivity : BaseActivity() {
     }
 
     private fun selectPreset(index: Int, bitmap: Bitmap) {
+        if (!canEditSelection()) return
         selectedPreset = index
         selectedBytes = ByteArrayOutputStream().use { output ->
             check(bitmap.compress(Bitmap.CompressFormat.JPEG, 88, output))
@@ -232,25 +324,37 @@ class XingDunGroupAvatarActivity : BaseActivity() {
         }
         selectedPreview.setImageBitmap(bitmap)
         selectedPreview.visibility = View.VISIBLE
-        saveAction.isEnabled = true
         renderPresets()
+        updateAuthorityControls()
         applyTheme(colors())
     }
 
+    private fun consumePendingPhoto() {
+        if (!ownerIsCurrent() || isSaving) return
+        val uri = pendingPhotoUri ?: return
+        pendingPhotoUri = null
+        prepareSelectedAvatar(uri)
+    }
+
     private fun prepareSelectedAvatar(uri: Uri) {
+        // Preparing a local draft is separate from authorizing its upload.
+        if (!ownerIsCurrent() || isSaving) return
         val scope = activityScope ?: return
         scope.launch {
             runCatching { avatarBytes(uri) }
                 .onSuccess { bytes ->
+                    if (!ownerIsCurrent() || isSaving) return@onSuccess
                     selectedPreset = -1
                     selectedBytes = bytes
                     selectedPreview.setImageBitmap(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
                     selectedPreview.visibility = View.VISIBLE
-                    saveAction.isEnabled = true
                     renderPresets()
+                    updateAuthorityControls()
                     applyTheme(colors())
                 }
                 .onFailure { error ->
+                    if (error is CancellationException) throw error
+                    if (!ownerIsCurrent()) return@onFailure
                     Toast.makeText(
                         this@XingDunGroupAvatarActivity,
                         error.localizedMessage ?: getString(R.string.xingdun_avatar_invalid),
@@ -279,43 +383,71 @@ class XingDunGroupAvatarActivity : BaseActivity() {
 
     private fun saveSelection() {
         val bytes = selectedBytes ?: return
-        if (isSaving) return
+        if (!canEditSelection()) return
         if (isDebugPreview) {
             setResult(Activity.RESULT_OK)
             finish()
             return
         }
+        val owner = profileOwner ?: return
         isSaving = true
-        saveAction.isEnabled = false
-        leftAction.isEnabled = false
+        authorityAvailable = false
+        authorityRequest++
+        updateAuthorityControls()
         activityScope?.launch {
-            runCatching {
-                val session = XingDunSessionManager.currentSession()
-                    ?: error(getString(R.string.xingdun_session_expired))
-                XingDunSessionManager.apiClient().postMultipartEmpty(
-                    session,
-                    "team/update",
-                    mapOf("team_id" to groupID),
-                    listOf(XingDunUploadFile("avatar", "xingdun-group-avatar.jpg", "image/jpeg", bytes)),
-                )
-            }.onSuccess {
+            var writeAttempted = false
+            try {
+                val latest = owner.detail(groupID)
+                if (!ownerIsCurrent()) return@launch
+                authorityAvailable = true
+                if (!latest.canEditGroupInfo) {
+                    authorityRevoked = true
+                    authorityMessage = getString(R.string.xingdun_group_permission_update_info_administrators_detail)
+                    return@launch
+                }
+                writeAttempted = true
+                owner.request { session ->
+                    if (!resumed) throw CancellationException()
+                    XingDunSessionManager.apiClient().postMultipartEmpty(session, "team/update",
+                        mapOf("team_id" to groupID),
+                        listOf(XingDunUploadFile("avatar", "xingdun-group-avatar.jpg", "image/jpeg", bytes)))
+                }
+                if (!ownerIsCurrent()) return@launch
                 GroupStore.shared.loadJoinedGroups()
-                Toast.makeText(
-                    this@XingDunGroupAvatarActivity,
-                    R.string.xingdun_group_info_avatar_updated,
-                    Toast.LENGTH_SHORT,
-                ).show()
+                Toast.makeText(this@XingDunGroupAvatarActivity,
+                    R.string.xingdun_group_info_avatar_updated, Toast.LENGTH_SHORT).show()
                 setResult(Activity.RESULT_OK)
                 finish()
-            }.onFailure { error ->
+            } catch (cancelled: CancellationException) {
+                if (writeAttempted) {
+                    resultPending = true
+                    authorityAvailable = false
+                    authorityMessage = getString(R.string.xingdun_pending)
+                }
+                throw cancelled
+            } catch (error: Exception) {
+                resultPending = writeAttempted && !isDefiniteGroupProfileRejection(error)
+                if (isFinishing || isDestroyed) return@launch
+                val actual = if (writeAttempted) try { owner.detail(groupID) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { null } else null
+                if (!ownerIsCurrent()) {
+                    authorityAvailable = false
+                    return@launch
+                }
+                authorityAvailable = actual != null
+                if (actual != null && !actual.canEditGroupInfo) authorityRevoked = true
+                // A different server avatar URL cannot identify this uncertain upload.
+                resultPending = writeAttempted && !isDefiniteGroupProfileRejection(error)
+                authorityMessage = when {
+                    resultPending -> getString(R.string.xingdun_pending)
+                    error is XingDunApiException -> error.localizedMessage
+                        ?: getString(R.string.xingdun_action_failed)
+                    else -> getString(R.string.xingdun_group_info_load_failed_message)
+                }
+            } finally {
                 isSaving = false
-                saveAction.isEnabled = true
-                leftAction.isEnabled = true
-                Toast.makeText(
-                    this@XingDunGroupAvatarActivity,
-                    error.localizedMessage ?: getString(R.string.xingdun_action_failed),
-                    Toast.LENGTH_LONG,
-                ).show()
+                if (!isFinishing && !isDestroyed) updateAuthorityControls()
             }
         }
     }

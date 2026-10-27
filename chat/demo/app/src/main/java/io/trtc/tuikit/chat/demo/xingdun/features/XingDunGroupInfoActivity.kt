@@ -1,7 +1,6 @@
 package io.trtc.tuikit.chat.demo.xingdun.features
 
 import android.app.AlertDialog
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -35,15 +34,24 @@ import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.common.BaseActivity
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiException
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupDetail
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupNameChangedException
+import io.trtc.tuikit.chat.demo.xingdun.network.groupNameUpdatePayload
+import io.trtc.tuikit.chat.demo.xingdun.network.isGroupNameChangeConflict
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /** Business-authoritative group information page aligned with the iOS group detail screen. */
 open class XingDunGroupInfoActivity : BaseActivity() {
@@ -67,11 +75,27 @@ open class XingDunGroupInfoActivity : BaseActivity() {
     private lateinit var content: LinearLayout
 
     private var detail: XingDunGroupDetail? = null
-    private val groupAvatarEditor = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK && !intent.getBooleanExtra(EXTRA_DEBUG_PREVIEW, false)) {
-            loadDetail(force = true)
-        }
-    }
+    private var profileOwner: XingDunGroupProfileOperationOwner? = null
+    private var authorityAvailable = false
+    @Volatile private var resumed = false
+    private var detailRequest = 0L
+    private var activeEditor: ProfileEditor? = null
+    private val isDebugPreview: Boolean
+        get() = intent.getBooleanExtra(EXTRA_DEBUG_PREVIEW, false)
+
+    private class ProfileEditor(
+        val isName: Boolean,
+        val openedName: String?,
+        val dialog: AlertDialog,
+        val input: EditText,
+        val feedback: TextView,
+        var submitting: Boolean = false,
+        var revoked: Boolean = false,
+        var resultPending: Boolean = false,
+    )
+
+    // Returning from either Save or Cancel always reauthorizes in onResume.
+    private val groupAvatarEditor = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,6 +109,7 @@ open class XingDunGroupInfoActivity : BaseActivity() {
         bindViews()
         configureHeader()
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        profileOwner = XingDunGroupProfileOperationOwner(getString(R.string.xingdun_session_expired))
         activityScope?.launch {
             themeStore.themeState.collectLatest {
                 applyHeaderTheme(it.currentTheme.tokens.color)
@@ -101,12 +126,31 @@ open class XingDunGroupInfoActivity : BaseActivity() {
                 currentUserRole = "owner",
                 updateTeamMode = 2,
             )
+            authorityAvailable = true
             renderDetail(requireNotNull(detail))
             refresh.isEnabled = false
         } else {
             showLoading()
-            loadDetail()
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        resumed = true
+        if (::content.isInitialized) {
+            if (isDebugPreview) detail?.let(::renderDetail) else loadDetail(force = true)
+        }
+    }
+
+    override fun onPause() {
+        resumed = false
+        if (!isDebugPreview && ::content.isInitialized) {
+            detailRequest++
+            authorityAvailable = false
+            detail?.let(::renderDetail)
+            updateEditorControls()
+        }
+        super.onPause()
     }
 
     override fun onDestroy() {
@@ -144,32 +188,57 @@ open class XingDunGroupInfoActivity : BaseActivity() {
         applyHeaderTheme(colors())
     }
 
+    private fun ownerIsCurrent(): Boolean =
+        resumed && !isFinishing && !isDestroyed && (isDebugPreview || profileOwner?.isCurrent() == true)
+
+    private fun canEdit(value: XingDunGroupDetail): Boolean =
+        authorityAvailable && ownerIsCurrent() && value.canEditGroupInfo
+
     private fun loadDetail(force: Boolean = false) {
         val scope = activityScope ?: return
-        if (!force && detail == null) showLoading()
+        val owner = profileOwner ?: return
+        if (activeEditor?.submitting == true) return
+        val ticket = ++detailRequest
+        authorityAvailable = false
+        if (!force && detail == null) showLoading() else detail?.let(::renderDetail)
+        updateEditorControls()
         scope.launch {
-            val result = runCatching {
-                val session = XingDunSessionManager.currentSession()
-                    ?: error(getString(R.string.xingdun_session_expired))
-                XingDunSessionManager.apiClient().get<XingDunGroupDetail>(
-                    session,
-                    "team/detail",
-                    mapOf("team_id" to groupID),
-                    XingDunGroupDetail::class.java,
-                )
-            }
-            refresh.isRefreshing = false
-            result.onSuccess {
-                detail = it
-                renderDetail(it)
-            }.onFailure { error ->
+            try {
+                val loaded = owner.detail(groupID)
+                if (ticket != detailRequest || !ownerIsCurrent()) return@launch
+                detail = loaded
+                authorityAvailable = true
+                if (!loaded.canEditGroupInfo) activeEditor?.revoked = true
+                renderDetail(loaded)
+                if (!loaded.canEditGroupInfo) editorFeedback(permissionMessage(loaded))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (ticket != detailRequest || isFinishing || isDestroyed) return@launch
+                authorityAvailable = false
+                val message = profileErrorMessage(error)
                 val cached = detail
-                if (cached == null) showLoadError(error) else {
-                    renderDetail(cached, error.localizedMessage)
+                if (cached == null) showLoadError(error) else renderDetail(cached, message)
+                editorFeedback(message)
+            } finally {
+                if (ticket == detailRequest) {
+                    refresh.isRefreshing = false
+                    updateEditorControls()
                 }
             }
         }
     }
+
+    private fun profileErrorMessage(error: Exception, nameEdit: Boolean = false): String =
+        if (nameEdit && isGroupNameChangeConflict(error)) getString(R.string.xingdun_group_info_name_changed)
+        else if (error is XingDunApiException) error.localizedMessage?.takeIf(String::isNotBlank)
+            ?: getString(R.string.xingdun_action_failed)
+        else getString(R.string.xingdun_group_info_load_failed_message)
+
+    private fun permissionMessage(value: XingDunGroupDetail): String =
+        getString(if (value.currentUserRole == "member" && value.updateTeamMode != 1)
+            R.string.xingdun_group_permission_update_info_administrators_detail
+        else R.string.xingdun_action_failed)
 
     private fun showLoading() {
         content.removeAllViews()
@@ -222,17 +291,17 @@ open class XingDunGroupInfoActivity : BaseActivity() {
             title = getString(R.string.xingdun_group_info_name),
             value = value.name.ifBlank { getString(R.string.xingdun_not_set) },
             colors = current,
-            showsDisclosure = value.canEditGroupInfo,
-            onClick = if (value.canEditGroupInfo) ({ showNameEditor(value) }) else null,
+            showsDisclosure = canEdit(value),
+            onClick = if (canEdit(value)) ({ showNameEditor(value) }) else null,
         ))
         identity.addView(rowDivider(current))
         identity.addView(textRow(
             title = getString(R.string.xingdun_group_info_intro),
             value = value.intro?.takeIf(String::isNotBlank) ?: getString(R.string.xingdun_not_set),
             colors = current,
-            showsDisclosure = value.canEditGroupInfo,
+            showsDisclosure = canEdit(value),
             multiline = true,
-            onClick = if (value.canEditGroupInfo) ({ showIntroductionEditor(value) }) else null,
+            onClick = if (canEdit(value)) ({ showIntroductionEditor(value) }) else null,
         ))
         content.addView(identity, matchWrap())
 
@@ -263,9 +332,10 @@ open class XingDunGroupInfoActivity : BaseActivity() {
             gravity = Gravity.CENTER_VERTICAL
             minimumHeight = 68.dp()
             setPadding(16.dp(), 8.dp(), 12.dp(), 8.dp())
-            isClickable = value.canEditGroupInfo
-            isFocusable = value.canEditGroupInfo
-            if (value.canEditGroupInfo) setOnClickListener {
+            isClickable = canEdit(value)
+            isFocusable = canEdit(value)
+            if (canEdit(value)) setOnClickListener {
+                if (!canEdit(value)) return@setOnClickListener
                 groupAvatarEditor.launch(
                     XingDunGroupAvatarActivity.intent(
                         context = this@XingDunGroupInfoActivity,
@@ -286,7 +356,7 @@ open class XingDunGroupInfoActivity : BaseActivity() {
             setSize(Avatar.AvatarSize.M)
             setContent(Avatar.AvatarContent.Image(value.avatar, value.name))
         })
-        if (value.canEditGroupInfo) {
+        if (canEdit(value)) {
             row.addView(chevron(colors), LinearLayout.LayoutParams(18.dp(), 24.dp()).apply { marginStart = 8.dp() })
         }
         return row
@@ -325,79 +395,31 @@ open class XingDunGroupInfoActivity : BaseActivity() {
         }
     }
 
-    private fun showIntroductionEditor(value: XingDunGroupDetail) {
-        val current = colors()
-        val wrapper = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(20.dp(), 8.dp(), 20.dp(), 0)
-        }
-        val editor = EditText(this).apply {
-            setText(value.intro.orEmpty())
-            setSelection(text.length)
-            minHeight = 130.dp()
-            gravity = Gravity.TOP or Gravity.START
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            setTextColor(current.textColorPrimary)
-            setHintTextColor(current.textColorTertiary)
-            setHint(R.string.xingdun_group_info_intro_hint)
-            background = rounded(current.bgColorOperate, 12f, current.strokeColorPrimary)
-            setPadding(12.dp(), 12.dp(), 12.dp(), 12.dp())
-        }
-        val counter = TextView(this).apply {
-            gravity = Gravity.END
-            setTextColor(current.textColorTertiary)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setPadding(0, 6.dp(), 0, 0)
-        }
-        fun updateCounter() {
-            counter.text = getString(
-                R.string.xingdun_group_info_byte_count,
-                editor.text.toString().toByteArray(Charsets.UTF_8).size,
-                INTRO_MAX_BYTES,
-            )
-        }
-        editor.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = updateCounter()
-            override fun afterTextChanged(s: Editable?) = Unit
-        })
-        updateCounter()
-        wrapper.addView(editor, matchWrap())
-        wrapper.addView(counter, matchWrap())
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_group_info_intro)
-            .setView(wrapper)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.xingdun_group_info_save, null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val candidate = editor.text.toString().trim()
-                if (candidate.toByteArray(Charsets.UTF_8).size > INTRO_MAX_BYTES) {
-                    Toast.makeText(this, R.string.xingdun_group_info_intro_too_long, Toast.LENGTH_LONG).show()
-                } else {
-                    saveIntroduction(candidate, dialog)
-                }
-            }
-        }
-        dialog.show()
-    }
+    private fun showIntroductionEditor(value: XingDunGroupDetail) = showProfileEditor(value, isName = false)
 
-    private fun showNameEditor(value: XingDunGroupDetail) {
+    private fun showNameEditor(value: XingDunGroupDetail) = showProfileEditor(value, isName = true)
+
+    private fun showProfileEditor(value: XingDunGroupDetail, isName: Boolean) {
+        if (!canEdit(value) || activeEditor != null) return
         val current = colors()
+        val limit = if (isName) NAME_MAX_BYTES else INTRO_MAX_BYTES
         val wrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20.dp(), 8.dp(), 20.dp(), 0)
         }
         val editor = EditText(this).apply {
-            setText(value.name)
+            setText(if (isName) value.name else value.intro.orEmpty())
             setSelection(text.length)
-            setSingleLine()
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+            if (isName) setSingleLine() else {
+                minHeight = 130.dp()
+                gravity = Gravity.TOP or Gravity.START
+            }
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or if (isName)
                 android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            else android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
             setTextColor(current.textColorPrimary)
             setHintTextColor(current.textColorTertiary)
-            setHint(R.string.xingdun_group_info_name_hint)
+            setHint(if (isName) R.string.xingdun_group_info_name_hint else R.string.xingdun_group_info_intro_hint)
             background = rounded(current.bgColorOperate, 12f, current.strokeColorPrimary)
             setPadding(12.dp(), 12.dp(), 12.dp(), 12.dp())
         }
@@ -408,11 +430,8 @@ open class XingDunGroupInfoActivity : BaseActivity() {
             setPadding(0, 6.dp(), 0, 0)
         }
         fun updateCounter() {
-            counter.text = getString(
-                R.string.xingdun_group_info_byte_count,
-                editor.text.toString().toByteArray(Charsets.UTF_8).size,
-                NAME_MAX_BYTES,
-            )
+            counter.text = getString(R.string.xingdun_group_info_byte_count,
+                editor.text.toString().toByteArray(Charsets.UTF_8).size, limit)
         }
         editor.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -420,95 +439,151 @@ open class XingDunGroupInfoActivity : BaseActivity() {
             override fun afterTextChanged(s: Editable?) = Unit
         })
         updateCounter()
+        val feedback = TextView(this).apply {
+            visibility = View.GONE
+            setTextColor(WARNING)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setPadding(0, 8.dp(), 0, 0)
+        }
         wrapper.addView(editor, matchWrap())
         wrapper.addView(counter, matchWrap())
+        wrapper.addView(feedback, matchWrap())
         val dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.xingdun_group_info_name)
+            .setTitle(if (isName) R.string.xingdun_group_info_name else R.string.xingdun_group_info_intro)
             .setView(wrapper)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.xingdun_group_info_save, null)
             .create()
+        val state = ProfileEditor(
+            isName = isName,
+            openedName = if (isName) value.name else null,
+            dialog = dialog,
+            input = editor,
+            feedback = feedback,
+        )
+        activeEditor = state
+        dialog.setOnDismissListener { if (activeEditor === state) activeEditor = null }
         dialog.setOnShowListener {
             editor.requestFocus()
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val candidate = editor.text.toString().trim()
                 when {
-                    candidate.isEmpty() -> Toast.makeText(
-                        this,
-                        R.string.xingdun_group_info_name_required,
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    candidate.toByteArray(Charsets.UTF_8).size > NAME_MAX_BYTES -> Toast.makeText(
-                        this,
-                        R.string.xingdun_group_info_name_too_long,
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    candidate == value.name -> dialog.dismiss()
-                    else -> saveName(candidate, dialog)
+                    isName && candidate.isEmpty() -> Toast.makeText(this,
+                        R.string.xingdun_group_info_name_required, Toast.LENGTH_LONG).show()
+                    candidate.toByteArray(Charsets.UTF_8).size > limit -> Toast.makeText(this,
+                        if (isName) R.string.xingdun_group_info_name_too_long else R.string.xingdun_group_info_intro_too_long,
+                        Toast.LENGTH_LONG).show()
+                    else -> saveProfile(candidate, state)
                 }
             }
+            updateEditorControls()
         }
         dialog.show()
     }
 
-    private fun saveName(value: String, dialog: AlertDialog) {
+    private fun editorFeedback(message: String) {
+        activeEditor?.feedback?.apply { text = message; visibility = View.VISIBLE }
+    }
+
+    private fun updateEditorControls() {
+        val state = activeEditor ?: return
+        val editable = detail?.let(::canEdit) == true && !state.submitting && !state.revoked && !state.resultPending
+        state.input.isEnabled = editable
+        state.dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = editable
+        state.dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.isEnabled = !state.submitting
+        state.dialog.setCancelable(!state.submitting)
+        state.dialog.setCanceledOnTouchOutside(!state.submitting)
+    }
+
+    private fun saveProfile(value: String, state: ProfileEditor) {
         val scope = activityScope ?: return
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = false
+        val owner = profileOwner ?: return
+        if (activeEditor !== state || state.submitting || state.revoked || state.resultPending ||
+            detail?.let(::canEdit) != true) return
+        state.submitting = true
+        authorityAvailable = false
+        detailRequest++ // A pre-submit read must never be replaced by an older in-flight refresh.
+        updateEditorControls()
         scope.launch {
-            runCatching {
-                val session = XingDunSessionManager.currentSession()
-                    ?: error(getString(R.string.xingdun_session_expired))
-                XingDunSessionManager.apiClient().postEmpty(
-                    session,
-                    "team/update",
-                    mapOf("team_id" to groupID, "name" to value),
-                )
-            }.onSuccess {
-                detail = detail?.copy(name = value)
-                detail?.let(::renderDetail)
-                GroupStore.shared.loadJoinedGroups()
-                dialog.dismiss()
-                Toast.makeText(
-                    this@XingDunGroupInfoActivity,
-                    R.string.xingdun_group_info_name_updated,
-                    Toast.LENGTH_SHORT,
-                ).show()
-                loadDetail(force = true)
-            }.onFailure { error ->
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = true
-                Toast.makeText(
-                    this@XingDunGroupInfoActivity,
-                    error.localizedMessage ?: getString(R.string.xingdun_action_failed),
-                    Toast.LENGTH_LONG,
-                ).show()
+            var writeAttempted = false
+            try {
+                val latest = owner.detail(groupID)
+                if (activeEditor !== state || !ownerIsCurrent()) return@launch
+                detail = latest
+                authorityAvailable = true
+                renderDetail(latest)
+                if (!latest.canEditGroupInfo) {
+                    state.revoked = true
+                    editorFeedback(permissionMessage(latest))
+                    return@launch
+                }
+                val body = if (state.isName) {
+                    groupNameUpdatePayload(groupID, checkNotNull(state.openedName), latest.name, value)
+                } else if (latest.intro.orEmpty() == value) null
+                else mapOf("team_id" to groupID, "intro" to value)
+                if (body == null) {
+                    profileSaved(latest, state)
+                    return@launch
+                }
+                writeAttempted = true
+                owner.request { session ->
+                    if (!resumed) throw CancellationException()
+                    XingDunSessionManager.apiClient().postEmpty(session, "team/update", body)
+                }
+                if (activeEditor !== state || !ownerIsCurrent()) return@launch
+                profileSaved(if (state.isName) latest.copy(name = value) else latest.copy(intro = value), state)
+            } catch (cancelled: CancellationException) {
+                if (writeAttempted) {
+                    state.resultPending = true
+                    authorityAvailable = false
+                    if (activeEditor === state) editorFeedback(getString(R.string.xingdun_pending))
+                }
+                throw cancelled
+            } catch (error: Exception) {
+                state.resultPending = writeAttempted && !isDefiniteGroupProfileRejection(error)
+                if (activeEditor !== state || isFinishing || isDestroyed) return@launch
+                val actual = when {
+                    writeAttempted -> try { owner.detail(groupID) }
+                        catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: Exception) { null }
+                    error is XingDunGroupNameChangedException -> detail // The just-confirmed pre-submit detail.
+                    else -> null
+                }
+                if (activeEditor !== state || !ownerIsCurrent()) {
+                    authorityAvailable = false
+                    return@launch
+                }
+                if (actual != null) detail = actual
+                authorityAvailable = actual != null
+                if (actual != null && !actual.canEditGroupInfo) state.revoked = true
+                if (writeAttempted && !isDefiniteGroupProfileRejection(error) && actual != null &&
+                    (if (state.isName) actual.name else actual.intro.orEmpty()) == value) {
+                    profileSaved(actual, state)
+                    return@launch
+                }
+                // A failed/old read does not prove an uncertain write was not committed.
+                state.resultPending = writeAttempted && !isDefiniteGroupProfileRejection(error)
+                detail?.let { renderDetail(it, profileErrorMessage(error, nameEdit = state.isName)) }
+                editorFeedback(if (state.resultPending) getString(R.string.xingdun_pending)
+                    else profileErrorMessage(error, nameEdit = state.isName))
+            } finally {
+                state.submitting = false
+                if (activeEditor === state) updateEditorControls()
             }
         }
     }
 
-    private fun saveIntroduction(value: String, dialog: AlertDialog) {
-        val scope = activityScope ?: return
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = false
-        scope.launch {
-            runCatching {
-                val session = XingDunSessionManager.currentSession()
-                    ?: error(getString(R.string.xingdun_session_expired))
-                XingDunSessionManager.apiClient().postEmpty(
-                    session,
-                    "team/update",
-                    mapOf("team_id" to groupID, "intro" to value),
-                )
-            }.onSuccess {
-                detail = detail?.copy(intro = value)
-                detail?.let(::renderDetail)
-                GroupStore.shared.loadJoinedGroups()
-                dialog.dismiss()
-                Toast.makeText(this@XingDunGroupInfoActivity, R.string.xingdun_group_info_intro_updated, Toast.LENGTH_SHORT).show()
-                loadDetail(force = true)
-            }.onFailure { error ->
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = true
-                Toast.makeText(this@XingDunGroupInfoActivity, error.localizedMessage ?: getString(R.string.xingdun_action_failed), Toast.LENGTH_LONG).show()
-            }
-        }
+    private fun profileSaved(value: XingDunGroupDetail, state: ProfileEditor) {
+        detail = value
+        authorityAvailable = false
+        if (activeEditor === state) activeEditor = null
+        state.dialog.dismiss()
+        renderDetail(value)
+        GroupStore.shared.loadJoinedGroups()
+        Toast.makeText(this,
+            if (state.isName) R.string.xingdun_group_info_name_updated else R.string.xingdun_group_info_intro_updated,
+            Toast.LENGTH_SHORT).show()
+        loadDetail(force = true)
     }
 
     private fun copyGroupID(id: String) {
@@ -577,3 +652,32 @@ open class XingDunGroupInfoActivity : BaseActivity() {
         }
     }
 }
+
+
+/** Profile editing borrows the existing authentication generation; credentials live only in IO calls. */
+internal class XingDunGroupProfileOperationOwner(private val unavailableMessage: String) {
+    private val generation = XingDunSessionManager.currentMessageReadStamp()?.authenticationGeneration
+
+    fun isCurrent(): Boolean = generation != null &&
+        XingDunSessionManager.currentMessageReadStamp()?.authenticationGeneration == generation
+
+    suspend fun <T> request(block: suspend (XingDunStoredSession) -> T): T = withContext(Dispatchers.IO) {
+        currentCoroutineContext().ensureActive()
+        check(isCurrent()) { unavailableMessage }
+        val snapshot = XingDunSessionManager.readMessageSessionSnapshot()
+        check(snapshot != null && snapshot.first.authenticationGeneration == generation && isCurrent()) { unavailableMessage }
+        val result = block(snapshot.second)
+        currentCoroutineContext().ensureActive()
+        check(isCurrent()) { unavailableMessage }
+        result
+    }
+
+    suspend fun detail(groupID: String): XingDunGroupDetail = request { session ->
+        XingDunSessionManager.apiClient().get<XingDunGroupDetail>(session, "team/detail",
+            mapOf("team_id" to groupID), XingDunGroupDetail::class.java)
+    }.also { check(it.groupId == groupID) { unavailableMessage } }
+}
+
+/** A confirmed rejection can keep a permitted draft editable; transport uncertainty must read back. */
+internal fun isDefiniteGroupProfileRejection(error: Exception): Boolean = error is XingDunApiException &&
+    (error.httpStatus?.let { it in 400..499 } == true || error.businessCode?.let { it in 400..499 } == true)

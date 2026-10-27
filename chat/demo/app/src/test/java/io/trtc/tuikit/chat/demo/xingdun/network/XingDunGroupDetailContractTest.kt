@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class XingDunGroupDetailContractTest {
@@ -31,13 +32,112 @@ class XingDunGroupDetailContractTest {
     }
 
     @Test
-    fun businessPolicyAllowsAllMembersManagersAndAssignedCustomerService() {
+    fun businessProfileEditPermissionMatchesCurrentServerRoles() {
         val member = XingDunGroupDetail(currentUserRole = "member", updateTeamMode = 2)
         assertFalse(member.canEditGroupInfo)
         assertTrue(member.copy(updateTeamMode = 1).canEditGroupInfo)
         assertTrue(member.copy(currentUserRole = "administrator").canEditGroupInfo)
         assertTrue(member.copy(currentUserRole = "owner").canEditGroupInfo)
-        assertTrue(member.copy(currentUserIsAssignedCs = true).canEditGroupInfo)
+        assertFalse(member.copy(currentUserIsAssignedCs = true).canEditGroupInfo)
+        assertTrue(member.copy(currentUserIsAssignedCs = true, updateTeamMode = 1).canEditGroupInfo)
+        assertTrue(member.copy(currentUserIsAssignedCs = true, currentUserRole = "administrator").canEditGroupInfo)
+    }
+
+    @Test
+    fun realBusinessRoleAndAssignmentProjectionDoesNotPromoteAnOrdinaryMember() {
+        for (role in listOf("owner", "administrator", "member")) {
+            for (assigned in listOf(false, true)) {
+                for (mode in listOf(1, 2)) {
+                    val detail = gson.fromJson(
+                        """{"group_id":"@TGS#group","current_user_role":"$role",
+                            "current_user_is_assigned_cs":$assigned,"update_team_mode":$mode}""",
+                        XingDunGroupDetail::class.java,
+                    )
+                    assertEquals(role, detail.currentUserRole)
+                    assertEquals(assigned, detail.currentUserIsAssignedCs)
+                    assertEquals(
+                        "role=$role assigned=$assigned mode=$mode",
+                        role == "owner" || role == "administrator" || mode == 1,
+                        detail.canEditGroupInfo,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun unknownBusinessRoleNeverGrantsProfileEditing() {
+        for (roleJSON in listOf("null", "\"\"", "\"unknown\"", "\"manager\"")) {
+            val detail = gson.fromJson(
+                """{"current_user_role":$roleJSON,"current_user_is_assigned_cs":true,"update_team_mode":1}""",
+                XingDunGroupDetail::class.java,
+            )
+            assertFalse("role=$roleJSON", detail.canEditGroupInfo)
+        }
+    }
+
+    @Test
+    fun omittedBusinessRoleCannotBeInferredAsAnEditableMember() {
+        for (assigned in listOf(false, true)) {
+            val detail = gson.fromJson(
+                """{"group_id":"@TGS#group","current_user_is_assigned_cs":$assigned,"update_team_mode":1}""",
+                XingDunGroupDetail::class.java,
+            )
+            assertFalse("missing role assigned=$assigned", detail.canEditGroupInfo)
+        }
+    }
+
+    @Test
+    fun invalidProfileModeKeepsServerOwnerAndAdministratorCompatibility() {
+        for (mode in listOf(-1, 0, 2, 3)) {
+            for (assigned in listOf(false, true)) {
+                val member = XingDunGroupDetail(
+                    currentUserRole = "member", updateTeamMode = mode, currentUserIsAssignedCs = assigned,
+                )
+                assertFalse(member.canEditGroupInfo)
+                assertTrue(member.copy(currentUserRole = "owner").canEditGroupInfo)
+                assertTrue(member.copy(currentUserRole = "administrator").canEditGroupInfo)
+            }
+        }
+    }
+
+    @Test
+    fun nameWritePayloadUsesTheExactOpenedNameAndNoUnrelatedFields() {
+        val opened = " 旧名称😀 "
+        val body = groupNameUpdatePayload("@TGS#group", opened, opened, "新名称😀")
+        val json = gson.toJsonTree(body).asJsonObject
+        assertEquals(setOf("team_id", "name", "expected_fields"), json.keySet())
+        assertEquals("@TGS#group", json.get("team_id").asString)
+        assertEquals("新名称😀", json.get("name").asString)
+        val expected = json.getAsJsonObject("expected_fields")
+        assertEquals(setOf("name"), expected.keySet())
+        assertEquals(opened, expected.get("name").asString)
+    }
+
+    @Test
+    fun staleNameDraftCannotReplaceAnotherOperatorsNewName() {
+        for (candidate in listOf("My draft", "Opened name")) {
+            assertThrows(XingDunGroupNameChangedException::class.java) {
+                groupNameUpdatePayload("@TGS#group", "Opened name", "Other new name", candidate)
+            }
+        }
+    }
+
+    @Test
+    fun alreadyVisibleNameTargetConfirmsWithoutSendingAWrite() {
+        assertNull(groupNameUpdatePayload("@TGS#group", "Opened name", "Target", "Target"))
+        assertNull(groupNameUpdatePayload("@TGS#group", "Same", "Same", "Same"))
+    }
+
+    @Test
+    fun nameConflictsRecognizeLocalAndActualBusinessOrHttp409Codes() {
+        assertTrue(isGroupNameChangeConflict(XingDunGroupNameChangedException()))
+        assertTrue(isGroupNameChangeConflict(XingDunApiException(409, 200, "Conflict")))
+        assertTrue(isGroupNameChangeConflict(XingDunApiException(null, 409, "Conflict")))
+        for (code in listOf(400, 422, 500)) {
+            assertFalse(isGroupNameChangeConflict(XingDunApiException(code, code, "Rejected")))
+        }
+        assertFalse(isGroupNameChangeConflict(java.io.IOException("Unconfirmed")))
     }
 
     @Test
