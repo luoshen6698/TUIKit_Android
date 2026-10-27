@@ -9,6 +9,9 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -23,6 +26,10 @@ import io.trtc.tuikit.atomicxcore.api.contact.GetContactInfoCompletionHandler
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.common.Event
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupInfoActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactDetailActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMemberPreviewNavigator
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMemberPreviewScope
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMemberPreviewFailure
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupMemberPolicy
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupAnnouncementActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupQRCodeActivity
@@ -42,6 +49,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 open class ChatSettingActivity : BaseActivity() {
 
@@ -51,6 +60,44 @@ open class ChatSettingActivity : BaseActivity() {
     private val themeStore by lazy { ThemeStore.shared(this) }
     private val contactStore by lazy { ContactStore.shared }
     private var groupSettingView: GroupChatSettingView? = null
+    private val memberPreviewNavigator by lazy {
+        XingDunGroupMemberPreviewNavigator(
+            currentScope = {
+                val session = XingDunSessionManager.currentSession()
+                val generation = XingDunSessionManager.currentAuthenticationGeneration()
+                if (session == null || generation == null) null else XingDunGroupMemberPreviewScope(
+                    session.companyCode, session.sdkAppId, session.timUserId, generation
+                )
+            },
+            loadGroup = { groupID ->
+                val session = checkNotNull(XingDunSessionManager.currentSession())
+                XingDunSessionManager.apiClient().get<XingDunGroupDetail>(
+                    session, "team/detail", mapOf("team_id" to groupID), XingDunGroupDetail::class.java
+                )
+            },
+            loadContact = { userID ->
+                suspendCancellableCoroutine { continuation ->
+                    contactStore.getContactInfo(listOf(userID), object : GetContactInfoCompletionHandler {
+                        override fun onSuccess(contactInfoList: List<ContactInfo>) {
+                            if (continuation.isActive) continuation.resume(contactInfoList.singleOrNull())
+                        }
+                        override fun onFailure(code: Int, desc: String) {
+                            if (continuation.isActive) continuation.resume(null)
+                        }
+                    })
+                }
+            },
+            openProfile = { sourceGroupID, info ->
+                XingDunContactDetailActivity.startFromGroup(this, sourceGroupID, info.userID, info.nickname, info.avatarURL)
+            },
+            showFailure = { failure ->
+                Toast.makeText(this, if (failure == XingDunGroupMemberPreviewFailure.RESTRICTED)
+                    R.string.xingdun_group_member_card_restricted else R.string.xingdun_contact_detail_load_failed,
+                    Toast.LENGTH_LONG).show()
+            },
+            isActive = { !isFinishing && !isDestroyed && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) },
+        )
+    }
 
     companion object {
         private const val EXTRA_USER_ID = "user_id"
@@ -272,30 +319,9 @@ open class ChatSettingActivity : BaseActivity() {
     }
 
     private fun handleGroupMemberClick(memberUserID: String) {
-        if (memberUserID.isEmpty()) return
-        contactStore.getContactInfo(
-            userIDList = listOf(memberUserID),
-            completion = object : GetContactInfoCompletionHandler {
-                override fun onSuccess(contactInfoList: List<ContactInfo>) {
-                    val info = contactInfoList.firstOrNull() ?: return
-                    if (info.isFriend == true) {
-                        startC2C(
-                            context = this@ChatSettingActivity,
-                            userID = memberUserID,
-                            needNavigateToChat = true
-                        )
-                    } else {
-                        ContactFlowLauncher.showAddFriendForContact(
-                            context = this@ChatSettingActivity,
-                            contactInfo = info
-                        )
-                    }
-                }
-
-                override fun onFailure(code: Int, desc: String) {
-                }
-            }
-        )
+        lifecycleScope.launch {
+            memberPreviewNavigator.open(intent.getStringExtra(EXTRA_GROUP_ID).orEmpty(), memberUserID)
+        }
     }
 
     override fun onDestroy() {
