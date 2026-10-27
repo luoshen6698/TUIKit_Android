@@ -10,6 +10,8 @@ internal object XingDunMessageDeletionVisibility {
         XingDunConversationPreviewResolver.initialize(context)
         XingDunC2CDeletionRepository.initialize(context)
         XingDunGroupDeletionRepository.initialize(context)
+        val displayFilter = XingDunGroupDeletionRepository.displayFilter(context.applicationContext)
+        SearchMessageVisibility.setDisplayProvider(displayFilter::map)
         SearchMessageVisibility.setDeletedProvider(::isDeleted)
         SearchMessageVisibility.setConfirmedDeletedProvider { conversation, id ->
             if (conversation.startsWith("group_")) XingDunGroupDeletionRepository.isDeleted(conversation, id)

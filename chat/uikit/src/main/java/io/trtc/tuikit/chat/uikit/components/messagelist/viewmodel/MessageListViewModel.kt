@@ -162,9 +162,11 @@ class MessageListViewModel(
     ) { list, processingMessagesByConversation, hiddenMessageIds, _ ->
         val processingMessages = processingMessagesByConversation[conversationID].orEmpty()
         val visibleMessages = AlbumPickerProcessingMessageStore.mergeWithMessages(list, processingMessages).filterNot { message ->
-            message.msgID in hiddenMessageIds || io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility.isDeleted(conversationID, message.msgID)
+            message.msgID in hiddenMessageIds
         }
-        displayMapper.map(io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility.redactQuotes(conversationID, visibleMessages))
+        io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility.mapForDisplay(
+            conversationID, visibleMessages, displayMapper::map
+        )
     }
         .stateIn(
             scope = viewModelScope,

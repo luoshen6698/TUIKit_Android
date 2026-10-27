@@ -15,7 +15,12 @@ internal class XingDunC2CDeletionMarkerStore(
     fun read(peer: String): Set<String> {
         if (!XingDunC2CDeletionPolicy.validID(peer)) return emptySet()
         val key = account() ?: return emptySet()
-        return preferences.getStringSet("$key:$peer", emptySet()).orEmpty().toSet()
+        return readForAccount(peer, key)
+    }
+
+    internal fun readForAccount(peer: String, account: String): Set<String> {
+        if (!XingDunC2CDeletionPolicy.validID(peer)) return emptySet()
+        return preferences.getStringSet("$account:$peer", emptySet()).orEmpty().toSet()
     }
 
     fun remember(requestedAccount: String, peer: String, ids: Set<String>) {

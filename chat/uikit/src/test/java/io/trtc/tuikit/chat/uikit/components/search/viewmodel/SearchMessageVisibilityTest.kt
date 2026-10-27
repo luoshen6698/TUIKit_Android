@@ -14,6 +14,7 @@ import org.junit.Test
 class SearchMessageVisibilityTest {
     @Before fun prepare() { restore(); SearchMessageVisibility.setSessionProvider { "test-session" } }
     @After fun restore() {
+        SearchMessageVisibility.setDisplayProvider(null)
         SearchMessageVisibility.setProvider { _, messages -> messages }
         SearchMessageVisibility.setDeletedProvider { _, _ -> false }
         SearchMessageVisibility.setQuoteHiddenProvider(null)
@@ -197,5 +198,34 @@ class SearchMessageVisibilityTest {
         val page = listOf(MessageInfo(msgID = "old"), MessageInfo(msgID = "retained"))
         assertEquals(listOf("retained"), SearchMessageVisibility.authoritativeMessages("c2c_bob", page).map { it.msgID })
         assertEquals(listOf("old", "retained"), SearchMessageVisibility.authoritativeMessages("group_bob", page).map { it.msgID })
+    }
+    @Test fun `display provider is process scoped and fallback exists only while absent`() {
+        val rows = listOf(MessageInfo(msgID = "deleted"), MessageInfo(msgID = "safe"))
+        SearchMessageVisibility.setDeletedProvider { _, id -> id == "deleted" }
+        assertFalse(SearchMessageVisibility.hasDisplayProvider)
+        assertEquals(listOf("safe"), SearchMessageVisibility.mapForDisplay("group_g", rows) { it }.map { it.msgID })
+        var batches = 0
+        SearchMessageVisibility.setDisplayProvider { conversation, source, mapper ->
+            batches++; assertTrue(conversation in setOf("group_one", "group_two")); mapper(source.filterNot { it.msgID == "deleted" })
+        }
+        assertTrue(SearchMessageVisibility.hasDisplayProvider)
+        assertEquals(1, SearchMessageVisibility.mapForDisplay("group_one", rows) { it }.size)
+        assertEquals(1, SearchMessageVisibility.mapForDisplay("group_two", rows) { it }.size)
+        assertEquals(2, batches)
+        SearchMessageVisibility.setDisplayProvider { _, _, _ -> throw IllegalStateException("snapshot unavailable") }
+        assertTrue(SearchMessageVisibility.mapForDisplay("group_g", rows) { fail("No failed provider fallback"); it }.isEmpty())
+        assertTrue(SearchMessageVisibility.hasDisplayProvider)
+        SearchMessageVisibility.setDisplayProvider(null)
+        assertEquals(listOf("safe"), SearchMessageVisibility.mapForDisplay("group_g", rows) { it }.map { it.msgID })
+    }
+    @Test fun `batch display still executes configured custom exclusions through real mapper policy`() {
+        val config = io.trtc.tuikit.chat.uikit.components.messagelist.config.ChatMessageListConfig()
+        config.addMessageExclusion(io.trtc.tuikit.chat.uikit.components.messagelist.ui.MessageMatcher { it.msgID == "custom-hidden" })
+        val policy = io.trtc.tuikit.chat.uikit.components.messagelist.viewmodel.MessageListVisibilityPolicy(config)
+        val mapper = io.trtc.tuikit.chat.uikit.components.messagelist.viewmodel.MessageListDisplayMapper(shouldDisplayMessage = policy::shouldDisplay)
+        SearchMessageVisibility.setDisplayProvider { _, rows, render -> render(rows.filterNot { it.msgID == "deleted" }) }
+        val rows = listOf("first", "custom-hidden", "deleted", "last", "last").map { MessageInfo(msgID = it) }
+        assertEquals(listOf("last", "first"), SearchMessageVisibility.mapForDisplay("group_g", rows, mapper::map).map { it.msgID })
+        assertEquals(5, rows.size)
     }
 }

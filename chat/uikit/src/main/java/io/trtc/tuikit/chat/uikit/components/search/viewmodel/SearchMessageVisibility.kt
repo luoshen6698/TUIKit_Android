@@ -15,6 +15,20 @@ object SearchMessageVisibility {
     @Volatile private var confirmedDeletedProvider: ((String, String) -> Boolean)? = null
     @Volatile private var verificationFailureProvider: (String) -> Boolean = { false }
     @Volatile private var sessionProvider: () -> String? = { null }
+    // App-owned and process-scoped; never captures an Activity or a per-chat lifetime.
+    @Volatile private var displayProvider: ((String, List<MessageInfo>, (List<MessageInfo>) -> List<MessageInfo>) -> List<MessageInfo>)? = null
+    val hasDisplayProvider: Boolean get() = displayProvider != null
+    fun setDisplayProvider(value: ((String, List<MessageInfo>, (List<MessageInfo>) -> List<MessageInfo>) -> List<MessageInfo>)?) { displayProvider = value }
+
+    /** One synchronous batch, including the existing mapper, before the app verifies its source again. */
+    fun mapForDisplay(conversationID: String, messages: List<MessageInfo>, mapper: (List<MessageInfo>) -> List<MessageInfo>): List<MessageInfo> {
+        val display = displayProvider
+        if (display != null) return try { display(conversationID, messages, mapper) }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { emptyList() } // A failed authority snapshot never falls back to visible rows.
+        return mapper(redactQuotes(conversationID, messages.filterNot { isDeleted(conversationID, it.msgID) }))
+    }
+
     private val searchVerificationFailedState = MutableStateFlow(false)
     val searchVerificationFailed: StateFlow<Boolean> = searchVerificationFailedState
     private val revisionState = MutableStateFlow(0L)

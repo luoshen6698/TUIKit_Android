@@ -360,10 +360,12 @@ class ChatActivity : BaseActivity() {
         )
         XingDunCustomMessagePresentation.configure(messageListConfig)
         if (isC2CConversation) messageListConfig.addMessageExclusion(MessageMatcher { message ->
-            message.msgID in XingDunC2CDeletionRepository.deletedIDs(this, conversationID)
+            !io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility.hasDisplayProvider &&
+                message.msgID in XingDunC2CDeletionRepository.deletedIDs(this, conversationID)
         })
         if (isGroupConversation) messageListConfig.addMessageExclusion(MessageMatcher { message ->
-            !XingDunGroupDeletionRepository.canDisplay(conversationID, message)
+            !io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility.hasDisplayProvider &&
+                !XingDunGroupDeletionRepository.canDisplay(conversationID, message)
         })
         configureBusinessMessageActions(messageListConfig)
         messageInputConfig = ChatMessageInputConfig(

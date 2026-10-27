@@ -29,6 +29,27 @@ internal object XingDunGroupDeletionRepository {
         val account = XingDunC2CDeletionRepository.accountKey() ?: return emptySet()
         return preferences(context).getStringSet("$account:$group", emptySet()).orEmpty().toSet()
     }
+
+    internal fun displayFilter(context: Context): XingDunMessageDisplayFilter {
+        val appContext = context.applicationContext
+        return XingDunMessageDisplayFilter(
+            currentScope = {
+                val session = XingDunSessionManager.currentSession()
+                val generation = XingDunSessionManager.currentAuthenticationGeneration()
+                val account = session?.let(XingDunC2CDeletionRepository::accountKey)
+                if (session == null || generation == null || account == null) null
+                else XingDunMessageDisplayScope(account, generation, session.timUserId)
+            },
+            deletedIDs = { conversation, scope ->
+                val group = XingDunGroupDeletionPolicy.group(conversation)
+                if (group != null) preferences(appContext).getStringSet("${scope.account}:$group", emptySet()).orEmpty().toSet()
+                else XingDunC2CDeletionRepository.displayDeletedIDs(appContext, conversation, scope.selfUserID, scope.account)
+            },
+            visibility = visibility,
+            revision = { SearchMessageVisibility.revision.value },
+        )
+    }
+
     fun isDeleted(conversationID: String, id: String) = applicationContext?.let { id in deletedIDs(it, conversationID) } == true
     fun isHidden(conversationID: String, id: String): Boolean = isDeleted(conversationID, id) ||
         visibility.isPending(scopeKey(conversationID), id)
