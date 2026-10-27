@@ -49,6 +49,8 @@ import io.trtc.tuikit.chat.uikit.components.config.BusinessActionRegistry
 import io.trtc.tuikit.chat.uikit.components.config.BusinessActionResult
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -74,6 +76,12 @@ class XingDunContactDetailActivity : BaseActivity() {
     private var groupSourceState: XingDunGroupSourceProfileState = XingDunGroupSourceProfileState.Loading
     private var groupSourceRefreshJob: Job? = null
     private var groupSourceViewRevision = 0L
+    private val groupSourceRenderState = XingDunGroupSourceProfileRenderState()
+    private var groupSourceActionJob: Job? = null
+    private var groupSourceGateBusyOwner: Long? = null
+    private var groupSourceHardActionLoading = false
+    private var sourceMoreMenu: PopupMenu? = null
+    private var sourceDialog: AlertDialog? = null
     private val groupSourceLoader by lazy {
         XingDunGroupSourceProfileLoader(
             groupID = sourceGroupID.orEmpty(),
@@ -164,6 +172,7 @@ class XingDunContactDetailActivity : BaseActivity() {
         if (sourceGroupID != null && ::content.isInitialized) {
             groupSourceResumed = false
             groupSourceViewRevision++
+            cancelGroupSourceGate()
             groupSourceRefreshJob?.cancel()
             groupSourceRefreshJob = null
             groupSourceLoader.invalidate()
@@ -172,14 +181,30 @@ class XingDunContactDetailActivity : BaseActivity() {
         super.onPause()
     }
 
+    private fun cancelGroupSourceGate() {
+        val ownedBusy = groupSourceGateBusyOwner != null
+        val pending = groupSourceActionJob
+        groupSourceGateBusyOwner = null
+        groupSourceActionJob = null
+        groupSourceHardActionLoading = false
+        // An SDK mutation handed off after authorization owns its own busy flag until completion.
+        if (ownedBusy) isOperating = false
+        pending?.cancel()
+    }
+
     private fun startGroupSourceRefresh() {
         if (!groupSourceResumed || isFinishing || isDestroyed) return
         groupSourceViewRevision++
+        cancelGroupSourceGate()
         groupSourceRefreshJob?.cancel()
         // refresh() advances its request before awaiting; preserve an ON_START picker result.
         groupSourceRefreshJob = lifecycleScope.launch {
+            var periodic = false
             while (isActive && groupSourceResumed) {
-                groupSourceLoader.refresh()
+                if (!groupSourceHardActionLoading) {
+                    groupSourceLoader.refresh(periodic)
+                    periodic = true
+                }
                 // Business policies have no reliable shared SDK invalidation stream here.
                 // One foreground job also rechecks while the same profile stays open.
                 delay(10_000L)
@@ -188,13 +213,15 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun applyGroupSourceState(state: XingDunGroupSourceProfileState) {
+        val previouslyFriend = isFriendRelationship()
         groupSourceState = state
-        operationError = null
         if (state is XingDunGroupSourceProfileState.Loaded) {
             detail = state.profile.copy(timUserId = state.profile.timUserId.trim().ifEmpty { timUserID })
             relationshipState = RELATIONSHIP_UNKNOWN
             state.relationship?.let(::applyRelationshipProfile)
+            if (previouslyFriend != isFriendRelationship()) sourceMoreMenu?.dismiss()
         } else {
+            operationError = null
             // Remove both rendered fields and cached data before checking authority again.
             detail = null
             relationshipState = RELATIONSHIP_UNKNOWN
@@ -205,6 +232,8 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun renderGroupSourceRestriction() {
+        sourceMoreMenu?.dismiss()
+        sourceDialog?.dismiss()
         content.removeAllViews()
         chatButton.visibility = View.GONE
         more.isEnabled = false
@@ -284,6 +313,7 @@ class XingDunContactDetailActivity : BaseActivity() {
             gravity = Gravity.CENTER
             setTextColor(TEXT_PRIMARY)
             contentDescription = getString(R.string.xingdun_back)
+            tag = R.string.xingdun_back
             setOnClickListener { finish() }
         }, FrameLayout.LayoutParams(52.dp(), 52.dp(), Gravity.START))
         addView(TextView(context).apply {
@@ -319,6 +349,7 @@ class XingDunContactDetailActivity : BaseActivity() {
                 9.dp(),
             )
             contentDescription = getString(R.string.xingdun_contact_detail_more)
+            tag = R.string.xingdun_contact_detail_more
             setOnClickListener { showMoreMenu(this) }
         }
         addView(more, FrameLayout.LayoutParams(48.dp(), 52.dp(), Gravity.END or Gravity.CENTER_VERTICAL).apply {
@@ -406,10 +437,17 @@ class XingDunContactDetailActivity : BaseActivity() {
 
     private fun render() {
         if (sourceGroupID != null && groupSourceState !is XingDunGroupSourceProfileState.Loaded) {
+            groupSourceRenderState.reset()
             renderGroupSourceRestriction()
             return
         }
         val current = detail ?: return
+        val features = XingDunSessionManager.currentSession()?.features
+        if (sourceGroupID != null && !groupSourceRenderState.shouldRender(
+            current, relationshipState, features?.audioCall == true, features?.videoCall == true,
+            isOperating, operationError, timUserID,
+        )) return
+        val focusTag = if (sourceGroupID != null) currentFocus?.tag as? Int else null
         content.removeAllViews()
         content.addView(profileCard(current), cardParams())
         operationError?.takeIf(String::isNotBlank)?.let { message ->
@@ -423,7 +461,6 @@ class XingDunContactDetailActivity : BaseActivity() {
         }
 
         val friendRelationship = isFriendRelationship()
-        val features = XingDunSessionManager.currentSession()?.features
         if (friendRelationship && (features?.audioCall == true || features?.videoCall == true)) {
             val calls = card()
             if (features.audioCall) {
@@ -470,6 +507,11 @@ class XingDunContactDetailActivity : BaseActivity() {
         chatButton.alpha = if (isOperating) .55f else 1f
         more.isEnabled = !isOperating
         more.alpha = if (isOperating) .35f else 1f
+        if (focusTag != null && sourceMoreMenu == null && sourceDialog == null) {
+            val target = window.decorView.findViewWithTag<View>(focusTag)
+            if (target != null && target.isShown && target.isEnabled && target.isFocusable) target.requestFocus()
+            else if (currentFocus?.tag != focusTag) currentFocus?.clearFocus()
+        }
     }
 
     private fun profileCard(current: XingDunContactDetail): View = card().apply {
@@ -501,6 +543,7 @@ class XingDunContactDetailActivity : BaseActivity() {
                 setTextColor(TEXT_SECONDARY)
                 setPadding(0, 6.dp(), 0, 0)
                 setTextIsSelectable(true)
+                tag = R.string.xingdun_contact_detail_account_id
             })
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
     }
@@ -518,10 +561,12 @@ class XingDunContactDetailActivity : BaseActivity() {
             isFriendRelationship() -> {
                 chatButton.visibility = View.VISIBLE
                 chatButton.setText(R.string.xingdun_contact_detail_start_chat)
+                chatButton.tag = R.string.xingdun_contact_detail_start_chat
             }
             canAddFriend() -> {
                 chatButton.visibility = View.VISIBLE
                 chatButton.setText(R.string.xingdun_add_friend)
+                chatButton.tag = R.string.xingdun_add_friend
             }
             else -> chatButton.visibility = View.GONE
         }
@@ -536,32 +581,90 @@ class XingDunContactDetailActivity : BaseActivity() {
         if (isFriendRelationship()) {
             val group = sourceGroupID
             if (group == null) ChatActivity.start(this, "c2c_$timUserID")
-            else {
-                if (isOperating) return
-                isOperating = true
-                render()
-                val scope = profileScope()
-                val revision = groupSourceViewRevision
-                lifecycleScope.launch {
-                    val result = runCatching { XingDunGroupSettingsAccess.authorize(group, "private_chat", timUserID) }
-                    isOperating = false
-                    if (isFinishing || isDestroyed || !groupSourceResumed || scope == null || revision != groupSourceViewRevision ||
-                        scope != groupSourcePageScope || profileScope() != scope ||
-                        groupSourceState !is XingDunGroupSourceProfileState.Loaded) return@launch
-                    result.onSuccess { ChatActivity.start(this@XingDunContactDetailActivity, "c2c_$timUserID") }
-                        .onFailure { operationError = getString(R.string.xingdun_group_access_denied) }
-                    render()
-                }
+            else dispatchGroupSourceAction(requiresPrivateChat = true, available = ::isFriendRelationship) {
+                ChatActivity.start(this, "c2c_$timUserID")
             }
         } else if (canAddFriend()) {
-            val keyword = detail?.customId.normalized() ?: timUserID
-            XingDunFeatureActivity.start(
-                this,
-                XingDunFeatureActivity.MODE_FRIEND_SEARCH,
-                keyword,
-                MainActivity.TAB_CONTACTS,
-            )
+            if (dispatchGroupSourceAction(available = ::canAddFriend) { openFriendSearchAuthorized() }) return
+            openFriendSearchAuthorized()
         }
+    }
+
+    private fun openFriendSearchAuthorized() {
+        val keyword = detail?.customId.normalized() ?: timUserID
+        XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_FRIEND_SEARCH, keyword, MainActivity.TAB_CONTACTS)
+    }
+
+    private fun ownsGroupAction(scope: XingDunGroupMemberPreviewScope, revision: Long): Boolean =
+        !isFinishing && !isDestroyed && groupSourceResumed && revision == groupSourceViewRevision &&
+            scope == groupSourcePageScope && profileScope() == scope && groupSourceState is XingDunGroupSourceProfileState.Loaded
+
+    private fun concealChangedGroupActionOwner(scope: XingDunGroupMemberPreviewScope, revision: Long): Boolean {
+        if (revision != groupSourceViewRevision || !groupSourceResumed || isFinishing || isDestroyed || profileScope() == scope) return false
+        groupSourceLoader.invalidate()
+        applyGroupSourceState(XingDunGroupSourceProfileState.Loading)
+        return true
+    }
+
+    /** Retained periodic display data never authorizes a new group-source action. */
+    private fun dispatchGroupSourceAction(
+        requiresPrivateChat: Boolean = false,
+        available: () -> Boolean,
+        onAllowed: () -> Unit,
+    ): Boolean {
+        val group = sourceGroupID ?: return false
+        if (isOperating || !groupSourceResumed || isFinishing || isDestroyed) return true
+        val scope = profileScope()
+        if (scope == null || scope != groupSourcePageScope || groupSourceState !is XingDunGroupSourceProfileState.Loaded) {
+            loadDetail()
+            return true
+        }
+        val revision = ++groupSourceViewRevision
+        groupSourceGateBusyOwner = revision
+        isOperating = true
+        groupSourceHardActionLoading = true
+        operationError = null
+        render()
+        groupSourceActionJob = lifecycleScope.launch(start = CoroutineStart.LAZY) {
+            var allowed = false
+            try {
+                if (!groupSourceLoader.refresh() || !ownsGroupAction(scope, revision)) return@launch
+                groupSourceHardActionLoading = false
+                if (!available()) {
+                    operationError = getString(R.string.xingdun_action_failed)
+                    return@launch
+                }
+                if (requiresPrivateChat) {
+                    try {
+                        XingDunGroupSettingsAccess.authorize(group, "private_chat", timUserID)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        if (ownsGroupAction(scope, revision)) operationError = getString(R.string.xingdun_group_access_denied)
+                        return@launch
+                    }
+                }
+                if (ownsGroupAction(scope, revision) && !available()) {
+                    operationError = getString(R.string.xingdun_action_failed)
+                    return@launch
+                }
+                allowed = ownsGroupAction(scope, revision)
+            } finally {
+                if (revision == groupSourceViewRevision && groupSourceGateBusyOwner == revision) {
+                    groupSourceGateBusyOwner = null
+                    groupSourceHardActionLoading = false
+                    groupSourceActionJob = null
+                    isOperating = false
+                    if (!concealChangedGroupActionOwner(scope, revision) && !isFinishing && !isDestroyed && groupSourceResumed && profileScope() == scope) render()
+                }
+            }
+            // Release the temporary busy guard before handing off to existing SDK mutation flows.
+            if (allowed && !concealChangedGroupActionOwner(scope, revision) && ownsGroupAction(scope, revision)) {
+                if (available()) onAllowed()
+                else { operationError = getString(R.string.xingdun_action_failed); render() }
+            }
+        }.also { it.start() }
+        return true
     }
 
     private fun blacklistRow(checked: Boolean): View = LinearLayout(this).apply {
@@ -571,6 +674,7 @@ class XingDunContactDetailActivity : BaseActivity() {
         minimumHeight = 56.dp()
         isClickable = !isOperating
         isFocusable = true
+        tag = R.string.xingdun_contact_detail_blacklist
         addView(TextView(context).apply {
             setText(R.string.xingdun_contact_detail_blacklist)
             textSize = 16f
@@ -585,11 +689,21 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun showRemarkEditor() {
+        if (dispatchGroupSourceAction(available = ::isFriendRelationship) { showRemarkEditorAuthorized() }) return
+        showRemarkEditorAuthorized()
+    }
+
+    private fun showRemarkEditorAuthorized() {
         remarkEditor.launch(XingDunContactRemarkActivity.intent(this, timUserID, detail?.alias.orEmpty()))
     }
 
     private fun confirmBlacklist(enabled: Boolean) {
-        AlertDialog.Builder(this)
+        if (dispatchGroupSourceAction(available = ::isFriendRelationship) { confirmBlacklistAuthorized(enabled) }) return
+        confirmBlacklistAuthorized(enabled)
+    }
+
+    private fun confirmBlacklistAuthorized(enabled: Boolean) {
+        val dialog = AlertDialog.Builder(this)
             .setTitle(if (enabled) R.string.xingdun_contact_detail_block_title else R.string.xingdun_contact_detail_unblock_title)
             .setMessage(if (enabled) R.string.xingdun_contact_detail_block_message else R.string.xingdun_contact_detail_unblock_message)
             .setNegativeButton(R.string.xingdun_cancel, null)
@@ -597,9 +711,15 @@ class XingDunContactDetailActivity : BaseActivity() {
                 setBlacklist(enabled)
             }
             .show()
+        trackGroupSourceDialog(dialog)
     }
 
     private fun setBlacklist(enabled: Boolean) {
+        if (dispatchGroupSourceAction(available = ::isFriendRelationship) { setBlacklistAuthorized(enabled) }) return
+        setBlacklistAuthorized(enabled)
+    }
+
+    private fun setBlacklistAuthorized(enabled: Boolean) {
         if (isOperating) return
         isOperating = true
         operationError = null
@@ -629,15 +749,26 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun confirmDelete() {
-        AlertDialog.Builder(this)
+        if (dispatchGroupSourceAction(available = ::isFriendRelationship) { confirmDeleteAuthorized() }) return
+        confirmDeleteAuthorized()
+    }
+
+    private fun confirmDeleteAuthorized() {
+        val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.xingdun_contact_detail_delete_title)
             .setMessage(R.string.xingdun_contact_detail_delete_message)
             .setNegativeButton(R.string.xingdun_cancel, null)
             .setPositiveButton(R.string.xingdun_contact_detail_delete) { _, _ -> deleteContact() }
             .show()
+        trackGroupSourceDialog(dialog)
     }
 
     private fun deleteContact() {
+        if (dispatchGroupSourceAction(available = ::isFriendRelationship) { deleteContactAuthorized() }) return
+        deleteContactAuthorized()
+    }
+
+    private fun deleteContactAuthorized() {
         if (isOperating) return
         isOperating = true
         operationError = null
@@ -658,8 +789,21 @@ class XingDunContactDetailActivity : BaseActivity() {
         }
     }
 
+    private fun trackGroupSourceDialog(dialog: AlertDialog) {
+        if (sourceGroupID == null) return
+        sourceDialog?.dismiss()
+        sourceDialog = dialog
+        dialog.setOnDismissListener { if (sourceDialog === dialog) sourceDialog = null }
+    }
+
     private fun showMoreMenu(anchor: View) {
-        PopupMenu(this, anchor).apply {
+        if (dispatchGroupSourceAction(available = { detail != null }) { showMoreMenuAuthorized(anchor) }) return
+        showMoreMenuAuthorized(anchor)
+    }
+
+    private fun showMoreMenuAuthorized(anchor: View) {
+        sourceMoreMenu?.dismiss()
+        val popup = PopupMenu(this, anchor).apply {
             if (isFriendRelationship()) {
                 menu.add(0, MENU_RECOMMEND, 0, R.string.xingdun_contact_detail_recommend)
             }
@@ -670,24 +814,36 @@ class XingDunContactDetailActivity : BaseActivity() {
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     MENU_RECOMMEND -> showRecommendPicker()
-                    MENU_REPORT -> detail?.let { current ->
-                        XingDunFeatureActivity.startReport(
-                            this@XingDunContactDetailActivity,
-                            "user",
-                            timUserID,
-                            current.alias.normalized() ?: current.nickname.normalized() ?: timUserID,
-                            current.customId.normalized() ?: current.timUserId.ifBlank { timUserID },
-                        )
-                    }
+                    MENU_REPORT -> startReport()
                     MENU_DELETE -> confirmDelete()
                 }
                 true
             }
-            show()
+            setOnDismissListener { if (sourceMoreMenu === it) sourceMoreMenu = null }
+        }
+        if (sourceGroupID != null) sourceMoreMenu = popup
+        popup.show()
+    }
+
+    private fun startReport() {
+        if (dispatchGroupSourceAction(available = { detail != null }) { startReportAuthorized() }) return
+        startReportAuthorized()
+    }
+
+    private fun startReportAuthorized() {
+        detail?.let { current ->
+            XingDunFeatureActivity.startReport(this, "user", timUserID,
+                current.alias.normalized() ?: current.nickname.normalized() ?: timUserID,
+                current.customId.normalized() ?: current.timUserId.ifBlank { timUserID })
         }
     }
 
     private fun showRecommendPicker() {
+        if (dispatchGroupSourceAction(available = ::isFriendRelationship) { showRecommendPickerAuthorized() }) return
+        showRecommendPickerAuthorized()
+    }
+
+    private fun showRecommendPickerAuthorized() {
         contactForwardPicker.launch(
             XingDunContactForwardPickerActivity.intent(this, "c2c_$timUserID")
         )
@@ -733,6 +889,14 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun startCall(mediaType: CallMediaType) {
+        if (dispatchGroupSourceAction(requiresPrivateChat = true, available = {
+                val features = XingDunSessionManager.currentSession()?.features
+                isFriendRelationship() && (if (mediaType == CallMediaType.Audio) features?.audioCall == true else features?.videoCall == true)
+            }) { startCallAuthorized(mediaType) }) return
+        startCallAuthorized(mediaType)
+    }
+
+    private fun startCallAuthorized(mediaType: CallMediaType) {
         TUICallKit.createInstance(this).calls(
             listOf(timUserID),
             mediaType,
@@ -830,6 +994,7 @@ class XingDunContactDetailActivity : BaseActivity() {
             gravity = Gravity.END
             maxLines = 2
             setTextIsSelectable(true)
+            tag = title
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.35f))
     }
 
@@ -841,6 +1006,7 @@ class XingDunContactDetailActivity : BaseActivity() {
             minimumHeight = 54.dp()
             isClickable = true
             isFocusable = true
+            tag = title
             setOnClickListener { onClick() }
             addView(TextView(context).apply {
                 setText(title)
@@ -869,6 +1035,7 @@ class XingDunContactDetailActivity : BaseActivity() {
             minimumHeight = 50.dp()
             isClickable = true
             isFocusable = true
+            tag = title
             setOnClickListener { onClick() }
             addView(ImageView(context).apply {
                 setImageResource(icon)
@@ -892,6 +1059,7 @@ class XingDunContactDetailActivity : BaseActivity() {
         background = rounded(BRAND, 14f)
         isClickable = true
         isFocusable = true
+        tag = title
         setOnClickListener { onClick() }
     }
 

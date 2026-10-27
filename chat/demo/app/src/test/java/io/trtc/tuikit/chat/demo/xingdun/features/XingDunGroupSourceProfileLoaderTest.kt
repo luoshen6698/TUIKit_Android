@@ -8,6 +8,16 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withTimeout
+import io.trtc.tuikit.chat.demo.xingdun.network.executeCancellable
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.thread
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -245,7 +255,225 @@ class XingDunGroupSourceProfileLoaderTest {
         }
     }
 
-    private class Fixture(groupID: String = "group-1", target: String = "target", missingOwner: Boolean = false) {
+    @Test fun `periodic unchanged refresh does not mask the confirmed foreground profile`() = runBlocking {
+        val f = Fixture()
+        f.loader.refresh()
+        val count = f.states.size
+        f.loader.refresh(periodic = true)
+        assertFalse(f.states.drop(count).any { it === XingDunGroupSourceProfileState.Loading })
+        assertTrue(f.states.last() is XingDunGroupSourceProfileState.Loaded)
+    }
+
+    @Test fun `equal actual rendered inputs do not request another view rebuild`() {
+        val renderer = XingDunGroupSourceProfileRenderState()
+        val first = XingDunContactDetail(timUserId = "target", nickname = "Synthetic",
+            profileVisibility = JsonObject().apply { addProperty("signature", true) }, signature = "Synthetic value")
+        assertTrue(renderer.shouldRender(first, "friend", true, true, false, null, "target"))
+        val same = first.copy(profileVisibility = first.profileVisibility!!.deepCopy())
+        assertFalse(renderer.shouldRender(same, "friend", true, true, false, null, "target"))
+    }
+
+    @Test fun `periodic success does not dispatch a queued recommendation instead of hard reauthorization`() = runBlocking {
+        val f = Fixture()
+        f.loader.refresh()
+        f.loader.queueRecommendation("c2c_recipient")
+        f.loader.refresh(periodic = true)
+        assertTrue(f.recommended.isEmpty())
+        f.loader.refresh()
+        assertEquals(listOf("c2c_recipient"), f.recommended)
+    }
+
+    @Test fun `periodic without a confirmed profile still starts concealed`() = runBlocking {
+        val f = Fixture()
+        f.loader.refresh(periodic = true)
+        assertSame(XingDunGroupSourceProfileState.Loading, f.states.first())
+        f.groupError = IllegalStateException("synthetic")
+        f.loader.refresh(periodic = true)
+        assertSame(XingDunGroupSourceProfileState.Unavailable, f.states.last())
+        val count = f.states.size
+        f.groupError = null
+        f.loader.refresh(periodic = true)
+        assertSame(XingDunGroupSourceProfileState.Loading, f.states[count])
+    }
+
+    @Test fun `periodic denial failure or mismatched context closes the retained profile`() = runBlocking {
+        for (failure in listOf("deny", "group", "profile", "relationship", "mismatch")) {
+            val f = Fixture()
+            f.loader.refresh()
+            when (failure) {
+                "deny" -> f.group = f.group.copy(viewMemberCardMode = 2)
+                "group" -> f.groupError = IllegalStateException("synthetic")
+                "profile" -> f.profileError = IllegalStateException("synthetic")
+                "relationship" -> f.relationshipError = IllegalStateException("synthetic")
+                else -> f.group = f.group.copy(groupId = "other")
+            }
+            f.loader.refresh(periodic = true)
+            assertSame(failure, if (failure == "deny") XingDunGroupSourceProfileState.Restricted else XingDunGroupSourceProfileState.Unavailable, f.states.last())
+        }
+    }
+
+    @Test fun `periodic owner or generation loss at every await conceals instead of leaving the old profile`() = runBlocking {
+        for (stage in listOf("group", "profile", "relationship")) {
+            for (change in listOf("tenant", "app", "account", "generation", "missing")) {
+                val f = Fixture()
+                f.loader.refresh()
+                val entered = CompletableDeferred<Unit>()
+                val release = CompletableDeferred<Unit>()
+                val barrier: suspend () -> Unit = { entered.complete(Unit); release.await() }
+                when (stage) { "group" -> f.beforeGroup = barrier; "profile" -> f.beforeProfile = barrier; else -> f.beforeRelationship = barrier }
+                val pending = launch(start = CoroutineStart.UNDISPATCHED) { f.loader.refresh(periodic = true) }
+                entered.await()
+                when (change) {
+                    "tenant" -> f.scope = f.scope!!.copy(companyCode = "other")
+                    "app" -> f.scope = f.scope!!.copy(sdkAppID = 456)
+                    "account" -> f.scope = f.scope!!.copy(userID = "replacement")
+                    "generation" -> f.scope = f.scope!!.copy(generation = 2)
+                    else -> f.scope = null
+                }
+                release.complete(Unit)
+                pending.join()
+                assertSame("$stage/$change", XingDunGroupSourceProfileState.Loading, f.states.last())
+            }
+        }
+    }
+
+    @Test fun `periodic overall deadline cancels any awaited stage and closes the retained profile`() = runBlocking {
+        for (stage in listOf("group", "profile", "relationship")) {
+            val f = Fixture(periodicTimeoutMillis = 50)
+            f.loader.refresh()
+            var cancelled = false
+            val never = CompletableDeferred<Unit>()
+            val barrier: suspend () -> Unit = { try { never.await() } finally { cancelled = true } }
+            when (stage) { "group" -> f.beforeGroup = barrier; "profile" -> f.beforeProfile = barrier; else -> f.beforeRelationship = barrier }
+            val completed = withTimeout(2_000) { f.loader.refresh(periodic = true) }
+            assertFalse(stage, completed)
+            assertTrue(stage, cancelled)
+            assertSame(stage, XingDunGroupSourceProfileState.Unavailable, f.states.last())
+        }
+    }
+
+    @Test fun `obsolete periodic timeout cannot conceal a newer hard request success`() = runBlocking {
+        val f = Fixture(periodicTimeoutMillis = 50)
+        f.loader.refresh()
+        val entered = CompletableDeferred<Unit>()
+        val never = CompletableDeferred<Unit>()
+        var first = true
+        f.beforeGroup = { if (first) { first = false; entered.complete(Unit); never.await() } }
+        val old = async(start = CoroutineStart.UNDISPATCHED) { f.loader.refresh(periodic = true) }
+        entered.await()
+        f.loader.refresh()
+        val count = f.states.size
+        val newest = f.states.last()
+        assertFalse(withTimeout(2_000) { old.await() })
+        assertEquals(count, f.states.size)
+        assertSame(newest, f.states.last())
+    }
+
+    @Test fun `cancelled old periodic request does not clear the current request or its queued intent`() = runBlocking {
+        val f = Fixture()
+        f.loader.refresh()
+        val entered = CompletableDeferred<Unit>()
+        val never = CompletableDeferred<Unit>()
+        var first = true
+        f.beforeGroup = { if (first) { first = false; entered.complete(Unit); never.await() } }
+        val old = launch(start = CoroutineStart.UNDISPATCHED) { f.loader.refresh(periodic = true) }
+        entered.await()
+        f.loader.queueRecommendation("c2c_recipient")
+        f.loader.refresh()
+        val count = f.states.size
+        old.cancelAndJoin()
+        assertEquals(count, f.states.size)
+        assertEquals(listOf("c2c_recipient"), f.recommended)
+    }
+
+    @Test fun `a hard request crossing unknown owner cannot later replay its recommendation when the owner returns`() = runBlocking {
+        val f = Fixture()
+        val owner = f.scope
+        f.loader.queueRecommendation("c2c_recipient")
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        f.beforeRelationship = { entered.complete(Unit); release.await() }
+        val request = launch(start = CoroutineStart.UNDISPATCHED) { f.loader.refresh() }
+        entered.await()
+        f.scope = null
+        release.complete(Unit)
+        request.join()
+        f.scope = owner
+        f.beforeRelationship = {}
+        f.loader.refresh()
+        assertTrue(f.recommended.isEmpty())
+        assertEquals(0, f.recommendationFailures)
+    }
+
+    @Test fun `render projection detects all displayed data and action factors without retaining mutable JSON`() {
+        fun policy() = JsonObject().apply { listOf("account", "birthday", "phone", "email", "signature").forEach { addProperty(it, true) } }
+        val base = XingDunContactDetail(timUserId = "target", customId = "synthetic-id", nickname = "Synthetic",
+            avatar = "https://example.invalid/a.png", alias = "Synthetic alias", birthday = "2000-01-01", phone = "synthetic-phone",
+            email = "synthetic@example.invalid", signature = "Synthetic signature", profileVisibility = policy())
+        val variants = listOf(base.copy(nickname = "Other"), base.copy(avatar = "other"), base.copy(customId = "other"),
+            base.copy(accountType = "internal"), base.copy(alias = "Other"), base.copy(birthday = "2001-01-01"),
+            base.copy(phone = "other"), base.copy(email = "other"), base.copy(signature = "other"), base.copy(isBlacklist = true))
+        for (changed in variants) {
+            val state = XingDunGroupSourceProfileRenderState()
+            state.shouldRender(base, "friend", true, true, false, null, "target")
+            assertTrue(state.shouldRender(changed, "friend", true, true, false, null, "target"))
+        }
+        for (field in listOf("account", "birthday", "phone", "email", "signature")) {
+            val profile = base.copy(profileVisibility = policy())
+            val state = XingDunGroupSourceProfileRenderState()
+            state.shouldRender(profile, "friend", true, true, false, null, "target")
+            profile.profileVisibility!!.addProperty(field, false)
+            assertTrue(field, state.shouldRender(profile, "friend", true, true, false, null, "target"))
+        }
+        for (change in listOf("relationship", "audio", "video", "busy", "error")) {
+            val state = XingDunGroupSourceProfileRenderState()
+            state.shouldRender(base, "friend", true, true, false, null, "target")
+            assertTrue(change, state.shouldRender(base, if (change == "relationship") "none" else "friend",
+                change != "audio", change != "video", change == "busy", if (change == "error") "Synthetic error" else null, "target"))
+        }
+    }
+
+    @Test fun `hidden values and unrelated DTO metadata do not rebuild identical UI but reset restores hard rendering`() {
+        val profile = XingDunContactDetail(timUserId = "target", nickname = " Synthetic ", phone = "old hidden value", signature = "hidden")
+        val state = XingDunGroupSourceProfileRenderState()
+        assertTrue(state.shouldRender(profile, "friend", true, true, false, null, "target"))
+        assertFalse(state.shouldRender(profile.copy(nickname = "Synthetic", phone = "new hidden value", signature = "different hidden",
+            departmentPath = listOf("ignored"), isBlockedByPeer = true), "friend", true, true, false, null, "target"))
+        state.reset()
+        assertTrue(state.shouldRender(profile, "friend", true, true, false, null, "target"))
+    }
+
+    @Test fun `periodic deadline aborts the actual HTTP call through the production cancellation bridge`() = runBlocking {
+        val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        val peer = AtomicReference<Socket?>()
+        val accepted = CompletableDeferred<Unit>()
+        val acceptThread = thread(isDaemon = true, name = "group-profile-periodic-timeout-test") {
+            runCatching { server.accept() }.onSuccess { peer.set(it); accepted.complete(Unit) }
+                .onFailure { accepted.completeExceptionally(it) }
+        }
+        val client = OkHttpClient()
+        val call = client.newCall(Request.Builder().url("http://127.0.0.1:${server.localPort}/").build())
+        val f = Fixture(periodicTimeoutMillis = 1_000)
+        f.loader.refresh()
+        f.beforeGroup = { call.executeCancellable { Unit } }
+        val pending = async(start = CoroutineStart.UNDISPATCHED) { f.loader.refresh(periodic = true) }
+        try {
+            withTimeout(5_000) { accepted.await() }
+            assertFalse(withTimeout(3_000) { pending.await() })
+            assertTrue(call.isCanceled())
+            assertSame(XingDunGroupSourceProfileState.Unavailable, f.states.last())
+            assertTrue(f.recommended.isEmpty())
+        } finally {
+            pending.cancelAndJoin()
+            server.close()
+            acceptThread.join(1_000)
+            peer.get()?.close()
+            client.connectionPool.evictAll()
+            client.dispatcher.executorService.shutdownNow()
+        }
+    }
+
+    private class Fixture(groupID: String = "group-1", target: String = "target", missingOwner: Boolean = false, periodicTimeoutMillis: Long = 10_000L) {
         var scope: XingDunGroupMemberPreviewScope? = if (missingOwner) null else XingDunGroupMemberPreviewScope("tenant", 123, "self", 1)
         var active = true
         var group = XingDunGroupDetail(groupId = "group-1", viewMemberCardMode = 1)
@@ -271,6 +499,7 @@ class XingDunGroupSourceProfileLoaderTest {
             publish = { states += it }, isActive = { active },
             recommend = { recommended += it; sentSignature = (states.last() as XingDunGroupSourceProfileState.Loaded).profile.signature },
             showRecommendationFailure = { recommendationFailures++ },
+            periodicTimeoutMillis = periodicTimeoutMillis,
         )
     }
 }
