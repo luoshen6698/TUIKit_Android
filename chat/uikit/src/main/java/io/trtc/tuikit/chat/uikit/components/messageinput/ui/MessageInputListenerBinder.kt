@@ -25,6 +25,7 @@ internal object MessageInputListenerBinder {
         editText: AtomicEditText,
         inputContainer: LinearLayout,
         coordinatorProvider: () -> InputCoordinator,
+        isCoordinatorInitialized: () -> Boolean,
         viewModelProvider: () -> MessageInputViewModel?,
         isLongPressToTalkEnabled: () -> Boolean,
         sendCurrentText: () -> Unit,
@@ -101,6 +102,8 @@ internal object MessageInputListenerBinder {
         }
 
         editText.setOnFocusChangeListener { _, hasFocus ->
+            // Android can restore focus before the keyboard runtime attaches.
+            if (!isCoordinatorInitialized()) return@setOnFocusChangeListener
             val coordinator = coordinatorProvider()
             val currentSurface = coordinator.state.value.surface
             logDebug("FOCUS: editText hasFocus=$hasFocus | currentSurface=$currentSurface")

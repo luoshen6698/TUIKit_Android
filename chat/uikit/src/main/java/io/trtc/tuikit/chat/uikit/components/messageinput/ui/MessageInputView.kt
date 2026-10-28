@@ -619,6 +619,7 @@ class MessageInputView @JvmOverloads constructor(
             editText = editText,
             inputContainer = inputContainer,
             coordinatorProvider = { coordinator },
+            isCoordinatorInitialized = { ::coordinator.isInitialized },
             viewModelProvider = { viewModel },
             isLongPressToTalkEnabled = { config.enableLongPressToTalk },
             sendCurrentText = { textController.sendCurrentText(onSubmitted = ::handleTextSubmitted) },
