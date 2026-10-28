@@ -11,7 +11,7 @@ internal class MessageInputDraftPolicy {
         isDraftClearPending = true
     }
 
-    fun shouldApplyIncomingDraft(currentInput: String, draft: String?): Boolean {
+    fun shouldApplyIncomingDraft(currentInput: String, draft: String?, hasUserEditedText: Boolean): Boolean {
         if (draft.isNullOrEmpty()) {
             isDraftClearPending = false
             return false
@@ -19,7 +19,8 @@ internal class MessageInputDraftPolicy {
         if (isDraftClearPending) {
             return false
         }
-        return currentInput.isEmpty()
+        // An empty field can be an intentional local edit, not a request to restore.
+        return currentInput.isEmpty() && !hasUserEditedText
     }
 
     fun shouldSaveDraft(currentInput: String, hasUserEditedText: Boolean): Boolean {

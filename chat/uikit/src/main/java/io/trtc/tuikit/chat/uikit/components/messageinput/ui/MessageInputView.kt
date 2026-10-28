@@ -248,7 +248,7 @@ class MessageInputView @JvmOverloads constructor(
     }
 
     private fun handleIncomingDraft(draft: String?) {
-        if (draftPolicy.shouldApplyIncomingDraft(textController.inputText, draft)) {
+        if (draftPolicy.shouldApplyIncomingDraft(textController.inputText, draft, textController.hasUserEditedText)) {
             textController.applyDraftIfEmpty(draft.orEmpty())
         }
     }
