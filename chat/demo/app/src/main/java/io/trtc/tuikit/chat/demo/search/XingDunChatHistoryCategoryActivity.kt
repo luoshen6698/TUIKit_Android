@@ -43,6 +43,8 @@ import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMessageDeletionVisibility
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupDeletionReadScope
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupDeletionRepository
 import io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility
 import io.trtc.tuikit.chat.uikit.components.imageviewer.ImageElement
@@ -79,13 +81,13 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     private var activeMediaIDs = emptySet<String>()
     private var mediaRevision = 0L
     private var sourceSession: String? = null
+    private var sourceReadScope: XingDunGroupDeletionReadScope? = null
     private var historyActive = false
     private var historyRevision = 0L
     private var historyReadJob: kotlinx.coroutines.Job? = null
     private fun isReadCurrent(ticket: Long): Boolean {
         if (isDestroyed || isFinishing) return false
-        if (!conversationID.startsWith("group_")) return true
-        if (!historyActive || ticket != historyRevision) return false
+        if (conversationID.startsWith("group_") && (!historyActive || ticket != historyRevision)) return false
         if (isSourceCurrent()) return true
         messages = emptyList()
         loadedMessages = emptyList()
@@ -94,10 +96,14 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         finish()
         return false
     }
-    private suspend fun allowsHistory(ticket: Long): Boolean =
-        io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchGroupHistoryAccess.allows(conversationID, sourceSession) {
-            isReadCurrent(ticket)
+    private suspend fun allowsHistory(ticket: Long): Boolean {
+        if (!isReadCurrent(ticket)) return false
+        val owner = sourceSession
+        val allowed = kotlinx.coroutines.withContext(Dispatchers.IO) {
+            io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchGroupHistoryAccess.allows(conversationID, owner)
         }
+        return allowed && isReadCurrent(ticket)
+    }
     private fun rejectHistory(ticket: Long) {
         if (!isReadCurrent(ticket)) return
         messages = emptyList()
@@ -107,8 +113,13 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         android.widget.Toast.makeText(this, R.string.xingdun_group_access_denied, android.widget.Toast.LENGTH_LONG).show()
         finish()
     }
-    private fun isSourceCurrent() = !conversationID.startsWith("group_") ||
-        (historyActive && sourceSession != null && sourceSession == SearchMessageVisibility.currentSessionKey())
+    private fun isSourceCurrent() = sourceReadScope?.let {
+        it.stamp == XingDunSessionManager.currentMessageReadStamp()
+    } == true && (!conversationID.startsWith("group_") || historyActive)
+
+    private fun visibleRows(values: List<MessageInfo>): List<MessageInfo> = sourceReadScope?.let {
+        XingDunGroupDeletionRepository.mapReadScope(applicationContext, it, conversationID, values)
+    }.orEmpty()
     private val deletionListener: (String) -> Unit = { changed ->
         if (changed == conversationID) runOnUiThread {
             activeMediaSession?.takeIf { it.isSourceBound }?.invalidateSource()
@@ -141,10 +152,24 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         bindViews()
         configureHeader()
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-        sourceSession = SearchMessageVisibility.currentSessionKey()
         XingDunMessageDeletionVisibility.addListener(deletionListener)
         activityScope?.launch {
+            val source = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                XingDunGroupDeletionRepository.currentReadScope()
+            }
+            if (isFinishing || isDestroyed) return@launch
+            if (source == null || source.stamp != XingDunSessionManager.currentMessageReadStamp()) {
+                finish()
+                return@launch
+            }
+            // Retain only non-secret identity/stamp metadata, never session credentials.
+            sourceReadScope = source
+            sourceSession = "${source.display.account}:${source.display.generation}"
+            if (historyActive && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) resumeHistory()
+        }
+        activityScope?.launch {
             SearchMessageVisibility.revision.collectLatest {
+                if (sourceReadScope == null) return@collectLatest
                 activeMediaSession?.takeIf { it.isSourceBound }?.invalidateSource()
                 if (conversationID.startsWith("group_") && !historyActive) return@collectLatest
                 if (!isSourceCurrent()) { activeMediaSession?.dismiss(); finish(); return@collectLatest }
@@ -170,9 +195,15 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         if (!::status.isInitialized || isFinishing) return
         historyActive = true
         historyRevision++
+        if (sourceReadScope == null) return
+        resumeHistory()
+    }
+
+    private fun resumeHistory() {
         if (!isSourceCurrent()) { finish(); return }
+        val ticket = historyRevision
         io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupSettingsAccess.history(this, conversationID) {
-            if (!isReadCurrent(historyRevision)) return@history
+            if (!isReadCurrent(ticket)) return@history
             if (!historyStarted) {
                 historyStarted = true
                 if (mode == MODE_DATE) showDatePicker() else loadMessages()
@@ -322,10 +353,14 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
                             )
                             if (!isReadCurrent(ticket)) return@launch
                             if (!allowsHistory(ticket)) { rejectHistory(ticket); return@launch }
+                            val verificationFailed = conversationID.startsWith("group_") &&
+                                kotlinx.coroutines.withContext(Dispatchers.IO) {
+                                    XingDunGroupDeletionRepository.verificationFailed(conversationID)
+                                }
                             if (!isReadCurrent(ticket)) return@launch
                             loadedMessages = snapshot
                             renderLoaded(checked)
-                            if (conversationID.startsWith("group_") && XingDunGroupDeletionRepository.verificationFailed(conversationID)) showLoadError()
+                            if (verificationFailed) showLoadError()
                         }
                     }
                     override fun onFailure(code: Int, desc: String) = runOnUiThread { if (isReadCurrent(ticket)) showLoadError() }
@@ -345,14 +380,13 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
 
     private fun renderLoaded(values: List<MessageInfo>) {
         if (!isSourceCurrent() && !isDebugPreview) return
-        messages = values
-            .filterNot { XingDunMessageDeletionVisibility.isDeleted(conversationID, it.msgID) }
+        messages = visibleRows(values)
             .filter(::matchesMode)
             .distinctBy { it.msgID }
             .sortedByDescending { it.timestamp ?: 0L }
         content.removeAllViews()
         progress.visibility = View.GONE
-        if (mode == MODE_MEMBER) renderMembers(values) else renderMessages()
+        if (mode == MODE_MEMBER) renderMembers(messages) else renderMessages()
         applyColors(colors())
     }
 
@@ -420,7 +454,7 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         setPadding(14.dp(), 8.dp(), 14.dp(), 8.dp())
         background = rounded(colors().bgColorOperate, 0f)
         setOnClickListener {
-            if (XingDunMessageDeletionVisibility.isDeleted(conversationID, message.msgID)) return@setOnClickListener
+            if (!isSourceCurrent() || visibleRows(listOf(message)).isEmpty()) return@setOnClickListener
             if (message.messageType == MessageType.IMAGE || message.messageType == MessageType.VIDEO) {
                 showMedia(message)
             } else {
@@ -530,9 +564,9 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         val owner = sourceSession
         fun isCurrent() = revision == mediaRevision && !isDestroyed && !isFinishing &&
             lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
-            owner != null && owner == SearchMessageVisibility.currentSessionKey() && isReadCurrent(ticket) &&
+            owner != null && owner == sourceSession && isReadCurrent(ticket) &&
             messages.any { it.msgID == selected.msgID } &&
-            !XingDunMessageDeletionVisibility.isDeleted(conversationID, selected.msgID)
+            visibleRows(listOf(selected)).isNotEmpty()
         activityScope?.launch {
             val checked = XingDunHistoryMediaGate.checked(conversationID, selected.msgID, ::isCurrent,
                 filter = { kotlinx.coroutines.withContext(Dispatchers.IO) {
@@ -581,9 +615,11 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
             val sourceConversation = conversationID
             val mediaSnapshot = entries.map { it.first }
             val mediaIDs = activeMediaIDs
+            val mediaSource = sourceReadScope ?: return@launch
             val session = if (sourceConversation.startsWith("group_")) {
                 ImageViewer.viewFromSource(entries.map { it.second }, index,
-                    XingDunHistoryMediaGate.sourcePolicy(sourceConversation, sourceOwner, mediaSnapshot, mediaIDs))
+                    XingDunHistoryMediaGate.sourcePolicy(sourceConversation, sourceOwner, mediaSnapshot, mediaIDs,
+                        sourceIsCurrent = { mediaSource.stamp == XingDunSessionManager.currentMessageReadStamp() }))
             } else ImageViewer.view(entries.map { it.second }, index, null)
             activeMediaSession = session
             session?.addOnClosedListener {
@@ -597,7 +633,8 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
 
     private fun closeDeletedMedia() {
         if (activeMediaSession?.isSourceBound == true) { activeMediaSession?.invalidateSource(); return }
-        if (activeMediaIDs.any { XingDunMessageDeletionVisibility.isDeleted(conversationID, it) }) {
+        val visibleIDs = visibleRows(messages).map { it.msgID }.toSet()
+        if (activeMediaIDs.any { it !in visibleIDs }) {
             mediaRevision++
             activeMediaSession?.dismiss()
             activeMediaSession = null
@@ -826,9 +863,10 @@ internal object XingDunChatHistoryMediaPolicy {
 /** The actual media-admission gate rechecks current group history after deletion verification. */
 internal object XingDunHistoryMediaGate {
     /** The exact viewer owns this immutable snapshot, independently of the paused parent Activity. */
-    fun sourcePolicy(conversationID: String, owner: String?, snapshot: List<MessageInfo>, mediaIDs: Set<String>) =
+    fun sourcePolicy(conversationID: String, owner: String?, snapshot: List<MessageInfo>, mediaIDs: Set<String>,
+                     sourceIsCurrent: () -> Boolean = { owner != null && owner == SearchMessageVisibility.currentSessionKey() }) =
         ImageViewer.SourcePolicy(
-            ownerIsCurrent = { owner != null && owner == SearchMessageVisibility.currentSessionKey() },
+            ownerIsCurrent = { owner != null && sourceIsCurrent() },
             revalidate = { kotlinx.coroutines.withContext(Dispatchers.IO) {
                 if (owner == null || owner != SearchMessageVisibility.currentSessionKey()) return@withContext false
                 // One app-owned deletion snapshot for the whole source; no per-message credential reads.

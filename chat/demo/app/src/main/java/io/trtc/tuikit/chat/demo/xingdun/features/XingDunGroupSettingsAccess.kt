@@ -8,6 +8,8 @@ import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.isActive
 import android.widget.Toast
 
@@ -19,7 +21,7 @@ internal object XingDunGroupSettingsAccess {
             value.get("action")?.takeIf { it.isJsonPrimitive }?.asString == action &&
             value.get("target_id")?.takeIf { it.isJsonPrimitive }?.asString == target
 
-    suspend fun authorize(group: String, action: String, target: String = "") {
+    suspend fun authorize(group: String, action: String, target: String = "") = withContext(Dispatchers.IO) {
         val session = XingDunSessionManager.currentSession() ?: error("No session")
         val generation = XingDunSessionManager.currentAuthenticationGeneration()
         val response = XingDunSessionManager.apiClient().get<JsonObject>(session, "team/settingsAccess",

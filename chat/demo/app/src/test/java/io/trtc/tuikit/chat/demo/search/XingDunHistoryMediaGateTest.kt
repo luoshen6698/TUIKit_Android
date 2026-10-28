@@ -26,6 +26,33 @@ class XingDunHistoryMediaGateTest {
         SearchMessageVisibility.setVerificationFailureProvider { false }
         SearchGroupHistoryAccess.setProvider { true }
     }
+    @Test fun `category fast owner callback never reads credential provider and rejects replaced source`() {
+        var current = true
+        var fastReads = 0
+        SearchMessageVisibility.setSessionProvider { error("UI owner check must not load encrypted credentials") }
+        val policy = XingDunHistoryMediaGate.sourcePolicy("group_target", "source-owner", rows, setOf("selected"),
+            sourceIsCurrent = { fastReads++; current })
+        repeat(100) { assertTrue(policy.ownerIsCurrent()) }
+        current = false
+        assertFalse(policy.ownerIsCurrent())
+        assertEquals(101, fastReads)
+        val missing = XingDunHistoryMediaGate.sourcePolicy("group_target", null, rows, setOf("selected"),
+            sourceIsCurrent = { true })
+        assertFalse(missing.ownerIsCurrent())
+    }
+    @Test fun `fast viewer owner callback cannot replace fresh session and history authorization`() = runBlocking {
+        sourceSetup()
+        val policy = XingDunHistoryMediaGate.sourcePolicy("group_target", "source-owner", rows, setOf("selected"),
+            sourceIsCurrent = { true })
+        SearchMessageVisibility.setSessionProvider { "replacement-owner" }
+        assertTrue(policy.ownerIsCurrent())
+        assertFalse(policy.revalidate())
+        SearchMessageVisibility.setSessionProvider { "source-owner" }
+        SearchGroupHistoryAccess.setProvider { false }
+        assertFalse(policy.revalidate())
+        SearchGroupHistoryAccess.setProvider { true }
+        assertTrue(policy.revalidate())
+    }
     @Test fun `actual detached viewer source checks batch deletion then fresh history without parent active state`() = runBlocking {
         sourceSetup(); val events = java.util.Collections.synchronizedList(mutableListOf<String>())
         SearchMessageVisibility.setDisplayProvider { _, value, mapper -> events += "snapshot"; mapper(value) }
