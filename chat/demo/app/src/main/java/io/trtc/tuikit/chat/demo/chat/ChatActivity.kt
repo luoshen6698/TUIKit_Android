@@ -155,6 +155,7 @@ class ChatActivity : BaseActivity() {
     private lateinit var headerContainer: LinearLayout
     private lateinit var chatTitleIcon: ImageView
     private lateinit var tvChatTitle: TextView
+    private lateinit var tvChatPresence: TextView
     private lateinit var btnBack: ImageView
     private lateinit var btnMore: ImageView
     private lateinit var headerDivider: View
@@ -303,6 +304,7 @@ class ChatActivity : BaseActivity() {
         headerContainer = findViewById(R.id.demo_chatHeaderContainer)
         chatTitleIcon = findViewById(R.id.demo_chatTitleIcon)
         tvChatTitle = findViewById(R.id.demo_tvChatTitle)
+        tvChatPresence = findViewById(R.id.demo_tvChatPresence)
         btnBack = findViewById(R.id.demo_btnBack)
         btnMore = findViewById(R.id.demo_btnMore)
         headerDivider = findViewById(R.id.demo_headerDivider)
@@ -1321,15 +1323,17 @@ class ChatActivity : BaseActivity() {
     }
 
     private fun renderPresenceTitle() {
-        if (!::tvChatTitle.isInitialized) return
-        tvChatTitle.text = if (isPeerTyping) getString(R.string.demo_chat_typing_indicator)
-        else if (::conversationID.isInitialized && getUserID(conversationID) != null) {
-            latestChatTitle + " · " + getString(when (peerPresence) {
+        if (!::tvChatTitle.isInitialized || !::tvChatPresence.isInitialized) return
+        tvChatTitle.text = if (isPeerTyping) getString(R.string.demo_chat_typing_indicator) else latestChatTitle
+        val showPresence = !isPeerTyping && ::conversationID.isInitialized && getUserID(conversationID) != null
+        tvChatPresence.visibility = if (showPresence) View.VISIBLE else View.GONE
+        tvChatPresence.text = if (showPresence) {
+            getString(when (peerPresence) {
                 io.trtc.tuikit.chat.uikit.components.presence.UserPresence.ONLINE -> R.string.xingdun_presence_online
                 io.trtc.tuikit.chat.uikit.components.presence.UserPresence.OFFLINE -> R.string.xingdun_presence_offline
                 else -> R.string.xingdun_presence_unknown
             })
-        } else latestChatTitle
+        } else ""
     }
 
     override fun onBackPressed() {
@@ -1374,6 +1378,7 @@ class ChatActivity : BaseActivity() {
         headerContainer.setBackgroundColor(colors.bgColorOperate)
         chatTitleIcon.imageTintList = ColorStateList.valueOf(0xFF23B39C.toInt())
         tvChatTitle.setTextColor(colors.textColorPrimary)
+        tvChatPresence.setTextColor(colors.textColorSecondary)
         btnBack.imageTintList = ColorStateList.valueOf(colors.textColorSecondary)
         btnMore.imageTintList = ColorStateList.valueOf(colors.textColorSecondary)
         btnMultiSelectCancel.setTextColor(colors.textColorLink)

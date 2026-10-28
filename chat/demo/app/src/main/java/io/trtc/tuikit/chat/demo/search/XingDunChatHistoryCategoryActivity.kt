@@ -81,21 +81,20 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     private var activeMediaIDs = emptySet<String>()
     private var mediaRevision = 0L
     private var sourceSession: String? = null
-    private var sourceReadScope: XingDunGroupDeletionReadScope? = null
+    private var historyScopeGuard: XingDunHistoryScopeGuard? = null
+    private val sourceReadScope: XingDunGroupDeletionReadScope? get() = historyScopeGuard?.scope
+    private var scopeRefreshJob: kotlinx.coroutines.Job? = null
     private var historyActive = false
     private var historyRevision = 0L
     private var historyReadJob: kotlinx.coroutines.Job? = null
     private fun isReadCurrent(ticket: Long): Boolean {
-        if (isDestroyed || isFinishing) return false
-        if (conversationID.startsWith("group_") && (!historyActive || ticket != historyRevision)) return false
-        if (isSourceCurrent()) return true
-        messages = emptyList()
-        loadedMessages = emptyList()
-        content.removeAllViews()
-        activeMediaSession?.dismiss()
-        finish()
+        if (isDestroyed || isFinishing || !historyActive) return false
+        if (historyScopeGuard?.acceptsRead(ticket, historyRevision) == true) return true
+        // An old query must not hide or restart a newer query on the same page.
+        if (ticket == historyRevision) refreshSourceBinding()
         return false
     }
+
     private suspend fun allowsHistory(ticket: Long): Boolean {
         if (!isReadCurrent(ticket)) return false
         val owner = sourceSession
@@ -106,6 +105,9 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     }
     private fun rejectHistory(ticket: Long) {
         if (!isReadCurrent(ticket)) return
+        closeDeniedHistory()
+    }
+    private fun closeDeniedHistory() {
         messages = emptyList()
         loadedMessages = emptyList()
         content.removeAllViews()
@@ -113,9 +115,31 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         android.widget.Toast.makeText(this, R.string.xingdun_group_access_denied, android.widget.Toast.LENGTH_LONG).show()
         finish()
     }
-    private fun isSourceCurrent() = sourceReadScope?.let {
-        it.stamp == XingDunSessionManager.currentMessageReadStamp()
-    } == true && (!conversationID.startsWith("group_") || historyActive)
+    private fun isSourceCurrent() = historyScopeGuard?.isCurrent() == true &&
+        (!conversationID.startsWith("group_") || historyActive)
+
+    private fun hideForScopeRefresh() {
+        if (historyStarted || historyReadJob != null || messages.isNotEmpty() || loadedMessages.isNotEmpty()) {
+            historyRevision++
+            mediaRevision++
+            historyReadJob?.cancel()
+            historyReadJob = null
+            historyStarted = false
+            messages = emptyList()
+            loadedMessages = emptyList()
+            activeMediaSession?.dismiss()
+        }
+        if (::progress.isInitialized && progress.parent !== content) showLoading()
+    }
+
+    private fun refreshSourceBinding() {
+        val guard = historyScopeGuard ?: return
+        val page = guard.pageEpoch
+        if (!historyActive || !guard.isActive(page) || !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        hideForScopeRefresh()
+        guard.requestRefresh()
+        resumeHistory()
+    }
 
     private fun visibleRows(values: List<MessageInfo>): List<MessageInfo> = sourceReadScope?.let {
         XingDunGroupDeletionRepository.mapReadScope(applicationContext, it, conversationID, values)
@@ -123,9 +147,13 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     private val deletionListener: (String) -> Unit = { changed ->
         if (changed == conversationID) runOnUiThread {
             activeMediaSession?.takeIf { it.isSourceBound }?.invalidateSource()
-            if (!isDestroyed && isSourceCurrent()) {
-                closeDeletedMedia()
-                renderLoaded(messages)
+            if (!isDestroyed) {
+                if (isSourceCurrent()) {
+                    closeDeletedMedia()
+                    renderLoaded(messages)
+                } else if (!conversationID.startsWith("group_") && historyScopeGuard?.isBoundToCurrentStamp() == true) {
+                    closeDeletedMedia()
+                }
             }
         }
     }
@@ -154,25 +182,35 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         XingDunMessageDeletionVisibility.addListener(deletionListener)
         activityScope?.launch {
-            val source = kotlinx.coroutines.withContext(Dispatchers.IO) {
-                XingDunGroupDeletionRepository.currentReadScope()
-            }
+            val source = XingDunHistoryScopeGuard.readInitialScope(
+                XingDunSessionManager::currentMessageReadStamp,
+                XingDunGroupDeletionRepository::currentReadScope,
+            )
             if (isFinishing || isDestroyed) return@launch
-            if (source == null || source.stamp != XingDunSessionManager.currentMessageReadStamp()) {
+            if (source == null) {
                 finish()
                 return@launch
             }
             // Retain only non-secret identity/stamp metadata, never session credentials.
-            sourceReadScope = source
-            sourceSession = "${source.display.account}:${source.display.generation}"
-            if (historyActive && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) resumeHistory()
+            val owner = "${source.display.account}:${source.display.generation}"
+            sourceSession = owner
+            historyScopeGuard = XingDunHistoryScopeGuard(source,
+                currentStamp = XingDunSessionManager::currentMessageReadStamp,
+                loadScope = XingDunGroupDeletionRepository::currentReadScope,
+                authorize = {
+                    io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchGroupHistoryAccess.allows(conversationID, owner)
+                })
+            if (historyActive && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                historyScopeGuard?.activate()
+                resumeHistory()
+            }
         }
         activityScope?.launch {
             SearchMessageVisibility.revision.collectLatest {
                 if (sourceReadScope == null) return@collectLatest
                 activeMediaSession?.takeIf { it.isSourceBound }?.invalidateSource()
                 if (conversationID.startsWith("group_") && !historyActive) return@collectLatest
-                if (!isSourceCurrent()) { activeMediaSession?.dismiss(); finish(); return@collectLatest }
+                if (!isSourceCurrent()) { refreshSourceBinding(); return@collectLatest }
                 closeDeletedMedia()
                 if (conversationID.startsWith("group_") && loadedMessages.isNotEmpty()) {
                     val ticket = historyRevision
@@ -196,35 +234,52 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         historyActive = true
         historyRevision++
         if (sourceReadScope == null) return
+        historyScopeGuard?.activate()
         resumeHistory()
     }
 
     private fun resumeHistory() {
-        if (!isSourceCurrent()) { finish(); return }
-        val ticket = historyRevision
-        io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupSettingsAccess.history(this, conversationID) {
-            if (!isReadCurrent(ticket)) return@history
-            if (!historyStarted) {
-                historyStarted = true
-                if (mode == MODE_DATE) showDatePicker() else loadMessages()
-            }
+        val guard = historyScopeGuard ?: return
+        val page = guard.pageEpoch
+        if (!historyActive || !guard.isActive(page) || scopeRefreshJob?.isActive == true) return
+        hideForScopeRefresh()
+        scopeRefreshJob = activityScope?.launch {
+            guard.observe(onInvalidated = { hideForScopeRefresh() }, onResult = { result ->
+                if (guard.isActive(page) && historyActive && !isFinishing && !isDestroyed) {
+                    when (result) {
+                        XingDunHistoryScopeGuard.Result.READY -> startHistoryContent()
+                        XingDunHistoryScopeGuard.Result.DENIED -> closeDeniedHistory()
+                        XingDunHistoryScopeGuard.Result.REPLACED, XingDunHistoryScopeGuard.Result.UNAVAILABLE -> finish()
+                        XingDunHistoryScopeGuard.Result.RETRY -> hideForScopeRefresh()
+                        XingDunHistoryScopeGuard.Result.STALE -> Unit
+                    }
+                }
+            })
         }
+    }
+
+    private fun startHistoryContent() {
+        if (!isSourceCurrent() || historyStarted) return
+        historyStarted = true
+        if (mode == MODE_DATE) showDatePicker() else loadMessages()
     }
 
     override fun onPause() {
         mediaRevision++
+        historyScopeGuard?.pause()
+        scopeRefreshJob?.cancel()
+        scopeRefreshJob = null
+        historyActive = false
+        historyRevision++
+        historyReadJob?.cancel()
+        historyReadJob = null
         if (conversationID.startsWith("group_")) {
-            historyActive = false
-            historyRevision++
-            historyReadJob?.cancel()
-            historyReadJob = null
             historyStarted = false
             messages = emptyList()
             loadedMessages = emptyList()
             activeMediaSession?.onSourceParentPaused()
             if (::content.isInitialized) content.removeAllViews()
         }
-        io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupSettingsAccess.stopHistory(this)
         super.onPause()
     }
 
@@ -234,6 +289,9 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
+        historyScopeGuard?.pause()
+        scopeRefreshJob?.cancel()
+        scopeRefreshJob = null
         XingDunMessageDeletionVisibility.removeListener(deletionListener)
         mediaRevision++
         activeMediaSession?.dismiss()
@@ -321,7 +379,7 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     }
 
     private fun loadMessages() {
-        if (!isSourceCurrent() && !isDebugPreview) return
+        if (!isSourceCurrent() && !isDebugPreview) { refreshSourceBinding(); return }
         if (isDebugPreview) { renderLoaded(emptyList()); return }
         historyReadJob?.cancel()
         val ticket = ++historyRevision
@@ -379,7 +437,7 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     }
 
     private fun renderLoaded(values: List<MessageInfo>) {
-        if (!isSourceCurrent() && !isDebugPreview) return
+        if (!isSourceCurrent() && !isDebugPreview) { refreshSourceBinding(); return }
         messages = visibleRows(values)
             .filter(::matchesMode)
             .distinctBy { it.msgID }
@@ -454,7 +512,8 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
         setPadding(14.dp(), 8.dp(), 14.dp(), 8.dp())
         background = rounded(colors().bgColorOperate, 0f)
         setOnClickListener {
-            if (!isSourceCurrent() || visibleRows(listOf(message)).isEmpty()) return@setOnClickListener
+            if (!isSourceCurrent()) { refreshSourceBinding(); return@setOnClickListener }
+            if (visibleRows(listOf(message)).isEmpty()) return@setOnClickListener
             if (message.messageType == MessageType.IMAGE || message.messageType == MessageType.VIDEO) {
                 showMedia(message)
             } else {
@@ -557,7 +616,8 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     }
 
     private fun locateSearchMessage(message: MessageInfo) {
-        if (!isSourceCurrent() || message.msgID.isBlank()) return
+        if (!isSourceCurrent()) { refreshSourceBinding(); return }
+        if (message.msgID.isBlank()) return
         val selected = message.copy(quoteInfo = message.quoteInfo?.copy())
         val revision = ++mediaRevision
         val ticket = historyRevision
@@ -586,7 +646,7 @@ open class XingDunChatHistoryCategoryActivity : BaseActivity() {
     }
 
     private fun showMedia(selected: MessageInfo) {
-        if (!isSourceCurrent()) return
+        if (!isSourceCurrent()) { refreshSourceBinding(); return }
         val revision = ++mediaRevision
         val ticket = historyRevision
         val snapshot = messages.toList()
