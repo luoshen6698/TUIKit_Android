@@ -15,6 +15,7 @@ class MessageForwardCoordinator(
             .withIndex()
             .associate { it.value.msgID to it.index }
         return messages
+            .filterNot(io.trtc.tuikit.chat.uikit.components.messagelist.typing.TypingMessageProtocol::isTypingMessage)
             .sortedWith(
                 compareBy<MessageInfo> { message ->
                     messageIdToIndex[message.msgID]?.let { -it } ?: Int.MAX_VALUE

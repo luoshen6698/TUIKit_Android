@@ -1152,6 +1152,10 @@ class MessageListViewModel(
                 conversationID = tempConversationID,
                 needReadReceipt = AppBuilderConfig.enableReadReceipt
             )
+            if (sortedMessageList.isEmpty()) {
+                completion?.onFailure(-1, getLocalizedString(R.string.uikit_empty_content))
+                return@forEach
+            }
             val mergedForwardInfo = when (forwardType) {
                 MessageForwardType.MERGED -> MergedForwardInfo(
                     title = getForwardMessageTitle(sortedMessageList) ?: "",

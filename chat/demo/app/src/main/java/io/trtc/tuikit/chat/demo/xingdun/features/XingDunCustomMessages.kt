@@ -396,6 +396,9 @@ internal object XingDunCustomMessageParser {
 
     internal fun parse(data: String?, description: String? = null): XingDunCustomMessage? {
         val root = runCatching { JsonParser.parseString(data.orEmpty()).asJsonObject }.getOrNull() ?: return null
+        if (io.trtc.tuikit.chat.uikit.components.messagelist.typing.TypingMessageProtocol.isTypingControlData(data)) {
+            return XingDunCustomMessage("user_typing_status", emptyMap(), isControl = true, isXingDunEnvelope = false)
+        }
         val values = linkedMapOf<String, String>()
         flatten(root, values)
         val explicitType = listOf("xd_type", "type", "message_type", "businessType", "name")

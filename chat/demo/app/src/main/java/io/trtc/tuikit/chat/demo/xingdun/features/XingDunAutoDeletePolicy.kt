@@ -6,6 +6,9 @@ import java.util.Locale
 import com.google.gson.JsonParser
 
 internal object XingDunAutoDeletePolicy {
+    fun protectsControlFromExpiry(customType: String?): Boolean =
+        customType in setOf("auto_delete_config", "config_refresh", "user_typing_status")
+
     fun remoteDeletedIDs(encoded: String?): Set<String> = runCatching {
         JsonParser.parseString(encoded.orEmpty()).asJsonArray
             .mapNotNull { element -> element.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim() }

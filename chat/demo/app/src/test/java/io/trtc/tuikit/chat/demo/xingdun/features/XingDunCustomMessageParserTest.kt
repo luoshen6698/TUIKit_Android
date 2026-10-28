@@ -197,4 +197,17 @@ class XingDunCustomMessageParserTest {
 
         assertNull(message?.contactCard())
     }
+    @Test
+    fun typingBusinessEnvelopesAreControlEvenWhenMalformedOrWrapped() {
+        for (data in listOf(
+            """{"businessID":"user_typing_status","typingStatus":1,"version":0}""",
+            """{"businessID":"user_typing_status","typingStatus":2}""",
+            """{"data":{"businessID":"user_typing_status","typingStatus":"invalid"}}"""
+        )) {
+            val parsed = requireNotNull(XingDunCustomMessageParser.parse(data))
+            assertEquals("user_typing_status", parsed.type)
+            assertTrue(parsed.isControl)
+        }
+    }
+
 }

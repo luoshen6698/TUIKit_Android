@@ -284,4 +284,19 @@ class TypingIndicatorControllerTest {
         main.drain()
         assertFalse("stop clears existing work; accepted pre-stop callback is obsolete", controller.typingState.value)
     }
+    @Test fun `invalid Store controls cannot arm activity while ordinary business custom still can`() {
+        val controller = obtain()
+        val invalid = control(true, 999).copy(messagePayload = CustomMessagePayload(
+            customData = """{"businessID":"user_typing_status","typingStatus":2}"""))
+        runtime.event(invalid)
+        controller.sendTypingStatus(true)
+        assertTrue("Invalid live Store control must not arm recent activity", runtime.sends.isEmpty())
+        runtime.snapshot(listOf(invalid))
+        controller.sendTypingStatus(true)
+        assertTrue("Invalid history control must not arm recent activity", runtime.sends.isEmpty())
+        runtime.event(invalid.copy(messagePayload = CustomMessagePayload(customData = """{"type":"contact_card","user_id":"card-user"}""")))
+        controller.sendTypingStatus(true)
+        assertEquals(listOf(true), runtime.statuses())
+    }
+
 }

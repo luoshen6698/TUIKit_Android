@@ -2,6 +2,7 @@ package io.trtc.tuikit.chat.uikit.components.search.viewmodel
 
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
 import io.trtc.tuikit.atomicxcore.api.message.MessageStatus
+import io.trtc.tuikit.chat.uikit.components.messagelist.typing.TypingMessageProtocol
 import io.trtc.tuikit.atomicxcore.api.search.MessageSearchResultItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,11 +23,12 @@ object SearchMessageVisibility {
 
     /** One synchronous batch, including the existing mapper, before the app verifies its source again. */
     fun mapForDisplay(conversationID: String, messages: List<MessageInfo>, mapper: (List<MessageInfo>) -> List<MessageInfo>): List<MessageInfo> {
+        val visible = messages.filterNot(TypingMessageProtocol::isTypingMessage)
         val display = displayProvider
-        if (display != null) return try { display(conversationID, messages, mapper) }
+        if (display != null) return try { display(conversationID, visible, mapper) }
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (_: Exception) { emptyList() } // A failed authority snapshot never falls back to visible rows.
-        return mapper(redactQuotes(conversationID, messages.filterNot { isDeleted(conversationID, it.msgID) }))
+        return mapper(redactQuotes(conversationID, visible.filterNot { isDeleted(conversationID, it.msgID) }))
     }
 
     private val searchVerificationFailedState = MutableStateFlow(false)
@@ -50,11 +52,12 @@ object SearchMessageVisibility {
     fun invalidate() { revisionState.update { it + 1 } }
 
     suspend fun authoritativeMessages(conversationID: String, messages: List<MessageInfo>): List<MessageInfo> =
-        (provider?.invoke(conversationID, messages) ?: messages).filterNot { isDeleted(conversationID, it.msgID) }
+        (provider?.invoke(conversationID, messages.filterNot(TypingMessageProtocol::isTypingMessage)) ?: messages)
+            .filterNot { TypingMessageProtocol.isTypingMessage(it) || isDeleted(conversationID, it.msgID) }
 
     /** An action on a retained source snapshot needs a fresh successful read, unlike an already displayed safe row. */
     suspend fun messagesForAction(conversationID: String, messages: List<MessageInfo>): List<MessageInfo> {
-        if (!conversationID.startsWith("group_")) return messages
+        if (!conversationID.startsWith("group_")) return messages.filterNot(TypingMessageProtocol::isTypingMessage)
         val session = currentSessionKey() ?: error("Missing authentication instance")
         val checked = authoritativeMessages(conversationID, messages)
         check(session == currentSessionKey() && !verificationFailureProvider(conversationID)) { "Source verification unavailable" }
@@ -96,13 +99,14 @@ object SearchMessageVisibility {
     internal fun publishVerificationFailure(failed: Boolean) { searchVerificationFailedState.value = failed }
 
     private suspend fun filterResults(results: List<MessageSearchResultItem>, sourceSession: String?, publishFailure: Boolean): List<MessageSearchResultItem> {
-        val filter = provider ?: return results
+        val filter = provider ?: return filterKnown(results)
         val groupBatch = results.any { it.conversationID.startsWith("group_") }
         fun isCurrent() = !groupBatch || (sourceSession != null && sourceSession == currentSessionKey())
         if (!isCurrent()) return emptyList()
         val visible = results.mapNotNull { result ->
             if (!isCurrent()) return emptyList()
-            val visible = filter(result.conversationID, result.messageList)
+            val visible = filter(result.conversationID, result.messageList.filterNot(TypingMessageProtocol::isTypingMessage))
+                .filterNot(TypingMessageProtocol::isTypingMessage)
             if (!isCurrent()) return emptyList()
             if (visible.isEmpty()) null else result.copy(
                 messageList = visible,

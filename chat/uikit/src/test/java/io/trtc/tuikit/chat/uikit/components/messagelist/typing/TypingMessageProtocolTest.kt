@@ -27,4 +27,20 @@ class TypingMessageProtocolTest {
         assertEquals(true, TypingMessageProtocol.parseTypingStatus("""{"businessID":"user_typing_status","actionParam":"EIMAMSG_InputStatus_Ing"}"""))
         assertEquals(false, TypingMessageProtocol.parseTypingStatus("""{"businessID":"user_typing_status","actionParam":"EIMAMSG_InputStatus_End"}"""))
     }
+    @Test fun `recognized typing envelopes stay hidden even when status cannot be applied`() {
+        val invalid = listOf(
+            """{"businessID":"user_typing_status","typingStatus":2}""",
+            """{"businessID":"user_typing_status","typingStatus":"bad"}""",
+            """{"businessID":"user_typing_status","typingStatus":1,"version":1}""",
+            """{"data":{"businessID":"user_typing_status","typingStatus":1,"version":0}}"""
+        )
+        invalid.forEach { data ->
+            val message = io.trtc.tuikit.atomicxcore.api.message.MessageInfo(
+                messageType = io.trtc.tuikit.atomicxcore.api.message.MessageType.CUSTOM,
+                messagePayload = io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload(customData = data))
+            assertTrue("Control must never become ordinary content: $data", TypingMessageProtocol.isTypingMessage(message))
+            assertNull("Hidden control need not be a valid state update", TypingMessageProtocol.parseTypingStatus(message))
+        }
+    }
+
 }

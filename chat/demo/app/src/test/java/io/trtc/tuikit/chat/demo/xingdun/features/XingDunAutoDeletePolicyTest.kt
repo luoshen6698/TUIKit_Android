@@ -55,4 +55,15 @@ class XingDunAutoDeletePolicyTest {
         assertFalse(XingDunAutoDeletePolicy.shouldApplyRemote(4, 3))
         assertFalse(XingDunAutoDeletePolicy.shouldApplyRemote(0, 0))
     }
+    @Test
+    fun `typing envelopes never enter expiry tracking but business messages keep ordinary TTL behavior`() {
+        val control = requireNotNull(XingDunCustomMessageParser.parse(
+            """{"businessID":"user_typing_status","typingStatus":2}"""))
+        assertTrue(XingDunAutoDeletePolicy.protectsControlFromExpiry(control.type))
+        for (type in listOf("contact_card", "redpacket", "remote_delete", null)) {
+            assertFalse(XingDunAutoDeletePolicy.protectsControlFromExpiry(type))
+        }
+        assertTrue(XingDunAutoDeletePolicy.isExpired(start / 1000, 120, true, effective, start + 600_000))
+    }
+
 }

@@ -42,9 +42,26 @@ object TypingMessageProtocol {
         return json.toString()
     }
 
-    fun isTypingMessage(message: MessageInfo): Boolean {
-        return parseTypingStatus(message) != null
-    }
+    fun isTypingMessage(message: MessageInfo): Boolean =
+        message.messageType == MessageType.CUSTOM &&
+            isTypingControlData((message.messagePayload as? CustomMessagePayload)?.customData)
+
+    // Content filtering recognizes the envelope even when its state is invalid or newer.
+    // Only parseTypingStatus may turn a control into a live typing update.
+    fun isTypingControlData(data: String?): Boolean = runCatching {
+        val root = JsonParser.parseString(data).asJsonObject
+        fun matches(json: JsonObject): Boolean = json.get("businessID")?.let {
+            it.isJsonPrimitive && it.asJsonPrimitive.isString && it.asString == BUSINESS_ID
+        } == true
+        if (matches(root)) true else root.get("data")?.let { nested ->
+            when {
+                nested.isJsonObject -> matches(nested.asJsonObject)
+                nested.isJsonPrimitive && nested.asJsonPrimitive.isString ->
+                    matches(JsonParser.parseString(nested.asString).asJsonObject)
+                else -> false
+            }
+        } ?: false
+    }.getOrDefault(false)
 
     fun parseTypingStatus(message: MessageInfo): Boolean? {
         if (message.messageType != MessageType.CUSTOM) return null
@@ -57,6 +74,10 @@ object TypingMessageProtocol {
             val json = JsonParser.parseString(data).asJsonObject
             val businessID = json.get("businessID")
             if (businessID?.isJsonPrimitive != true || !businessID.asJsonPrimitive.isString || businessID.asString != BUSINESS_ID) return null
+            if (json.has("version")) {
+                val version = json.get("version")
+                if (!version.isJsonPrimitive || !version.asJsonPrimitive.isNumber || version.asDouble != 0.0) return null
+            }
             if (json.has("typingStatus")) {
                 val value = json.get("typingStatus")
                 if (!value.isJsonPrimitive || !value.asJsonPrimitive.isNumber) return null
@@ -260,7 +281,7 @@ internal class TypingIndicatorController private constructor(
         val identity = currentLoginIdentity()
         val loggedIn = isLoggedIn()
         val lastPeerMessageTimeSec = list.lastOrNull {
-            receiveGate.acceptsStoreActivity(it.from.userID, it.isSentBySelf,
+            !TypingMessageProtocol.isTypingMessage(it) && receiveGate.acceptsStoreActivity(it.from.userID, it.isSentBySelf,
                 TypingMessageProtocol.parseTypingStatus(it), identity, loggedIn)
         }?.timestamp ?: return
         val timeMs = lastPeerMessageTimeSec * 1000L
@@ -270,7 +291,8 @@ internal class TypingIndicatorController private constructor(
     }
 
     private fun handleNewMessage(message: MessageInfo) {
-        if (destroyed || !receiveGate.acceptsStoreActivity(message.from.userID, message.isSentBySelf,
+        if (destroyed || TypingMessageProtocol.isTypingMessage(message) ||
+            !receiveGate.acceptsStoreActivity(message.from.userID, message.isSentBySelf,
                 TypingMessageProtocol.parseTypingStatus(message), currentLoginIdentity(), isLoggedIn())) return
         lastPeerMessageTimeMs = nowMillis()
     }

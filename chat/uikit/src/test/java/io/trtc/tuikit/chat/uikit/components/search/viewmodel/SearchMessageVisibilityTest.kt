@@ -228,4 +228,41 @@ class SearchMessageVisibilityTest {
         assertEquals(listOf("last", "first"), SearchMessageVisibility.mapForDisplay("group_g", rows, mapper::map).map { it.msgID })
         assertEquals(5, rows.size)
     }
+    @Test fun `typing controls are absent from search display and retained C2C action snapshots`() = runBlocking {
+        val control = MessageInfo(msgID = "typing", messageType = io.trtc.tuikit.atomicxcore.api.message.MessageType.CUSTOM,
+            messagePayload = io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload(customData = """{"businessID":"user_typing_status","typingStatus":2}"""))
+        val card = control.copy(msgID = "card", messagePayload = io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload(customData = """{"type":"contact_card","nickname":"typing"}"""))
+        val packet = card.copy(msgID = "packet", messagePayload = io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload(customData = """{"type":"redpacket","packet_no":"synthetic"}"""))
+        val source = listOf(control, card, packet)
+        assertEquals(listOf("card", "packet"), SearchMessageVisibility.mapForDisplay("c2c_peer", source) { it }.map { it.msgID })
+        assertEquals(listOf("card", "packet"), SearchMessageVisibility.authoritativeMessages("c2c_peer", source).map { it.msgID })
+        assertEquals(listOf("card", "packet"), SearchMessageVisibility.messagesForAction("c2c_peer", source).map { it.msgID })
+        val result = SearchMessageVisibility.filterKnown(listOf(MessageSearchResultItem(conversationID = "c2c_peer", messageCount = 3, messageList = source))).single()
+        assertEquals(2, result.messageCount)
+        assertEquals(listOf("card", "packet"), result.messageList.map { it.msgID })
+        SearchMessageVisibility.setDisplayProvider { _, rows, mapper ->
+            assertFalse(rows.any { it.msgID == "typing" })
+            mapper(rows)
+        }
+        assertEquals(listOf("card", "packet"), SearchMessageVisibility.mapForDisplay("c2c_peer", source) { it }.map { it.msgID })
+        // Authority may return an SDK snapshot containing controls again; filter at publication too.
+        SearchMessageVisibility.setProvider { _, rows -> rows + control }
+        assertEquals(listOf("card", "packet"), SearchMessageVisibility.authoritativeMessages("c2c_peer", source).map { it.msgID })
+        val asynchronous = SearchMessageVisibility.filter(listOf(MessageSearchResultItem(conversationID = "c2c_peer", messageCount = 3, messageList = source))).single()
+        assertEquals(listOf("card", "packet"), asynchronous.messageList.map { it.msgID })
+        assertEquals(2, asynchronous.messageCount)
+        assertEquals(3, source.size)
+    }
+
+    @Test fun `forward coordinator excludes typing controls while keeping business custom messages`() {
+        val control = MessageInfo(msgID = "typing", messageType = io.trtc.tuikit.atomicxcore.api.message.MessageType.CUSTOM,
+            messagePayload = io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload(customData = """{"businessID":"user_typing_status","typingStatus":2}"""))
+        val card = control.copy(msgID = "card", messagePayload = io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload(customData = """{"type":"contact_card","nickname":"typing"}"""))
+        val coordinator = io.trtc.tuikit.chat.uikit.components.messagelist.viewmodel.MessageForwardCoordinator(
+            currentVisibleMessages = { listOf(control, card) },
+            offlinePushInfoFactory = { io.trtc.tuikit.atomicxcore.api.message.OfflinePushInfo() })
+        assertEquals(listOf("card"), coordinator.prepareMessagesForForward(listOf(control, card), "c2c_target", false).map { it.msgID })
+        assertTrue(coordinator.prepareMessagesForForward(listOf(control), "c2c_target", false).isEmpty())
+    }
+
 }
