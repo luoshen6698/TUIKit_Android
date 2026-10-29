@@ -81,10 +81,14 @@ internal class XingDunGroupSourceProfileLoader(
             return false
         }
         val self = targetUserID == scope.userID
-        val profile = if (self) loadSelfProfile() else loadProfile(targetUserID)
+        val loadedProfile = if (self) loadSelfProfile() else loadProfile(targetUserID)
         currentCoroutineContext().ensureActive()
         if (!currentOrConceal(ticket, scope, retaining)) return false
-        check(profile.timUserId.trim() == targetUserID || !self && profile.timUserId.isBlank())
+        check(loadedProfile.timUserId.trim() == targetUserID || !self && loadedProfile.timUserId.isBlank())
+        // Public visibility controls other viewers; the owner's endpoint returns their own fields.
+        val profile = if (self) loadedProfile.copy(profileVisibility = JsonObject().apply {
+            XingDunProfileVisibility.fields.forEach { addProperty(it, true) }
+        }) else loadedProfile
         // The authenticated owner's own profile is not a friendship or a private-chat grant.
         val relationship = if (self) JsonObject().apply {
             addProperty("tim_user_id", scope.userID)

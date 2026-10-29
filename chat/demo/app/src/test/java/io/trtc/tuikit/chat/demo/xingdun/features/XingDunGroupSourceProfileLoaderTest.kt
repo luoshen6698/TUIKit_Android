@@ -22,6 +22,30 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class XingDunGroupSourceProfileLoaderTest {
+    @Test fun `own profile fields remain visible when the owner endpoint omits public policy`() = runBlocking {
+        val f = Fixture(target = "self")
+        assertNull(f.selfProfile.profileVisibility)
+        assertTrue(f.loader.refresh())
+        val own = (f.states.last() as XingDunGroupSourceProfileState.Loaded).profile
+        for (field in XingDunProfileVisibility.fields) {
+            assertTrue(field, XingDunProfileVisibility.visible(own.profileVisibility, field))
+        }
+        assertNull(f.selfProfile.profileVisibility)
+    }
+
+    @Test fun `nonself public policy stays hidden without applying own visibility`() = runBlocking {
+        val f = Fixture()
+        val policy = JsonObject().apply { XingDunProfileVisibility.fields.forEach { addProperty(it, false) } }
+        f.profile = f.profile.copy(profileVisibility = policy)
+        assertTrue(f.loader.refresh())
+        val other = (f.states.last() as XingDunGroupSourceProfileState.Loaded).profile
+        for (field in XingDunProfileVisibility.fields) {
+            assertFalse(field, XingDunProfileVisibility.visible(other.profileVisibility, field))
+            assertFalse(field, policy.get(field).asBoolean)
+        }
+        assertEquals(0, f.selfProfileReads)
+    }
+
     @Test fun `self target loads own profile without requiring a friendship or discovery`() = runBlocking {
         val f = Fixture(target = "self")
         f.profileError = IllegalStateException("Friend detail requires a friendship")
