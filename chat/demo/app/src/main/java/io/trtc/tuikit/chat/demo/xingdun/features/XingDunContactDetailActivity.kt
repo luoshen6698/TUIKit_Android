@@ -99,6 +99,12 @@ class XingDunContactDetailActivity : BaseActivity() {
                     mapOf("tim_user_id" to target), XingDunContactDetail::class.java,
                 )
             },
+            loadSelfProfile = {
+                XingDunSessionManager.apiClient().get(
+                    checkNotNull(XingDunSessionManager.currentSession()), "user/profile",
+                    emptyMap(), XingDunContactDetail::class.java,
+                )
+            },
             loadRelationship = { keyword ->
                 XingDunSessionManager.apiClient().getNullable(
                     checkNotNull(XingDunSessionManager.currentSession()), "user/searchForFriend",

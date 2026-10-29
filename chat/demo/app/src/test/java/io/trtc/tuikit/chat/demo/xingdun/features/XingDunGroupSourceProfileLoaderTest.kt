@@ -22,6 +22,83 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class XingDunGroupSourceProfileLoaderTest {
+    @Test fun `self target loads own profile without requiring a friendship or discovery`() = runBlocking {
+        val f = Fixture(target = "self")
+        f.profileError = IllegalStateException("Friend detail requires a friendship")
+        f.relationshipError = IllegalStateException("Self is not a friend discovery")
+        assertTrue(f.loader.refresh())
+        val loaded = f.states.last() as XingDunGroupSourceProfileState.Loaded
+        assertEquals("self", loaded.profile.timUserId)
+        assertEquals("Own profile", loaded.profile.nickname)
+        assertTrue(loaded.relationship!!.get("is_self").asBoolean)
+        assertEquals("self", loaded.relationship.get("relationship_status").asString)
+        assertEquals(1, f.selfProfileReads)
+        assertEquals(0, f.profileReads)
+        assertEquals(0, f.relationshipReads)
+    }
+
+    @Test fun `own profile must return the exact authenticated owner`() = runBlocking {
+        for (returnedID in listOf("", "other-user")) {
+            val f = Fixture(target = "self")
+            f.selfProfile = f.selfProfile.copy(timUserId = returnedID)
+            assertFalse(f.loader.refresh())
+            assertSame(XingDunGroupSourceProfileState.Unavailable, f.states.last())
+            assertEquals(0, f.profileReads)
+            assertEquals(0, f.relationshipReads)
+        }
+    }
+
+    @Test fun `own profile failure conceals fields and retries without public detail fallback`() = runBlocking {
+        val f = Fixture(target = "self")
+        f.selfProfileError = IllegalStateException("Synthetic own profile outage")
+        assertFalse(f.loader.refresh())
+        assertSame(XingDunGroupSourceProfileState.Unavailable, f.states.last())
+        f.selfProfileError = null
+        assertTrue(f.loader.refresh())
+        assertTrue(f.states.last() is XingDunGroupSourceProfileState.Loaded)
+        assertEquals(2, f.selfProfileReads)
+        assertEquals(0, f.profileReads)
+        assertEquals(0, f.relationshipReads)
+    }
+
+    @Test fun `changed authentication scope cannot publish a pending own profile`() = runBlocking {
+        for (change in listOf("tenant", "app", "account", "generation", "page")) {
+            val f = Fixture(target = "self")
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            f.beforeSelfProfile = { entered.complete(Unit); release.await() }
+            val request = launch(start = CoroutineStart.UNDISPATCHED) { f.loader.refresh() }
+            withTimeout(1_000) { entered.await() }
+            when (change) {
+                "tenant" -> f.scope = f.scope!!.copy(companyCode = "other")
+                "app" -> f.scope = f.scope!!.copy(sdkAppID = 456)
+                "account" -> f.scope = f.scope!!.copy(userID = "replacement")
+                "generation" -> f.scope = f.scope!!.copy(generation = 2)
+                else -> f.active = false
+            }
+            release.complete(Unit)
+            request.join()
+            assertFalse(change, f.states.any { it is XingDunGroupSourceProfileState.Loaded })
+            assertEquals(0, f.relationshipReads)
+        }
+    }
+
+    @Test fun `own profile cannot authorize a queued friend recommendation`() = runBlocking {
+        val f = Fixture(target = "self")
+        f.loader.queueRecommendation("c2c-recipient")
+        assertTrue(f.loader.refresh())
+        assertTrue(f.recommended.isEmpty())
+        assertEquals(1, f.recommendationFailures)
+    }
+
+    @Test fun `nonself detail denial never falls back to own private fields`() = runBlocking {
+        val f = Fixture()
+        f.profileError = IllegalStateException("Synthetic friend detail denial")
+        assertFalse(f.loader.refresh())
+        assertSame(XingDunGroupSourceProfileState.Unavailable, f.states.last())
+        assertEquals(0, f.selfProfileReads)
+    }
+
     @Test fun `refresh conceals previously visible profile before awaiting current authority`() = runBlocking {
         val f = Fixture()
         f.loader.refresh()
@@ -478,14 +555,19 @@ class XingDunGroupSourceProfileLoaderTest {
         var active = true
         var group = XingDunGroupDetail(groupId = "group-1", viewMemberCardMode = 1)
         var profile = XingDunContactDetail(timUserId = target, signature = "Synthetic private field")
+        var selfProfile = XingDunContactDetail(timUserId = "self", nickname = "Own profile")
         var relationship = JsonObject().apply { addProperty("relationship_status", "friend"); addProperty("tim_user_id", target) }
         var groupReads = 0
         var profileReads = 0
+        var selfProfileReads = 0
+        var relationshipReads = 0
         var groupError: Exception? = null
         var profileError: Exception? = null
+        var selfProfileError: Exception? = null
         var relationshipError: Exception? = null
         var beforeGroup: suspend () -> Unit = {}
         var beforeProfile: suspend () -> Unit = {}
+        var beforeSelfProfile: suspend () -> Unit = {}
         var beforeRelationship: suspend () -> Unit = {}
         val states = mutableListOf<XingDunGroupSourceProfileState>()
         val recommended = mutableListOf<String>()
@@ -495,7 +577,8 @@ class XingDunGroupSourceProfileLoaderTest {
             groupID = groupID, targetUserID = target, currentScope = { scope },
             loadGroup = { groupReads++; beforeGroup(); groupError?.let { throw it }; group },
             loadProfile = { profileReads++; beforeProfile(); profileError?.let { throw it }; profile },
-            loadRelationship = { beforeRelationship(); relationshipError?.let { throw it }; relationship },
+            loadSelfProfile = { selfProfileReads++; beforeSelfProfile(); selfProfileError?.let { throw it }; selfProfile },
+            loadRelationship = { relationshipReads++; beforeRelationship(); relationshipError?.let { throw it }; relationship },
             publish = { states += it }, isActive = { active },
             recommend = { recommended += it; sentSignature = (states.last() as XingDunGroupSourceProfileState.Loaded).profile.signature },
             showRecommendationFailure = { recommendationFailures++ },

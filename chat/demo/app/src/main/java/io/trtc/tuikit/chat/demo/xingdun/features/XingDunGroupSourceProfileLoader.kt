@@ -24,6 +24,7 @@ internal class XingDunGroupSourceProfileLoader(
     private val currentScope: () -> XingDunGroupMemberPreviewScope?,
     private val loadGroup: suspend (String) -> XingDunGroupDetail,
     private val loadProfile: suspend (String) -> XingDunContactDetail,
+    private val loadSelfProfile: suspend () -> XingDunContactDetail,
     private val loadRelationship: suspend (String) -> JsonObject?,
     private val publish: (XingDunGroupSourceProfileState) -> Unit,
     private val isActive: () -> Boolean,
@@ -79,11 +80,17 @@ internal class XingDunGroupSourceProfileLoader(
             rejectRecommendation()
             return false
         }
-        val profile = loadProfile(targetUserID)
+        val self = targetUserID == scope.userID
+        val profile = if (self) loadSelfProfile() else loadProfile(targetUserID)
         currentCoroutineContext().ensureActive()
         if (!currentOrConceal(ticket, scope, retaining)) return false
-        check(profile.timUserId.isBlank() || profile.timUserId.trim() == targetUserID)
-        val relationship = loadRelationship(profile.customId?.trim()?.takeIf(String::isNotEmpty) ?: targetUserID)
+        check(profile.timUserId.trim() == targetUserID || !self && profile.timUserId.isBlank())
+        // The authenticated owner's own profile is not a friendship or a private-chat grant.
+        val relationship = if (self) JsonObject().apply {
+            addProperty("tim_user_id", scope.userID)
+            addProperty("is_self", true)
+            addProperty("relationship_status", "self")
+        } else loadRelationship(profile.customId?.trim()?.takeIf(String::isNotEmpty) ?: targetUserID)
         currentCoroutineContext().ensureActive()
         if (!currentOrConceal(ticket, scope, retaining)) return false
         val relationshipTarget = relationship?.get("tim_user_id")?.takeUnless { it.isJsonNull }?.asString?.trim()
