@@ -71,6 +71,11 @@ class XingDunContactDetailActivity : BaseActivity() {
     private var isOperating = false
     private var operationError: String? = null
     private var relationshipState: String = RELATIONSHIP_UNKNOWN
+    private var independentResumed = false
+    private var independentLoader: XingDunIndependentProfileLoader? = null
+    private var independentLoadJob: Job? = null
+    private var independentPickerScope: XingDunGroupMemberPreviewScope? = null
+    private var pendingIndependentRecommendation: Pair<XingDunGroupMemberPreviewScope, String>? = null
     private var groupSourceResumed = false
     private var groupSourcePageScope: XingDunGroupMemberPreviewScope? = null
     private var groupSourceState: XingDunGroupSourceProfileState = XingDunGroupSourceProfileState.Loading
@@ -132,12 +137,20 @@ class XingDunContactDetailActivity : BaseActivity() {
         Toast.makeText(this, R.string.xingdun_contact_detail_remark_updated, Toast.LENGTH_SHORT).show()
     }
     private val contactForwardPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val pickerScope = independentPickerScope
+        independentPickerScope = null
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
         val conversationID = result.data
             ?.getStringExtra(XingDunContactForwardPickerActivity.EXTRA_RESULT_CONVERSATION_ID)
             .orEmpty()
         if (conversationID.isNotBlank()) {
-            if (sourceGroupID == null) sendContactCard(listOf(conversationID))
+            if (sourceGroupID == null) {
+                // ActivityResult arrives before onResume; re-read privacy before sending a card.
+                if (pickerScope != null && pickerScope == profileScope()) {
+                    pendingIndependentRecommendation = pickerScope to conversationID
+                    if (independentResumed) loadIndependentDetail()
+                }
+            }
             else {
                 groupSourceLoader.queueRecommendation(conversationID)
                 if (groupSourceResumed) startGroupSourceRefresh()
@@ -156,8 +169,7 @@ class XingDunContactDetailActivity : BaseActivity() {
         detail = fallbackDetail()
         buildPage()
         if (sourceGroupID == null) {
-            render()
-            loadIndependentDetail()
+            applyIndependentState(XingDunIndependentProfileState(null, RELATIONSHIP_UNKNOWN, loading = true))
         } else {
             groupSourcePageScope = profileScope()
             // Capture this page's owner before returning from onCreate.
@@ -168,6 +180,10 @@ class XingDunContactDetailActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (sourceGroupID == null && ::content.isInitialized && !isFinishing) {
+            independentResumed = true
+            loadIndependentDetail()
+        }
         if (sourceGroupID != null && ::content.isInitialized && !isFinishing) {
             groupSourceResumed = true
             startGroupSourceRefresh()
@@ -175,6 +191,15 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     override fun onPause() {
+        if (sourceGroupID == null && ::content.isInitialized) {
+            independentResumed = false
+            independentLoader?.invalidate()
+            independentLoadJob?.cancel()
+            independentLoadJob = null
+            sourceMoreMenu?.dismiss()
+            sourceDialog?.dismiss()
+            applyIndependentState(XingDunIndependentProfileState(null, RELATIONSHIP_UNKNOWN, loading = true))
+        }
         if (sourceGroupID != null && ::content.isInitialized) {
             groupSourceResumed = false
             groupSourceViewRevision++
@@ -368,77 +393,81 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun loadIndependentDetail() {
-        loading.visibility = View.VISIBLE
+        if (!independentResumed || isFinishing || isDestroyed) return
+        independentLoader?.invalidate()
+        independentLoadJob?.cancel()
         val session = XingDunSessionManager.currentSession()
         if (session == null) {
-            loading.visibility = View.GONE
-            if (::detailRefresh.isInitialized) detailRefresh.isRefreshing = false
-            showLoadFailure(getString(R.string.xingdun_session_expired))
+            applyIndependentState(XingDunIndependentProfileState(null, RELATIONSHIP_UNKNOWN, failed = true))
             return
         }
-        lifecycleScope.launch {
-            val generation = XingDunSessionManager.currentAuthenticationGeneration()
-            val detailResult = runCatching {
-                XingDunSessionManager.apiClient().get<XingDunContactDetail>(
-                    session,
-                    "user/detail",
-                    mapOf("tim_user_id" to timUserID),
-                    XingDunContactDetail::class.java
+        val loader = XingDunIndependentProfileLoader(
+            targetUserID = timUserID,
+            fallback = fallbackDetail(),
+            initialRelationship = intent.getStringExtra(EXTRA_RELATIONSHIP).orEmpty().ifBlank { RELATIONSHIP_UNKNOWN },
+            currentScope = ::profileScope,
+            currentStorageRevision = { XingDunSessionManager.currentMessageReadStamp()?.storageRevision },
+            isActive = { independentResumed && !isFinishing && !isDestroyed },
+            loadProfile = {
+                XingDunSessionManager.apiClient().get(
+                    session, "user/detail", mapOf("tim_user_id" to timUserID), XingDunContactDetail::class.java,
                 )
-            }
-            detailResult.onSuccess { response ->
-                if (generation == null || generation != XingDunSessionManager.currentAuthenticationGeneration() ||
-                    XingDunSessionManager.currentSession()?.let { it.companyCode == session.companyCode && it.timUserId == session.timUserId && it.sdkAppId == session.sdkAppId } != true) return@launch
-                if (relationshipState == RELATIONSHIP_FRIEND || relationshipState == RELATIONSHIP_BLOCKED) {
-                    relationshipState = if (response.isBlacklist) RELATIONSHIP_BLOCKED else RELATIONSHIP_FRIEND
-                }
-                detail = response.copy(
-                    timUserId = response.timUserId.trim().ifEmpty { timUserID },
-                    customId = response.customId,
-                    nickname = response.nickname.normalized() ?: detail?.nickname,
-                    avatar = response.avatar.normalized() ?: detail?.avatar
+            },
+            loadRelationship = { keyword ->
+                XingDunSessionManager.apiClient().getNullable(
+                    session, "user/searchForFriend", mapOf("keyword" to keyword), JsonObject::class.java,
                 )
+            },
+            publish = ::applyIndependentState,
+        )
+        independentLoader = loader
+        independentLoadJob = lifecycleScope.launch { loader.refresh() }
+    }
+
+    private fun applyIndependentState(state: XingDunIndependentProfileState) {
+        detail = state.profile
+        relationshipState = state.relationship
+        operationError = null
+        if (state.profile != null) render()
+        else {
+            content.removeAllViews()
+            chatButton.visibility = View.GONE
+            more.isEnabled = false
+            more.alpha = 0f
+            if (state.failed) showLoadFailure(getString(R.string.xingdun_action_failed))
+            else content.addView(TextView(this).apply {
+                setText(R.string.xingdun_loading)
+                gravity = Gravity.CENTER
+                setPadding(30.dp(), 80.dp(), 30.dp(), 30.dp())
+                setTextColor(TEXT_PRIMARY)
+            })
+        }
+        loading.visibility = if (state.loading) View.VISIBLE else View.GONE
+        detailRefresh.isRefreshing = false
+        if (!state.loading) {
+            val pending = pendingIndependentRecommendation
+            pendingIndependentRecommendation = null
+            if (pending != null && pending.first == profileScope() && independentResumed) {
+                if (state.profile != null && isFriendRelationship() && independentLoader?.ownsSnapshot() == true) {
+                    sendContactCard(listOf(pending.second))
+                } else Toast.makeText(this, R.string.xingdun_contact_detail_recommend_failed, Toast.LENGTH_SHORT).show()
             }
-            if (relationshipState == RELATIONSHIP_UNKNOWN) {
-                runCatching {
-                    XingDunSessionManager.apiClient().getNullable<JsonObject>(
-                        session,
-                        "user/searchForFriend",
-                        mapOf("keyword" to (detail?.customId.normalized() ?: fallbackCustomID ?: timUserID)),
-                        JsonObject::class.java,
-                    )
-                }.onSuccess { profile ->
-                    if (profile != null) applyRelationshipProfile(profile)
-                }.onFailure { error ->
-                    if (detail == null) showLoadFailure(error.localizedMessage.orEmpty())
-                }
-            } else if (detailResult.isFailure && detail == null) {
-                showLoadFailure(detailResult.exceptionOrNull()?.localizedMessage.orEmpty())
-            }
-            render()
-            loading.visibility = View.GONE
-            detailRefresh.isRefreshing = false
         }
     }
 
     private fun applyRelationshipProfile(profile: JsonObject) {
-        relationshipState = if (profile.boolean("is_self")) {
-            RELATIONSHIP_SELF
-        } else {
-            profile.string("relationship_status") ?: RELATIONSHIP_NONE
-        }
-        val current = detail ?: fallbackDetail()
-        detail = current.copy(
-            id = profile.int("id") ?: current.id,
-            customId = profile.string("custom_id") ?: current.customId,
-            nickname = profile.string("nickname") ?: current.nickname,
-            avatar = profile.string("avatar") ?: current.avatar,
-            signature = profile.string("signature") ?: current.signature,
-            profileVisibility = if (profile.has("profile_visibility")) profile.get("profile_visibility")?.takeIf { it.isJsonObject }?.asJsonObject else current.profileVisibility,
-            accountType = if (profile.has("account_type")) profile.string("account_type") else "normal",
-            timUserId = profile.string("tim_user_id") ?: current.timUserId.ifBlank { timUserID },
-            isBlacklist = relationshipState == RELATIONSHIP_BLOCKED,
+        val merged = mergeXingDunRelationshipProfile(
+            detail ?: fallbackDetail(), profile, timUserID,
+            authoritativeOwnProfile = sourceGroupID != null && timUserID == profileScope()?.userID,
         )
+        detail = merged.first
+        relationshipState = merged.second
+    }
+
+    private fun hasCurrentIndependentProfile(): Boolean {
+        if (independentResumed && detail != null && independentLoader?.ownsSnapshot() == true) return true
+        loadIndependentDetail()
+        return false
     }
 
     private fun render() {
@@ -579,6 +608,7 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun openBottomAction() {
+        if (sourceGroupID == null && !hasCurrentIndependentProfile()) return
         if (sourceGroupID != null && (!groupSourceResumed ||
             groupSourceState !is XingDunGroupSourceProfileState.Loaded || profileScope() != groupSourcePageScope)) {
             loadDetail()
@@ -618,7 +648,7 @@ class XingDunContactDetailActivity : BaseActivity() {
         available: () -> Boolean,
         onAllowed: () -> Unit,
     ): Boolean {
-        val group = sourceGroupID ?: return false
+        val group = sourceGroupID ?: return !hasCurrentIndependentProfile()
         if (isOperating || !groupSourceResumed || isFinishing || isDestroyed) return true
         val scope = profileScope()
         if (scope == null || scope != groupSourcePageScope || groupSourceState !is XingDunGroupSourceProfileState.Loaded) {
@@ -796,7 +826,6 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun trackGroupSourceDialog(dialog: AlertDialog) {
-        if (sourceGroupID == null) return
         sourceDialog?.dismiss()
         sourceDialog = dialog
         dialog.setOnDismissListener { if (sourceDialog === dialog) sourceDialog = null }
@@ -827,7 +856,7 @@ class XingDunContactDetailActivity : BaseActivity() {
             }
             setOnDismissListener { if (sourceMoreMenu === it) sourceMoreMenu = null }
         }
-        if (sourceGroupID != null) sourceMoreMenu = popup
+        sourceMoreMenu = popup
         popup.show()
     }
 
@@ -850,12 +879,14 @@ class XingDunContactDetailActivity : BaseActivity() {
     }
 
     private fun showRecommendPickerAuthorized() {
+        if (sourceGroupID == null) independentPickerScope = profileScope()
         contactForwardPicker.launch(
             XingDunContactForwardPickerActivity.intent(this, "c2c_$timUserID")
         )
     }
 
     private fun sendContactCard(conversationIDs: List<String>) {
+        if (sourceGroupID == null && !hasCurrentIndependentProfile()) return
         val current = detail ?: return
         if (conversationIDs.isEmpty()) return
         val payload = JsonObject().apply {
