@@ -406,7 +406,9 @@ class XingDunContactDetailActivity : BaseActivity() {
             fallback = fallbackDetail(),
             initialRelationship = intent.getStringExtra(EXTRA_RELATIONSHIP).orEmpty().ifBlank { RELATIONSHIP_UNKNOWN },
             currentScope = ::profileScope,
-            currentStorageRevision = { XingDunSessionManager.currentMessageReadStamp()?.storageRevision },
+            currentCredentials = {
+                XingDunIndependentProfileCredentials.fromSession(XingDunSessionManager.currentSession())
+            },
             isActive = { independentResumed && !isFinishing && !isDestroyed },
             loadProfile = {
                 XingDunSessionManager.apiClient().get(

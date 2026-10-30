@@ -2,6 +2,7 @@ package io.trtc.tuikit.chat.demo.xingdun.features
 
 import com.google.gson.JsonObject
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunContactDetail
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -13,6 +14,36 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class XingDunIndependentProfileLoaderTest {
+    @Test fun `request binding ignores display metadata but rejects actual credential or service replacement`() = runBlocking {
+        val session = syntheticSession()
+        val binding = XingDunIndependentProfileCredentials.fromSession(session)
+        assertNotNull(binding)
+        assertEquals(binding, XingDunIndependentProfileCredentials.fromSession(session.copy(companyName = "New", nickname = "New")))
+        for (changed in listOf(
+            session.copy(accessToken = "replacement"), session.copy(tokenType = "replacement"),
+            session.copy(userSig = "replacement"), session.copy(apiBaseUrl = "https://other.invalid/"),
+        )) {
+            assertNotEquals(binding, XingDunIndependentProfileCredentials.fromSession(changed))
+            val f = Fixture()
+            f.beforeProfile = { f.session = changed }
+            f.loader.refresh()
+            assertNull(f.states.last().profile)
+            assertFalse(f.loader.ownsSnapshot())
+            assertEquals(0, f.relationshipReads)
+        }
+        assertNull(XingDunIndependentProfileCredentials.fromSession(null))
+        assertNull(XingDunIndependentProfileCredentials.fromSession(session.copy(accessToken = "")))
+        assertEquals("XingDunIndependentProfileCredentials(redacted)", binding.toString())
+    }
+    @Test fun `same credential foreground enterprise refresh does not reject a successful profile`() = runBlocking {
+        val f = Fixture(initialRelationship = "friend")
+        // Application's foreground enterprise refresh saves metadata while preserving the
+        // authenticated request credentials. The store revision alone is not their identity.
+        f.beforeProfile = { f.session = f.session!!.copy(companyName = "Refreshed company", nickname = "Refreshed nickname") }
+        f.loader.refresh()
+        assertNotNull(f.states.last().profile)
+        assertFalse(f.states.last().failed)
+    }
     @Test fun `fresh explicit empty fields cannot restore older account and signature`() {
         val old = visibleProfile()
         val fresh = relationship().apply {
@@ -63,7 +94,7 @@ class XingDunIndependentProfileLoaderTest {
 
     @Test fun `held reads cannot continue or publish under changed context or paused page`() = runBlocking {
         for (phase in listOf("detail", "discovery")) for (change in listOf(
-            "tenant", "app", "account", "generation", "storage", "logout", "pause", "invalidate", "cancel",
+            "tenant", "app", "account", "generation", "credential", "logout", "pause", "invalidate", "cancel",
         )) {
             val f = Fixture()
             val entered = CompletableDeferred<Unit>()
@@ -79,7 +110,7 @@ class XingDunIndependentProfileLoaderTest {
                 "app" -> f.scope = f.scope!!.copy(sdkAppID = 456)
                 "account" -> f.scope = f.scope!!.copy(userID = "replacement")
                 "generation" -> f.scope = f.scope!!.copy(generation = 2)
-                "storage" -> f.revision = 2
+                "credential" -> f.session = f.session!!.copy(accessToken = "synthetic-new-token")
                 "logout" -> f.scope = null
                 "pause" -> f.active = false
                 "invalidate" -> f.loader.invalidate()
@@ -129,7 +160,7 @@ class XingDunIndependentProfileLoaderTest {
 
     @Test fun `new explicit read can recover under refreshed credentials without changing actor`() = runBlocking {
         val f = Fixture()
-        f.beforeProfile = { f.scope = f.scope!!.copy(generation = 2); f.revision = 2 }
+        f.beforeProfile = { f.scope = f.scope!!.copy(generation = 2); f.session = f.session!!.copy(accessToken = "synthetic-new-token") }
         f.loader.refresh()
         assertTrue(f.states.last().failed)
         f.beforeProfile = {}
@@ -143,14 +174,14 @@ class XingDunIndependentProfileLoaderTest {
     }
 
     @Test fun `snapshot cannot authorize an action after credentials page or request change`() = runBlocking {
-        for (change in listOf("generation", "storage", "account", "pause", "invalidate", "refresh")) {
+        for (change in listOf("generation", "credential", "account", "pause", "invalidate", "refresh")) {
             val f = Fixture()
             assertFalse(f.loader.ownsSnapshot())
             f.loader.refresh()
             assertTrue(f.loader.ownsSnapshot())
             when (change) {
                 "generation" -> f.scope = f.scope!!.copy(generation = 2)
-                "storage" -> f.revision = 2
+                "credential" -> f.session = f.session!!.copy(accessToken = "synthetic-new-token")
                 "account" -> f.scope = f.scope!!.copy(userID = "other")
                 "pause" -> f.active = false
                 "invalidate" -> f.loader.invalidate()
@@ -191,7 +222,7 @@ class XingDunIndependentProfileLoaderTest {
                 "detail-target" -> f.profile = visibleProfile().copy(timUserId = "wrong")
                 "discovery-target" -> f.discoveryTarget = "wrong"
                 "null-owner" -> f.scope = null
-                else -> f.revision = null
+                else -> f.session = null
             }
             f.loader.refresh()
             assertFalse(kind, f.states.any { it.profile != null })
@@ -248,7 +279,7 @@ class XingDunIndependentProfileLoaderTest {
         var relationshipError = false
         var emptyRelationship = false
         var active = true
-        var revision: Long? = 1
+        var session: XingDunStoredSession? = syntheticSession()
         var profile = visibleProfile()
         var discoveryTarget = "target"
         var profileReads = 0
@@ -257,7 +288,7 @@ class XingDunIndependentProfileLoaderTest {
         val loader = XingDunIndependentProfileLoader(
             targetUserID = "target", fallback = fallback,
             initialRelationship = initialRelationship, currentScope = { scope },
-            isActive = { active }, currentStorageRevision = { revision },
+            isActive = { active }, currentCredentials = { XingDunIndependentProfileCredentials.fromSession(session) },
             loadProfile = { profileReads++; beforeProfile(); profile },
             loadRelationship = { relationshipReads++; beforeRelationship(); if (relationshipError) error("Synthetic discovery outage"); if (emptyRelationship) null else relationship().apply {
                 addProperty("tim_user_id", discoveryTarget)
@@ -268,6 +299,12 @@ class XingDunIndependentProfileLoaderTest {
     }
 
     companion object {
+        private fun syntheticSession() = XingDunStoredSession(
+            accessToken = "synthetic-token", tokenType = "Bearer", accessExpiresAtMillis = 1000,
+            companyCode = "synthetic", companyName = "Company", apiBaseUrl = "https://synthetic.invalid/",
+            sdkAppId = 123, timUserId = "viewer", userSig = "synthetic-user-sig",
+            userSigExpiresAtMillis = 1000, nickname = "Viewer",
+        )
         private fun visiblePolicy() = JsonObject().apply { XingDunProfileVisibility.fields.forEach { addProperty(it, true) } }
         private fun visibleProfile() = XingDunContactDetail(
             timUserId = "target", customId = "old-account", signature = "old-signature",

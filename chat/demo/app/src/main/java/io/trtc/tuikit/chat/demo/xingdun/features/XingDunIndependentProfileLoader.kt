@@ -2,6 +2,7 @@ package io.trtc.tuikit.chat.demo.xingdun.features
 
 import com.google.gson.JsonObject
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunContactDetail
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -10,6 +11,22 @@ internal data class XingDunIndependentProfileState(
     val profile: XingDunContactDetail?, val relationship: String, val loading: Boolean = false,
     val failed: Boolean = false,
 )
+
+/** Request binding only: normal foreground company/feature refreshes do not replace credentials.
+ * Values stay in memory, are never persisted here, and must not appear in diagnostics. */
+internal data class XingDunIndependentProfileCredentials(
+    private val accessToken: String, private val tokenType: String,
+    private val userSig: String, private val apiBaseURL: String,
+) {
+    override fun toString(): String = "XingDunIndependentProfileCredentials(redacted)"
+
+    companion object {
+        fun fromSession(session: XingDunStoredSession?): XingDunIndependentProfileCredentials? = session?.let {
+            if (it.accessToken.isBlank() || it.userSig.isBlank() || it.apiBaseUrl.isBlank()) null
+            else XingDunIndependentProfileCredentials(it.accessToken, it.tokenType, it.userSig, it.apiBaseUrl)
+        }
+    }
+}
 
 /** Independent detail/discovery path used by the contact Activity. */
 internal class XingDunIndependentProfileLoader(
@@ -21,11 +38,11 @@ internal class XingDunIndependentProfileLoader(
     private val loadRelationship: suspend (String) -> JsonObject?,
     private val publish: (XingDunIndependentProfileState) -> Unit,
     private val isActive: () -> Boolean = { true },
-    private val currentStorageRevision: () -> Long? = { 0L },
+    private val currentCredentials: () -> XingDunIndependentProfileCredentials?,
 ) {
     private val owner = currentScope()
     private var request = 0L
-    private var confirmed: Triple<Long, XingDunGroupMemberPreviewScope, Long>? = null
+    private var confirmed: Triple<Long, XingDunGroupMemberPreviewScope, XingDunIndependentProfileCredentials>? = null
 
     suspend fun refresh() {
         val ticket = ++request
@@ -33,8 +50,8 @@ internal class XingDunIndependentProfileLoader(
         if (!isActive()) return
         publish(XingDunIndependentProfileState(null, "unknown", loading = true))
         val scope = currentScope()
-        val storageRevision = currentStorageRevision()
-        if (scope == null || storageRevision == null || !sameOwner(scope) ||
+        val credentials = currentCredentials()
+        if (scope == null || credentials == null || !sameOwner(scope) ||
             scope.companyCode.isBlank() || scope.sdkAppID <= 0 || scope.userID.isBlank() || targetUserID.isBlank()) {
             publish(XingDunIndependentProfileState(null, "unknown", failed = true))
             return
@@ -44,7 +61,7 @@ internal class XingDunIndependentProfileLoader(
                 throw cancelled
             } catch (_: Exception) { null }
             currentCoroutineContext().ensureActive()
-            if (!currentOrConceal(ticket, scope, storageRevision)) return
+            if (!currentOrConceal(ticket, scope, credentials)) return
             check(profile?.timUserId.isNullOrBlank() || profile?.timUserId?.trim() == targetUserID)
             val knownFriend = initialRelationship == "friend" || initialRelationship == "blocked"
             // A failed friend read can only fall back to a fresh public discovery response.
@@ -53,7 +70,7 @@ internal class XingDunIndependentProfileLoader(
                 loadRelationship(profile?.customId.normalized() ?: fallback.customId.normalized() ?: targetUserID)
             } else null
             currentCoroutineContext().ensureActive()
-            if (!currentOrConceal(ticket, scope, storageRevision)) return
+            if (!currentOrConceal(ticket, scope, credentials)) return
             check(profile != null || relationship != null)
             val target = relationship?.get("tim_user_id")?.takeUnless { it.isJsonNull }?.asString?.trim()
             check(target.isNullOrEmpty() || target == targetUserID)
@@ -67,14 +84,14 @@ internal class XingDunIndependentProfileLoader(
             )
             val merged = if (relationship != null) mergeXingDunRelationshipProfile(fresh, relationship, targetUserID)
                 else fresh to if (knownFriend) { if (fresh.isBlacklist) "blocked" else "friend" } else "unknown"
-            confirmed = Triple(ticket, scope, storageRevision)
+            confirmed = Triple(ticket, scope, credentials)
             publish(XingDunIndependentProfileState(merged.first, merged.second))
         } catch (cancelled: CancellationException) {
             // A callback that ignores cancellation must not republish data or start discovery.
             if (request == ticket && isActive()) publish(XingDunIndependentProfileState(null, "unknown"))
             throw cancelled
         } catch (_: Exception) {
-            if (currentOrConceal(ticket, scope, storageRevision)) {
+            if (currentOrConceal(ticket, scope, credentials)) {
                 publish(XingDunIndependentProfileState(null, "unknown", failed = true))
             }
         }
@@ -83,16 +100,16 @@ internal class XingDunIndependentProfileLoader(
     fun invalidate() { request++; confirmed = null }
 
     fun ownsSnapshot(): Boolean = confirmed?.let {
-        isActive() && request == it.first && currentScope() == it.second && currentStorageRevision() == it.third
+        isActive() && request == it.first && currentScope() == it.second && currentCredentials() == it.third
     } == true
 
     private fun sameOwner(scope: XingDunGroupMemberPreviewScope): Boolean = owner?.let {
         it.companyCode == scope.companyCode && it.sdkAppID == scope.sdkAppID && it.userID == scope.userID
     } == true
 
-    private fun currentOrConceal(ticket: Long, scope: XingDunGroupMemberPreviewScope, storageRevision: Long): Boolean {
+    private fun currentOrConceal(ticket: Long, scope: XingDunGroupMemberPreviewScope, credentials: XingDunIndependentProfileCredentials): Boolean {
         if (request != ticket || !isActive()) return false
-        if (currentScope() == scope && currentStorageRevision() == storageRevision) return true
+        if (currentScope() == scope && currentCredentials() == credentials) return true
         publish(XingDunIndependentProfileState(null, "unknown", failed = true))
         return false
     }
