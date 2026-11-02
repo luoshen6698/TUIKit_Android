@@ -104,9 +104,16 @@ internal object XingDunAuthenticationErrorPresenter {
 
     @StringRes
     fun im(code: Int, description: String): Int = when {
+        code == -10108 -> R.string.xingdun_enterprise_service_unavailable
         code == 10108 -> R.string.xingdun_enterprise_service_expired
         code == -1 && description.contains("企业") -> R.string.xingdun_error_company_mismatch
         else -> R.string.xingdun_im_connection_failed
+    }
+
+    @StringRes
+    fun startupIMFailure(code: Int, description: String): Int = when (im(code, description)) {
+        R.string.xingdun_enterprise_service_unavailable -> R.string.xingdun_startup_enterprise_service_unavailable
+        else -> R.string.xingdun_startup_recovering_session
     }
 
     private fun presentation(
@@ -119,5 +126,5 @@ internal object XingDunInteractiveIMLoginRetryPolicy {
     const val RETRY_DELAY_MILLIS = 1_200L
 
     fun shouldRetry(retriesRemaining: Int, code: Int): Boolean =
-        retriesRemaining > 0 && code != 10108
+        retriesRemaining > 0 && code != 10108 && code != -10108
 }

@@ -6,6 +6,25 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class XingDunAuthenticationErrorPresenterTest {
+    @Test fun negativePrepaidArrearsUsesServiceNoticeWithoutDisplayingProviderDetails() {
+        assertEquals(R.string.xingdun_enterprise_service_unavailable,
+            XingDunAuthenticationErrorPresenter.im(-10108, "synthetic private provider description"))
+    }
+
+    @Test fun negativePrepaidArrearsIsNotRetriedAsATransientInteractiveLoginFailure() {
+        assertEquals(false, XingDunInteractiveIMLoginRetryPolicy.shouldRetry(1, -10108))
+        assertEquals(false, XingDunInteractiveIMLoginRetryPolicy.shouldRetry(0, -10108))
+    }
+
+    @Test fun startupKeepsAnExplicitSavedAccountServiceNoticeAndPreservesOtherRecoveryFallbacks() {
+        assertEquals(R.string.xingdun_startup_enterprise_service_unavailable,
+            XingDunAuthenticationErrorPresenter.startupIMFailure(-10108, "synthetic private provider description"))
+        for ((code, description) in listOf(6012 to "timeout", 10108 to "expired", -1 to "企业", 60020 to "unknown")) {
+            assertEquals(R.string.xingdun_startup_recovering_session,
+                XingDunAuthenticationErrorPresenter.startupIMFailure(code, description))
+        }
+    }
+
     @Test fun ipRestrictionUsesExplicitReasonInsteadOfAllForbiddenResponses() {
         assertEquals(R.string.xingdun_login_ip_restricted,
             XingDunAuthenticationErrorPresenter.login(XingDunApiException(403, 403, "denied", reason = "login_ip_restricted")))

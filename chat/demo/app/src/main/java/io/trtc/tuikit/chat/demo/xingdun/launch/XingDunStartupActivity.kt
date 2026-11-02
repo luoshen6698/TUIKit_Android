@@ -264,7 +264,7 @@ class XingDunStartupActivity : AppCompatActivity() {
         updateStartupStatus(R.string.xingdun_connecting_im)
         val imLoginFailure = if (wakeupSession != null) 0 else {
             withTimeoutOrNull(IM_LOGIN_TIMEOUT_MILLIS) { loginToIM(restoredSession) }
-                ?: R.string.xingdun_im_connection_failed
+                ?: R.string.xingdun_startup_recovering_session
         }
         logStartup("im_ready")
         if (!isStartupActive()) {
@@ -274,7 +274,7 @@ class XingDunStartupActivity : AppCompatActivity() {
             return@coroutineScope
         }
         if (imLoginFailure != 0) {
-            throw StartupRetryException(R.string.xingdun_startup_recovering_session)
+            throw StartupRetryException(imLoginFailure)
         }
         if (!XingDunSessionManager.matchesCurrentIMIdentity(restoredSession.sdkAppId, restoredSession.timUserId) ||
             LoginStore.shared.sdkAppID != restoredSession.sdkAppId ||
@@ -505,7 +505,7 @@ class XingDunStartupActivity : AppCompatActivity() {
                     override fun onFailure(code: Int, desc: String) {
                         android.util.Log.w("XingDunLogin", "stage=startup_im code=$code")
                         if (continuation.isActive) {
-                            continuation.resume(XingDunAuthenticationErrorPresenter.im(code, desc))
+                            continuation.resume(XingDunAuthenticationErrorPresenter.startupIMFailure(code, desc))
                         }
                     }
                 },
