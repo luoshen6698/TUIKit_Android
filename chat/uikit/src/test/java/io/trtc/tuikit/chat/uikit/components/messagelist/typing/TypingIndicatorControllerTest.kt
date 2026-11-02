@@ -123,6 +123,53 @@ class TypingIndicatorControllerTest {
         assertEquals(listOf(true, true), runtime.statuses())
     }
 
+    @Test fun `future history snapshot cannot arm typing and a real event can recover`() {
+        val controller = obtain()
+        runtime.snapshot(listOf(ordinary(seconds = 3700)))
+        controller.sendTypingStatus(true)
+        assertTrue(runtime.sends.isEmpty())
+        runtime.event(ordinary())
+        controller.sendTypingStatus(true)
+        assertEquals(listOf(true), runtime.statuses())
+        now += 30_000
+        controller.sendTypingStatus(true)
+        assertEquals(listOf(true), runtime.statuses())
+    }
+
+    @Test fun `future row after a valid history row does not extend its activity window`() {
+        val controller = obtain()
+        runtime.snapshot(listOf(ordinary(seconds = 100), ordinary(seconds = 3700)))
+        now = 130_000
+        controller.sendTypingStatus(true)
+        assertTrue(runtime.sends.isEmpty())
+        runtime.event(ordinary())
+        controller.sendTypingStatus(true)
+        assertEquals(listOf(true), runtime.statuses())
+    }
+
+    @Test fun `history clock skew of five seconds is accepted`() {
+        val controller = obtain()
+        runtime.snapshot(listOf(ordinary(seconds = 105)))
+        controller.sendTypingStatus(true)
+        assertEquals(listOf(true), runtime.statuses())
+    }
+
+    @Test fun `future row does not suppress a valid recent history row`() {
+        val controller = obtain()
+        runtime.snapshot(listOf(ordinary(seconds = 100), ordinary(seconds = 3700)))
+        controller.sendTypingStatus(true)
+        assertEquals(listOf(true), runtime.statuses())
+    }
+
+    @Test fun `history beyond clock skew and overflowing timestamps are ignored`() {
+        val controller = obtain()
+        for (timestamp in listOf(106L, 3700L, Long.MAX_VALUE, Long.MIN_VALUE)) {
+            runtime.snapshot(listOf(ordinary(seconds = timestamp)))
+            controller.sendTypingStatus(true)
+        }
+        assertTrue(runtime.sends.isEmpty())
+    }
+
     @Test fun `explicit clear emits one end and keeps four second cross clear throttle`() {
         val controller = obtain()
         runtime.event(ordinary())

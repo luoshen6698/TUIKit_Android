@@ -280,8 +280,10 @@ internal class TypingIndicatorController private constructor(
         if (destroyed) return
         val identity = currentLoginIdentity()
         val loggedIn = isLoggedIn()
+        val latestAllowedTimeSec = nowMillis() / 1000L + 5L
         val lastPeerMessageTimeSec = list.lastOrNull {
-            !TypingMessageProtocol.isTypingMessage(it) && receiveGate.acceptsStoreActivity(it.from.userID, it.isSentBySelf,
+            it.timestamp in 1L..latestAllowedTimeSec &&
+                !TypingMessageProtocol.isTypingMessage(it) && receiveGate.acceptsStoreActivity(it.from.userID, it.isSentBySelf,
                 TypingMessageProtocol.parseTypingStatus(it), identity, loggedIn)
         }?.timestamp ?: return
         val timeMs = lastPeerMessageTimeSec * 1000L
