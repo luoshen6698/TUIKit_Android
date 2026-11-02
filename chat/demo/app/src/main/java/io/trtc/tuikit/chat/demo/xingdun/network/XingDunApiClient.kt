@@ -75,6 +75,7 @@ class XingDunApiClient(
         }
         .build()
     private val groupDeleteHttpClient = XingDunGroupDeleteRequestPolicy.client(httpClient)
+    private val passwordResetTransport = XingDunPasswordResetTransport(httpClient)
     private val authenticatedRequestExecutor = XingDunAuthenticatedRequestExecutor()
 
     fun configureAuthenticatedSessionRecovery(
@@ -347,7 +348,7 @@ class XingDunApiClient(
             }
 
     private suspend fun <T> executeOnce(request: Request, responseType: Type): T =
-        httpClient.newCall(request).executeCancellable { response ->
+        passwordResetTransport.newCall(request).executeCancellable { response ->
             val payload = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 throw apiException(payload, response.code)
@@ -380,7 +381,7 @@ class XingDunApiClient(
     )
 
     private suspend fun <T> executeNullableOnce(request: Request, responseType: Type): T? =
-        httpClient.newCall(request).executeCancellable { response ->
+        passwordResetTransport.newCall(request).executeCancellable { response ->
             val payload = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw apiException(payload, response.code)
             val envelopeType = TypeToken.getParameterized(XingDunEnvelope::class.java, responseType).type
@@ -405,7 +406,7 @@ class XingDunApiClient(
     )
 
     private suspend fun executeAllowEmptyOnce(request: Request): Unit =
-        httpClient.newCall(request).executeCancellable { response ->
+        passwordResetTransport.newCall(request).executeCancellable { response ->
             val payload = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw apiException(payload, response.code)
             val envelope = runCatching { gson.fromJson(payload, JsonObject::class.java) }.getOrNull()
