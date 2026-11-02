@@ -82,6 +82,35 @@ class XingDunAuthenticationContractTest {
     }
 
     @Test
+    fun phoneResetRequestUsesThePasswordResetTenantContract() {
+        val fields = gson.fromJson(
+            gson.toJson(XingDunSendResetCodeRequest("phone", "19900000001", "xd2026")),
+            Map::class.java
+        )
+
+        assertEquals(setOf("verify_type", "target", "company_code"), fields.keys)
+        assertEquals("phone", fields["verify_type"])
+        assertEquals("19900000001", fields["target"])
+        assertEquals("xd2026", fields["company_code"])
+    }
+
+    @Test
+    fun resetCodeResponseParsesTheGenericChannelAndLifetime() {
+        for (channel in listOf("phone", "email")) {
+            val response = gson.fromJson(
+                """{"verify_type":"$channel","expires_in":300}""",
+                XingDunResetCodeResponse::class.java
+            )
+            assertEquals(channel, response.verifyType)
+            assertEquals(300L, response.expiresIn)
+        }
+
+        val legacy = gson.fromJson("{}", XingDunResetCodeResponse::class.java)
+        assertNull(legacy.verifyType)
+        assertNull(legacy.expiresIn)
+    }
+
+    @Test
     fun registrationAuthenticationResponseParses180DayRefreshCredential() {
         val response = gson.fromJson(
             """{
