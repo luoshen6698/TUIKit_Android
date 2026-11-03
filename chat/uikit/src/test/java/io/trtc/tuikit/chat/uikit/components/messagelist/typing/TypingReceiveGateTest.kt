@@ -39,30 +39,9 @@ class TypingReceiveGateTest {
         }
     }
 
-    @Test fun `late Store start and end cannot qualify for state or activity`() {
-        val gate = newGate()
-        assertEquals(true, raw(gate, true))
-        assertEquals(false, raw(gate, false))
-        listOf(true, false, true).forEach { lateStatus ->
-            val parsed = TypingMessageProtocol.parseTypingStatus(
-                TypingMessageProtocol.buildTypingMessageData(lateStatus))
-            // Both Store event and Store list use this gate. A late control is
-            // ineligible even when its timestamp is newer than ordinary messages.
-            assertFalse(gate.acceptsStoreActivity("peer", false, parsed, identity, true))
-        }
-        assertTrue(gate.acceptsStoreActivity("peer", false, null, identity, true))
-    }
 
-    @Test fun `ordinary Store activity still requires the same peer and account`() {
-        val gate = newGate()
-        assertFalse(gate.acceptsStoreActivity("other", false, null, identity, true))
-        assertFalse(gate.acceptsStoreActivity("peer", true, null, identity, true))
-        assertFalse(gate.acceptsStoreActivity("peer", false, null, "123:next-owner", true))
-        assertFalse(gate.acceptsStoreActivity("peer", false, null, identity, false))
-        assertTrue(gate.acceptsStoreActivity("peer", false, null, identity, true))
-    }
 
-    @Test fun `close is terminal for already accepted raw work and later Store activity`() {
+    @Test fun `close is terminal for already accepted raw work and later callbacks`() {
         val gate = newGate()
         assertEquals(true, raw(gate, true))
         assertTrue(gate.isCurrent(identity, true))
@@ -71,7 +50,6 @@ class TypingReceiveGateTest {
         assertFalse(gate.isCurrent(identity, true))
         assertNull(raw(gate, true))
         assertNull(raw(gate, false))
-        assertFalse(gate.acceptsStoreActivity("peer", false, null, identity, true))
         gate.close()
         assertFalse(gate.isCurrent(identity, true))
         assertEquals(true, raw(newGate(), true))

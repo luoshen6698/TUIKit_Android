@@ -1,10 +1,7 @@
 package io.trtc.tuikit.chat.uikit.components.messagelist.typing
 
 import io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload
-import io.trtc.tuikit.atomicxcore.api.message.MessageEvent
 import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
-import io.trtc.tuikit.atomicxcore.api.message.MessageListStore
-import io.trtc.tuikit.atomicxcore.api.message.MessageLoadOption
 import io.trtc.tuikit.atomicxcore.api.message.MessageType
 import com.tencent.imsdk.v2.V2TIMManager
 import com.tencent.imsdk.v2.V2TIMMessage
@@ -110,10 +107,6 @@ internal class TypingReceiveGate(private val peerUserID: String?, private val lo
         return TypingMessageProtocol.parseTypingStatus(data)
     }
 
-    fun acceptsStoreActivity(sender: String?, self: Boolean, typingStatus: Boolean?,
-                             identity: String, loggedIn: Boolean): Boolean =
-        isCurrent(identity, loggedIn) && !self && sender == peerUserID && typingStatus == null
-
     fun close() { closed = true }
 }
 
@@ -128,11 +121,7 @@ internal class TypingIndicatorController private constructor(
         fun currentIdentity(): String
         fun isLoggedIn(): Boolean
         fun bind(
-            conversationID: String,
-            scope: CoroutineScope,
-            onRaw: (String, String?, String?, Boolean) -> Unit,
-            onStoreMessage: (MessageInfo) -> Unit,
-            onStoreSnapshot: (List<MessageInfo>) -> Unit
+            onRaw: (String, String?, String?, Boolean) -> Unit
         ): () -> Unit
         fun send(peerUserID: String, data: String)
     }
@@ -145,13 +134,8 @@ internal class TypingIndicatorController private constructor(
             V2TIMManager.getInstance().loginStatus == V2TIMManager.V2TIM_STATUS_LOGINED
 
         override fun bind(
-            conversationID: String,
-            scope: CoroutineScope,
-            onRaw: (String, String?, String?, Boolean) -> Unit,
-            onStoreMessage: (MessageInfo) -> Unit,
-            onStoreSnapshot: (List<MessageInfo>) -> Unit
+            onRaw: (String, String?, String?, Boolean) -> Unit
         ): () -> Unit {
-            val store = MessageListStore.create(conversationID)
             val rawTypingListener = object : V2TIMAdvancedMsgListener() {
                 override fun onRecvNewMessage(message: V2TIMMessage?) {
                     val incoming = message ?: return
@@ -161,17 +145,6 @@ internal class TypingIndicatorController private constructor(
                 }
             }
             V2TIMManager.getMessageManager().addAdvancedMsgListener(rawTypingListener)
-            store.loadMessages(MessageLoadOption(pageCount = RECENT_MESSAGE_LOAD_COUNT))
-            scope.launch {
-                store.messageEventFlow.collect { event ->
-                    when (event) {
-                        is MessageEvent.OnReceiveNewMessage -> onStoreMessage(event.message)
-                    }
-                }
-            }
-            scope.launch {
-                store.state.messageList.collect { onStoreSnapshot(it) }
-            }
             return { V2TIMManager.getMessageManager().removeAdvancedMsgListener(rawTypingListener) }
         }
 
@@ -188,8 +161,6 @@ internal class TypingIndicatorController private constructor(
     companion object {
         private const val TYPING_SEND_INTERVAL_MS = 4_000L
         private const val TYPING_DISPLAY_TIMEOUT_MS = 5_000L
-        private const val PEER_ACTIVE_WINDOW_MS = 30_000L
-        private const val RECENT_MESSAGE_LOAD_COUNT = 20
 
         private val controllers = HashMap<String, TypingIndicatorController>()
 
@@ -246,14 +217,11 @@ internal class TypingIndicatorController private constructor(
     @Volatile
     private var destroyed = false
 
-    @Volatile
-    private var lastPeerMessageTimeMs = 0L
-
     private val displayWorkRevision = AtomicLong()
     private val loginIdentity = runtime.currentIdentity()
     private val receiveGate = TypingReceiveGate(peerUserID, loginIdentity)
     private val unbind: () -> Unit = if (peerUserID != null) {
-        runtime.bind(conversationID, scope, ::handleRawMessage, ::handleNewMessage, ::handleStoreSnapshot)
+        runtime.bind(::handleRawMessage)
     } else {
         {}
     }
@@ -271,32 +239,8 @@ internal class TypingIndicatorController private constructor(
         scope.launch(mainDispatcher.immediate) {
             if (destroyed || workRevision != displayWorkRevision.get() ||
                 !receiveGate.isCurrent(currentLoginIdentity(), isLoggedIn())) return@launch
-            lastPeerMessageTimeMs = nowMillis()
             updatePeerTyping(status)
         }
-    }
-
-    private fun handleStoreSnapshot(list: List<MessageInfo>) {
-        if (destroyed) return
-        val identity = currentLoginIdentity()
-        val loggedIn = isLoggedIn()
-        val latestAllowedTimeSec = nowMillis() / 1000L + 5L
-        val lastPeerMessageTimeSec = list.lastOrNull {
-            it.timestamp in 1L..latestAllowedTimeSec &&
-                !TypingMessageProtocol.isTypingMessage(it) && receiveGate.acceptsStoreActivity(it.from.userID, it.isSentBySelf,
-                TypingMessageProtocol.parseTypingStatus(it), identity, loggedIn)
-        }?.timestamp ?: return
-        val timeMs = lastPeerMessageTimeSec * 1000L
-        if (timeMs > lastPeerMessageTimeMs) {
-            lastPeerMessageTimeMs = timeMs
-        }
-    }
-
-    private fun handleNewMessage(message: MessageInfo) {
-        if (destroyed || TypingMessageProtocol.isTypingMessage(message) ||
-            !receiveGate.acceptsStoreActivity(message.from.userID, message.isSentBySelf,
-                TypingMessageProtocol.parseTypingStatus(message), currentLoginIdentity(), isLoggedIn())) return
-        lastPeerMessageTimeMs = nowMillis()
     }
 
     private fun updatePeerTyping(isTyping: Boolean) {
@@ -316,7 +260,7 @@ internal class TypingIndicatorController private constructor(
     fun sendTypingStatus(isTyping: Boolean) {
         if (destroyed) return
         if (peerUserID == null) return
-        if (!isPeerActive()) return
+        if (!receiveGate.isCurrent(currentLoginIdentity(), isLoggedIn())) return
         if (isTyping) {
             val now = nowMillis()
             if (now - lastTypingSendTimeMs < TYPING_SEND_INTERVAL_MS) return
@@ -333,11 +277,6 @@ internal class TypingIndicatorController private constructor(
         if (currentIdentity != loginIdentity || !runtime.isLoggedIn()) return
         val peer = peerUserID ?: return
         runtime.send(peer, TypingMessageProtocol.buildTypingMessageData(isTyping))
-    }
-
-    private fun isPeerActive(): Boolean {
-        if (lastPeerMessageTimeMs == 0L) return false
-        return nowMillis() - lastPeerMessageTimeMs < PEER_ACTIVE_WINDOW_MS
     }
 
     private fun destroy() {

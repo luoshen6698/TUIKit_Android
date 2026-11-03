@@ -1,11 +1,6 @@
 package io.trtc.tuikit.chat.uikit.components.messagelist.typing
 
 import com.google.gson.JsonParser
-import io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload
-import io.trtc.tuikit.atomicxcore.api.message.MessageInfo
-import io.trtc.tuikit.atomicxcore.api.message.MessageSenderInfo
-import io.trtc.tuikit.atomicxcore.api.message.MessageType
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainCoroutineDispatcher
 import org.junit.After
 import org.junit.Assert.*
@@ -39,18 +34,11 @@ class TypingIndicatorControllerTest {
         var unbinds = 0
         val sends = mutableListOf<Pair<String, String>>()
         lateinit var raw: (String, String?, String?, Boolean) -> Unit
-        lateinit var event: (MessageInfo) -> Unit
-        lateinit var snapshot: (List<MessageInfo>) -> Unit
         override fun currentIdentity() = identity
         override fun isLoggedIn() = loggedIn
-        override fun bind(conversationID: String, scope: CoroutineScope,
-                          onRaw: (String, String?, String?, Boolean) -> Unit,
-                          onStoreMessage: (MessageInfo) -> Unit,
-                          onStoreSnapshot: (List<MessageInfo>) -> Unit): () -> Unit {
+        override fun bind(onRaw: (String, String?, String?, Boolean) -> Unit): () -> Unit {
             binds++
             raw = onRaw
-            event = onStoreMessage
-            snapshot = onStoreSnapshot
             return { unbinds++ }
         }
         override fun send(peerUserID: String, data: String) { sends.add(peerUserID to data) }
@@ -64,12 +52,6 @@ class TypingIndicatorControllerTest {
     private var now = 100_000L
     private fun obtain(conversation: String = "c2c_peer", sdk: FakeRuntime = runtime) =
         TypingIndicatorController.obtain(conversation, sdk, main) { now }
-    private fun ordinary(sender: String = "peer", seconds: Long = now / 1000) =
-        MessageInfo(from = MessageSenderInfo(userID = sender), timestamp = seconds)
-    private fun control(active: Boolean, seconds: Long = now / 1000) =
-        MessageInfo(from = MessageSenderInfo(userID = "peer"), timestamp = seconds,
-            messageType = MessageType.CUSTOM,
-            messagePayload = CustomMessagePayload(customData = TypingMessageProtocol.buildTypingMessageData(active)))
     private fun await(timeoutMs: Long, predicate: () -> Boolean) {
         val deadline = System.nanoTime() + timeoutMs * 1_000_000
         do {
@@ -80,16 +62,24 @@ class TypingIndicatorControllerTest {
         fail("Controller condition did not settle within bounded wait")
     }
 
+    @Test fun coldConversationAndLongIdleSendWithoutPeerActivity() {
+        val controller = obtain()
+        controller.sendTypingStatus(true)
+        assertEquals(listOf(true), runtime.statuses())
+        now += 60_000
+        controller.sendTypingStatus(false)
+        controller.sendTypingStatus(true)
+        assertEquals(listOf(true, false, true), runtime.statuses())
+    }
+
     @After fun cleanup() {
         TypingIndicatorController.resetAll()
         main.drain()
     }
 
-    @Test fun `ordinary peer activity and exact four second start interval execute in controller`() {
+    @Test fun `cold conversation and exact four second start interval execute in controller`() {
         val controller = obtain()
         controller.sendTypingStatus(true)
-        assertTrue(runtime.sends.isEmpty())
-        runtime.event(ordinary())
         controller.sendTypingStatus(true)
         now += 3999
         controller.sendTypingStatus(true)
@@ -106,73 +96,14 @@ class TypingIndicatorControllerTest {
         }
     }
 
-    @Test fun `thirty second activity boundary is strict and snapshot epoch is respected`() {
-        val controller = obtain()
-        runtime.snapshot(listOf(ordinary(seconds = 100)))
-        now = 129_999
-        controller.sendTypingStatus(true)
-        assertEquals(listOf(true), runtime.statuses())
-        now = 130_000
-        controller.sendTypingStatus(false)
-        assertEquals("Existing false-after30 baseline is unchanged", listOf(true), runtime.statuses())
-        now = 134_000
-        controller.sendTypingStatus(true)
-        assertEquals(listOf(true), runtime.statuses())
-        runtime.event(ordinary())
-        controller.sendTypingStatus(true)
-        assertEquals(listOf(true, true), runtime.statuses())
-    }
 
-    @Test fun `future history snapshot cannot arm typing and a real event can recover`() {
-        val controller = obtain()
-        runtime.snapshot(listOf(ordinary(seconds = 3700)))
-        controller.sendTypingStatus(true)
-        assertTrue(runtime.sends.isEmpty())
-        runtime.event(ordinary())
-        controller.sendTypingStatus(true)
-        assertEquals(listOf(true), runtime.statuses())
-        now += 30_000
-        controller.sendTypingStatus(true)
-        assertEquals(listOf(true), runtime.statuses())
-    }
 
-    @Test fun `future row after a valid history row does not extend its activity window`() {
-        val controller = obtain()
-        runtime.snapshot(listOf(ordinary(seconds = 100), ordinary(seconds = 3700)))
-        now = 130_000
-        controller.sendTypingStatus(true)
-        assertTrue(runtime.sends.isEmpty())
-        runtime.event(ordinary())
-        controller.sendTypingStatus(true)
-        assertEquals(listOf(true), runtime.statuses())
-    }
 
-    @Test fun `history clock skew of five seconds is accepted`() {
-        val controller = obtain()
-        runtime.snapshot(listOf(ordinary(seconds = 105)))
-        controller.sendTypingStatus(true)
-        assertEquals(listOf(true), runtime.statuses())
-    }
 
-    @Test fun `future row does not suppress a valid recent history row`() {
-        val controller = obtain()
-        runtime.snapshot(listOf(ordinary(seconds = 100), ordinary(seconds = 3700)))
-        controller.sendTypingStatus(true)
-        assertEquals(listOf(true), runtime.statuses())
-    }
 
-    @Test fun `history beyond clock skew and overflowing timestamps are ignored`() {
-        val controller = obtain()
-        for (timestamp in listOf(106L, 3700L, Long.MAX_VALUE, Long.MIN_VALUE)) {
-            runtime.snapshot(listOf(ordinary(seconds = timestamp)))
-            controller.sendTypingStatus(true)
-        }
-        assertTrue(runtime.sends.isEmpty())
-    }
 
     @Test fun `explicit clear emits one end and keeps four second cross clear throttle`() {
         val controller = obtain()
-        runtime.event(ordinary())
         controller.sendTypingStatus(false)
         assertTrue(runtime.sends.isEmpty())
         controller.sendTypingStatus(true)
@@ -189,7 +120,7 @@ class TypingIndicatorControllerTest {
         assertEquals(listOf(true, false, true), runtime.statuses())
     }
 
-    @Test fun `valid raw start and end change actual state and both arm peer activity`() {
+    @Test fun `valid raw start and end change actual state independently of local sends`() {
         val controller = obtain()
         runtime.peerTyping(true)
         assertFalse(controller.typingState.value)
@@ -202,7 +133,7 @@ class TypingIndicatorControllerTest {
         assertEquals(listOf(true), runtime.statuses())
     }
 
-    @Test fun `raw other peer group self malformed and missing login cannot arm state or sends`() {
+    @Test fun `raw other peer group self malformed and missing login cannot alter receive state`() {
         val controller = obtain()
         runtime.peerTyping(true, sender = "other")
         runtime.peerTyping(true, group = "group")
@@ -211,10 +142,12 @@ class TypingIndicatorControllerTest {
         runtime.loggedIn = false
         runtime.peerTyping(true)
         main.drain()
-        runtime.loggedIn = true
         controller.sendTypingStatus(true)
         assertFalse(controller.typingState.value)
         assertTrue(runtime.sends.isEmpty())
+        runtime.loggedIn = true
+        controller.sendTypingStatus(true)
+        assertEquals(listOf(true), runtime.statuses())
         val groupRuntime = FakeRuntime()
         val groupController = obtain("group_example", groupRuntime)
         groupController.sendTypingStatus(true)
@@ -222,18 +155,6 @@ class TypingIndicatorControllerTest {
         assertTrue(groupRuntime.sends.isEmpty())
     }
 
-    @Test fun `late Store controls cannot relight or extend thirty second activity`() {
-        val controller = obtain()
-        runtime.event(ordinary())
-        now = 129_999
-        runtime.event(control(true, 999))
-        runtime.event(control(false, 999))
-        runtime.snapshot(listOf(control(true, 999), control(false, 1000)))
-        assertFalse(controller.typingState.value)
-        now = 130_000
-        controller.sendTypingStatus(true)
-        assertTrue(runtime.sends.isEmpty())
-    }
 
     @Test fun `lost stop clears actual state through original five second cooperative timer`() {
         val controller = obtain()
@@ -330,20 +251,6 @@ class TypingIndicatorControllerTest {
         assertFalse(controller.typingState.value)
         main.drain()
         assertFalse("stop clears existing work; accepted pre-stop callback is obsolete", controller.typingState.value)
-    }
-    @Test fun `invalid Store controls cannot arm activity while ordinary business custom still can`() {
-        val controller = obtain()
-        val invalid = control(true, 999).copy(messagePayload = CustomMessagePayload(
-            customData = """{"businessID":"user_typing_status","typingStatus":2}"""))
-        runtime.event(invalid)
-        controller.sendTypingStatus(true)
-        assertTrue("Invalid live Store control must not arm recent activity", runtime.sends.isEmpty())
-        runtime.snapshot(listOf(invalid))
-        controller.sendTypingStatus(true)
-        assertTrue("Invalid history control must not arm recent activity", runtime.sends.isEmpty())
-        runtime.event(invalid.copy(messagePayload = CustomMessagePayload(customData = """{"type":"contact_card","user_id":"card-user"}""")))
-        controller.sendTypingStatus(true)
-        assertEquals(listOf(true), runtime.statuses())
     }
 
 }
