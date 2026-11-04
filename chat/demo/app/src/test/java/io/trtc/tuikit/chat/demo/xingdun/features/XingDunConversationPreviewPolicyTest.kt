@@ -6,6 +6,40 @@ import org.junit.Test
 
 class XingDunConversationPreviewPolicyTest {
     @Test
+    fun `hidden business controls never replace the last visible conversation message`() {
+        listOf("pin_message", "read_receipt_summary", "remote_delete", "config_refresh").forEach { type ->
+            val message = requireNotNull(XingDunCustomMessageParser.parse(
+                """{"xd_type":"$type","payload":{"scope":"account"}}""",
+            ))
+            assertTrue("$type must be hidden from conversation previews",
+                XingDunConversationPreviewPolicy.shouldSkipInConversationList(message))
+        }
+    }
+
+    @Test
+    fun `pin and receipt controls are skipped without deleting their local envelopes`() {
+        listOf("pin_message", "read_receipt_summary").forEach { type ->
+            val message = requireNotNull(XingDunCustomMessageParser.parse("""{"type":"$type"}"""))
+            assertTrue(XingDunConversationPreviewPolicy.shouldSkipInConversationList(message))
+            assertFalse(XingDunConversationPreviewPolicy.shouldRemoveFromLocalHistory(message))
+        }
+    }
+
+    @Test
+    fun `visible cards and group policy notices remain valid previews`() {
+        listOf(
+            """{"type":"contact_card"}""",
+            """{"type":"redpacket"}""",
+            """{"type":"config_refresh","payload":{"scope":"group"}}""",
+            """{"type":"future_visible_card"}""",
+        ).forEach { data ->
+            assertFalse(XingDunConversationPreviewPolicy.shouldSkipInConversationList(
+                requireNotNull(XingDunCustomMessageParser.parse(data))))
+        }
+        assertFalse(XingDunConversationPreviewPolicy.shouldSkipInConversationList(null))
+    }
+
+    @Test
     fun `remote delete control is removed from local history`() {
         val message = requireNotNull(
             XingDunCustomMessageParser.parse(

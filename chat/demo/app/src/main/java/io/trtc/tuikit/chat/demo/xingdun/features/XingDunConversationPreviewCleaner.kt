@@ -17,7 +17,7 @@ internal object XingDunConversationPreviewPolicy {
         message?.type == "remote_delete" && message.isControl
 
     fun shouldSkipInConversationList(message: XingDunCustomMessage?): Boolean =
-        message?.type == "auto_delete_config"
+        message?.isControl == true || message?.type == "auto_delete_config"
 }
 
 /**
@@ -98,7 +98,7 @@ internal object XingDunConversationPreviewCleaner {
     private fun cleanupConversation(context: Context, conversation: V2TIMConversation) {
         val controlMessage = conversation.lastMessage ?: return
         val custom = parse(controlMessage) ?: return
-        if (XingDunConversationPreviewPolicy.shouldSkipInConversationList(custom)) {
+        if (custom.type == "auto_delete_config") {
             XingDunAutoDeleteRepository.applyRemote(conversation.conversationID, custom.values)
             return
         }
