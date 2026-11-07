@@ -33,7 +33,12 @@ class XingDunSessionStore(context: Context) {
     }
 
     fun load(): XingDunStoredSession? =
-        loadEncrypted(KEY_SESSION_IV, KEY_SESSION_DATA, XingDunStoredSession::class.java)
+        loadEncrypted(KEY_SESSION_IV, KEY_SESSION_DATA, XingDunStoredSession::class.java)?.let { session ->
+            session.copy(apiBaseUrl = XingDunServerAddressMigration.api(session.apiBaseUrl),
+                privacy = session.privacy.copy(
+                    privacyUrl = XingDunServerAddressMigration.website(session.privacy.privacyUrl),
+                    userAgreementUrl = XingDunServerAddressMigration.website(session.privacy.userAgreementUrl)))
+        }
 
     /** Presence is separate from readability, including partially written encrypted records. */
     fun hasStoredSession(): Boolean =
@@ -57,7 +62,15 @@ class XingDunSessionStore(context: Context) {
     }
 
     fun loadEnterprise(): XingDunBootstrapConfiguration? =
-        loadEncrypted(KEY_ENTERPRISE_IV, KEY_ENTERPRISE_DATA, XingDunBootstrapConfiguration::class.java)
+        loadEncrypted(KEY_ENTERPRISE_IV, KEY_ENTERPRISE_DATA, XingDunBootstrapConfiguration::class.java)?.let { configuration ->
+            configuration.copy(
+                apiBaseUrl = configuration.apiBaseUrl?.let(XingDunServerAddressMigration::api),
+                company = configuration.company?.let { company -> company.copy(
+                    apiBaseUrl = company.apiBaseUrl?.let(XingDunServerAddressMigration::api)) },
+                privacy = configuration.privacy.copy(
+                    privacyUrl = XingDunServerAddressMigration.website(configuration.privacy.privacyUrl),
+                    userAgreementUrl = XingDunServerAddressMigration.website(configuration.privacy.userAgreementUrl)))
+        }
 
     fun clear() = clearSession()
 

@@ -29,7 +29,7 @@ class XingDunQRCodeParserTest {
         assertEquals(
             expected,
             XingDunQRCodeParser.parse(
-                "https://api.xingdunim.com/prod/xingdun/share.html?code=ab23cd&company_code=COMP01"
+                "https://api.xuyinfang365.bid/prod/xingdun/share.html?code=ab23cd&company_code=COMP01"
             )
         )
         assertEquals(
@@ -44,7 +44,7 @@ class XingDunQRCodeParserTest {
             """{"app":"XingDun","type":"user","user_id":"user-001","token":"secret","version":1}""",
             """{"app":"XingDun","type":"group","group_id":"group-001","version":2}""",
             "https://example.com/prod/xingdun/share.html?code=ab23cd",
-            "https://api.xingdunim.com/prod/xingdun/share.html?code=ab23cd&token=secret"
+            "https://api.xuyinfang365.bid/prod/xingdun/share.html?code=ab23cd&token=secret"
         )
         inputs.forEach { payload ->
             assertTrue(payload, runCatching { XingDunQRCodeParser.parse(payload) }.isFailure)

@@ -6,7 +6,7 @@ object XingDunLegalDocuments {
     const val PRIVACY_POLICY_VERSION = "2026.10.04"
     const val PRIVACY_FILE = "xingdun-privacy-policy-android.html"
     const val AGREEMENT_FILE = "xingdun-user-agreement-android.html"
-    const val BASE_URL = "https://www.xingdunim.com/"
+    const val BASE_URL = "https://www.xuyinfang365.bid/"
 
     fun fileName(privacy: Boolean) = if (privacy) PRIVACY_FILE else AGREEMENT_FILE
     fun url(privacy: Boolean) = BASE_URL + fileName(privacy)

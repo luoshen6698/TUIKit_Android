@@ -55,7 +55,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="api.xingdunim.com"
+                    android:host="api.xuyinfang365.bid"
                     android:path="/prod/xingdun/share.html" />
             </intent-filter>
             <intent-filter>

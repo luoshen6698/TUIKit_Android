@@ -133,7 +133,7 @@ class XingDunLegalActivity : AppCompatActivity() {
     private fun loadRemote() {
         webView.stopLoading()
         failed = false
-        source.text = "www.xingdunim.com · Android · 简体中文"
+        source.text = "www.xuyinfang365.bid · Android · 简体中文"
         errorPanel.visibility = View.GONE
         webView.visibility = View.VISIBLE
         progress.visibility = View.VISIBLE

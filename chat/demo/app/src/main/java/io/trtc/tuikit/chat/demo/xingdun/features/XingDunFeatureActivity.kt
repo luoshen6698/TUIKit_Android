@@ -2825,7 +2825,7 @@ open class XingDunFeatureActivity : BaseActivity() {
         val qrBitmap = BarcodeEncoder().encodeBitmap(payload, BarcodeFormat.QR_CODE, 720, 720)
         renderInvitePoster(
             poster = createInvitePoster(qrBitmap, inviteCode, "d001", getString(R.string.xingdun_platform_brand_name)),
-            shareUrl = "https://api.xingdunim.com/prod/xingdun/share.html?code=$inviteCode&company_code=xc2026",
+            shareUrl = "https://api.xuyinfang365.bid/prod/xingdun/share.html?code=$inviteCode&company_code=xc2026",
         )
     }
 
@@ -4325,7 +4325,7 @@ open class XingDunFeatureActivity : BaseActivity() {
             renderAccountSecurity(JsonObject().apply {
                 addProperty("username", "xingdun_user")
                 addProperty("phone", "13800138000")
-                addProperty("email", "user@xingdunim.com")
+                addProperty("email", "user@xuyinfang365.bid")
             })
             return
         }

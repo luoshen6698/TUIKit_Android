@@ -8,8 +8,8 @@ import org.junit.Test
 class XingDunLegalDocumentsTest {
     @Test
     fun androidEntryPointsUseSeparateChineseWebsiteDocuments() {
-        assertEquals("https://www.xingdunim.com/xingdun-privacy-policy-android.html", XingDunLegalDocuments.url(true))
-        assertEquals("https://www.xingdunim.com/xingdun-user-agreement-android.html", XingDunLegalDocuments.url(false))
+        assertEquals("https://www.xuyinfang365.bid/xingdun-privacy-policy-android.html", XingDunLegalDocuments.url(true))
+        assertEquals("https://www.xuyinfang365.bid/xingdun-user-agreement-android.html", XingDunLegalDocuments.url(false))
         assertEquals("2026.10.01", XingDunSessionManager.USER_AGREEMENT_VERSION)
         assertEquals("2026.10.04", XingDunSessionManager.PRIVACY_VERSION)
         assertEquals(XingDunLegalDocuments.USER_AGREEMENT_VERSION, XingDunSessionManager.USER_AGREEMENT_VERSION)
@@ -28,10 +28,10 @@ class XingDunLegalDocumentsTest {
     @Test
     fun iosAndUntrustedDestinationsCannotReplaceAndroidDocuments() {
         for (value in listOf(
-            "https://www.xingdunim.com/xingdun-privacy-policy-en.html",
-            "http://www.xingdunim.com/xingdun-privacy-policy-android.html",
-            "https://www.xingdunim.com.evil.test/xingdun-privacy-policy-android.html",
-            "https://www.xingdunim.com@evil.test/xingdun-privacy-policy-android.html",
+            "https://www.xuyinfang365.bid/xingdun-privacy-policy-en.html",
+            "http://www.xuyinfang365.bid/xingdun-privacy-policy-android.html",
+            "https://www.xuyinfang365.bid.evil.test/xingdun-privacy-policy-android.html",
+            "https://www.xuyinfang365.bid@evil.test/xingdun-privacy-policy-android.html",
             XingDunLegalDocuments.url(true) + "?redirect=https://evil.test",
             "file:///android_asset/legal/xingdun-privacy-policy-android.html",
             "javascript:alert(1)"

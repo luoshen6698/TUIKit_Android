@@ -234,7 +234,7 @@ class XingDunEnterpriseAccessActivity : AppCompatActivity() {
     private fun invitationCompanyCode(uri: Uri?): String? {
         if (uri == null) return null
         val validRoute = (uri.scheme == "xingdun" && uri.host == "invite") ||
-            (uri.scheme == "https" && uri.host == "api.xingdunim.com" && uri.path == "/prod/xingdun/share.html")
+            (uri.scheme == "https" && uri.host == "api.xuyinfang365.bid" && uri.path == "/prod/xingdun/share.html")
         if (!validRoute) return null
         return listOf("company_code", "companyCode")
             .firstNotNullOfOrNull(uri::getQueryParameter)

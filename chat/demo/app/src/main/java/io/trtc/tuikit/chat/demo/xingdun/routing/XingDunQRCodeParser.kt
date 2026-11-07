@@ -48,7 +48,7 @@ internal object XingDunQRCodeParser {
     private fun parseUri(uri: URI): XingDunQRCodeRoute {
         require(uri.userInfo == null && uri.port == -1 && uri.fragment == null)
         val universal = uri.scheme.equals("https", ignoreCase = true) &&
-            uri.host.equals("api.xingdunim.com", ignoreCase = true) &&
+            uri.host.equals("api.xuyinfang365.bid", ignoreCase = true) &&
             uri.path == "/prod/xingdun/share.html"
         val custom = uri.scheme.equals("xingdun", ignoreCase = true) &&
             uri.host.equals("invite", ignoreCase = true) &&
