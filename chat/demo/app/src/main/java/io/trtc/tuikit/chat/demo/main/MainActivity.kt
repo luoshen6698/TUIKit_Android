@@ -71,6 +71,9 @@ import io.trtc.tuikit.chat.demo.xingdun.features.travel.TravelActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import io.trtc.tuikit.chat.demo.xingdun.features.home.XingDunHomePageView
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMinePageView
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMineAvatarView
+import androidx.drawerlayout.widget.DrawerLayout
+import androidx.activity.OnBackPressedCallback
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunNotificationIntentReader
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
@@ -138,6 +141,10 @@ class MainActivity : BaseActivity() {
         if (result.resultCode == RESULT_OK) (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.published()
     }
 
+    private lateinit var drawerHost: DrawerLayout
+    private lateinit var drawerPanel: FrameLayout
+    private lateinit var mineDrawer: XingDunMinePageView
+    private var mineBack: OnBackPressedCallback? = null
     private lateinit var viewPager: ViewPager2
     private lateinit var bottomNav: LinearLayout
     private lateinit var bottomNavContainer: FrameLayout
@@ -220,6 +227,7 @@ class MainActivity : BaseActivity() {
             )
         }
 
+        setupMineDrawer()
         mainContainer = findViewById(R.id.demo_mainContainer)
         viewPager = findViewById(R.id.demo_viewPager)
         bottomNavContainer = findViewById(R.id.demo_bottomNavContainer)
@@ -256,14 +264,6 @@ class MainActivity : BaseActivity() {
                 icon = findViewById(R.id.demo_tab_contacts_icon),
                 text = findViewById(R.id.demo_tab_contacts_text),
                 iconResId = R.drawable.demo_ic_tab_contacts
-            ),
-
-            BottomTab(
-                tabId = R.id.demo_tab_me,
-                root = findViewById(R.id.demo_tab_me),
-                icon = findViewById(R.id.demo_tab_me_icon),
-                text = findViewById(R.id.demo_tab_me_text),
-                iconResId = R.drawable.demo_ic_tab_me
             )
         )
         bottomTabs = allBottomTabs.filter { BuildConfig.XINGDUN_HOME_ENABLED || it.tabId != R.id.demo_tab_home }
@@ -287,6 +287,7 @@ class MainActivity : BaseActivity() {
         refreshUnreadCounts()
         selectRequestedTab(intent)
         XingDunNotificationIntentReader.readAndStage(intent, "main_create")
+        if (savedInstanceState?.getBoolean("mine_drawer_open") == true) drawerHost.post { openMineDrawer() }
         XingDunRouter.markMainReady()
         XingDunRouter.consumePendingRoute()
         V2TIMManager.getInstance().addIMSDKListener(imSDKListener)
@@ -307,6 +308,7 @@ class MainActivity : BaseActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("mine_drawer_open", ::drawerHost.isInitialized && drawerHost.isDrawerVisible(Gravity.RIGHT))
         outState.putBundle("lushu_state", (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.saveState() ?: lushuState)
         outState.putInt("main_tab", currentTabId)
         super.onSaveInstanceState(outState)
@@ -314,6 +316,7 @@ class MainActivity : BaseActivity() {
 
     override fun onStart() {
         super.onStart()
+        if (::mineDrawer.isInitialized) mineDrawer.setActive(drawerHost.isDrawerVisible(Gravity.RIGHT))
         (tabPageCache[R.id.demo_tab_home] as? XingDunHomePageView)?.setActive(currentTabId == R.id.demo_tab_home)
         (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.setActive(currentTabId == R.id.demo_tab_lushu)
         mainScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -378,6 +381,7 @@ class MainActivity : BaseActivity() {
     override fun onStop() {
         (tabPageCache[R.id.demo_tab_home] as? XingDunHomePageView)?.setActive(false)
         (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.setActive(false)
+        if (::mineDrawer.isInitialized) mineDrawer.setActive(false)
         super.onStop()
         mainScope?.cancel()
         mainScope = null
@@ -430,7 +434,6 @@ class MainActivity : BaseActivity() {
                 R.id.demo_tab_home -> XingDunHomePageView(this, verificationUnreadCount)
                 R.id.demo_tab_lushu -> LushuPageView(this) { lushuPublisher.launch(TravelActivity.intent(this, "intent")) }.apply { restoreState(lushuState) }
                 R.id.demo_tab_contacts -> createContactsPage()
-                R.id.demo_tab_me -> createMePage()
                 else -> createConversationsPage()
             }
         }
@@ -948,6 +951,7 @@ class MainActivity : BaseActivity() {
             gravity = Gravity.CENTER_VERTICAL
             addView(searchButton)
             addView(addButton)
+            addView(XingDunMineAvatarView(this@MainActivity), LinearLayout.LayoutParams(36.dpToPx(),36.dpToPx()).apply { marginStart = 12.dpToPx() })
         }
         page.setup(
             config = actionConfig,
@@ -1146,6 +1150,7 @@ class MainActivity : BaseActivity() {
             gravity = Gravity.CENTER_VERTICAL
             addView(searchButton)
             addView(addButton)
+            addView(XingDunMineAvatarView(this@MainActivity), LinearLayout.LayoutParams(36.dpToPx(),36.dpToPx()).apply { marginStart = 12.dpToPx() })
         }
         contactsHeaderActions = headerActions
         configureContactsPage(page)
@@ -1293,12 +1298,15 @@ class MainActivity : BaseActivity() {
 
     private fun selectRequestedTab(intent: Intent?) {
         if (!::bottomTabs.isInitialized) return
+        if (intent?.getStringExtra(EXTRA_TARGET_TAB) == TAB_PROFILE) {
+            openMineDrawer(); intent.removeExtra(EXTRA_TARGET_TAB); return
+        }
+        if (::drawerHost.isInitialized) closeMineDrawer()
         val requestedTabId = when (intent?.getStringExtra(EXTRA_TARGET_TAB)) {
             TAB_HOME -> defaultTabId
             TAB_MESSAGES -> R.id.demo_tab_messages
             TAB_LUSHU -> R.id.demo_tab_lushu
             TAB_CONTACTS -> R.id.demo_tab_contacts
-            TAB_PROFILE -> R.id.demo_tab_me
             else -> return
         }
         val index = bottomTabs.indexOfFirst { it.tabId == requestedTabId }
@@ -1310,8 +1318,44 @@ class MainActivity : BaseActivity() {
         selectRequestedTab(Intent().putExtra(EXTRA_TARGET_TAB, tab))
     }
 
-    private fun createMePage(): View {
-        return XingDunMinePageView(this)
+    private fun setupMineDrawer() {
+        drawerHost = findViewById(R.id.demo_drawer_host)
+        drawerPanel = findViewById(R.id.demo_mine_drawer)
+        mineDrawer = XingDunMinePageView(this, close = ::closeMineDrawer, markRead = ::markAllConversationsRead,
+            createTeam = { ContactFlowLauncher.showCreateGroupChatPage(this) { id -> ChatActivity.start(this, id) } })
+        drawerPanel.addView(mineDrawer, FrameLayout.LayoutParams(-1, -1))
+        drawerHost.setScrimColor(0x8A000000.toInt())
+        drawerHost.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED, Gravity.RIGHT)
+        drawerHost.setDrawerTitle(Gravity.RIGHT, getString(R.string.demo_page_me_title))
+        drawerHost.addOnLayoutChangeListener { view, l, _, right, _, oldL, _, oldR, _ ->
+            if (right-l != oldR-oldL || drawerPanel.layoutParams.width != ((right-l)*.88f).toInt()) {
+                drawerPanel.layoutParams = (drawerPanel.layoutParams as DrawerLayout.LayoutParams).apply { width = ((right-l)*.88f).toInt() }
+            }
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(drawerPanel) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(0, bars.top, 0, bars.bottom); insets
+        }
+        val back = object : OnBackPressedCallback(false) { override fun handleOnBackPressed() = closeMineDrawer() }
+        mineBack = back; onBackPressedDispatcher.addCallback(this, back)
+        drawerHost.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
+            override fun onDrawerSlide(view: View, offset: Float) { back.isEnabled = offset > 0f }
+            override fun onDrawerOpened(view: View) { back.isEnabled = true; mainContainer.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS; drawerPanel.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES; mineDrawer.setActive(true) }
+            override fun onDrawerClosed(view: View) {
+                back.isEnabled = false; mainContainer.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO; mineDrawer.setActive(false)
+                drawerHost.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED, Gravity.RIGHT)
+            }
+        })
+    }
+
+    fun openMineDrawer() {
+        if (!::drawerHost.isInitialized) return
+        drawerHost.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, Gravity.RIGHT)
+        drawerHost.openDrawer(Gravity.RIGHT)
+    }
+
+    fun closeMineDrawer() {
+        if (::drawerHost.isInitialized) drawerHost.closeDrawer(Gravity.RIGHT, false)
     }
 
     private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()

@@ -1,282 +1,284 @@
 package io.trtc.tuikit.chat.demo.xingdun.features
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.Paint
 import android.graphics.drawable.GradientDrawable
-import android.util.AttributeSet
-import android.view.LayoutInflater
+import android.text.TextUtils
+import android.view.Gravity
 import android.view.View
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.widget.Toast
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.LifecycleOwner
+import android.view.ViewGroup
+import android.widget.*
+import androidx.appcompat.app.AlertDialog
+import androidx.lifecycle.*
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import io.trtc.tuikit.atomicx.theme.ThemeStore
-import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
-import io.trtc.tuikit.atomicxcore.api.login.UserProfile
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.settings.SelfDetailActivity
 import io.trtc.tuikit.chat.demo.settings.XingDunSystemSettingsActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.travel.TravelUi
+import io.trtc.tuikit.chat.demo.xingdun.features.travel.safeTravelMedia
+import io.trtc.tuikit.chat.demo.xingdun.features.travel.opt
+import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
-import io.trtc.tuikit.chat.demo.xingdun.main.XingDunJoinedGroupLoadStatus
-import io.trtc.tuikit.chat.demo.xingdun.main.XingDunMessageFirstFramePreloader
-import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
-import io.trtc.tuikit.chat.uikit.pages.PageHeaderView
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.launch
+import java.util.Locale
 
-internal fun shouldOpenCustomerServiceChat(
-    isKnownFriend: Boolean,
-    relationship: String?,
-): Boolean = isKnownFriend || relationship?.trim() in setOf("friend", "blocked")
+internal fun shouldOpenCustomerServiceChat(isKnownFriend: Boolean, relationship: String?): Boolean =
+    isKnownFriend || relationship?.trim() in setOf("friend", "blocked")
 
-/** iOS-aligned root for the My tab. Detailed settings remain in child screens. */
-class XingDunMinePageView @JvmOverloads constructor(
-    context: Context,
-    attrs: AttributeSet? = null,
-    defStyleAttr: Int = 0
-) : LinearLayout(context, attrs, defStyleAttr) {
+internal fun mineCanUseIMData(currentId: String?, profileId: String?) = !currentId.isNullOrBlank() && currentId == profileId
 
-    private data class MenuItem(
-        val titleRes: Int,
-        val iconRes: Int,
-        val action: () -> Unit,
-    )
+internal fun mineMetric(count: Int): String = when {
+    count >= 10000 -> "9999+"
+    count >= 1000 -> String.format(Locale.US, "%.1fk", count / 1000.0)
+    else -> count.coerceAtLeast(0).toString()
+}
 
-    private val header: PageHeaderView
-    private val content: LinearLayout
-    private val profileCard: View
-    private val avatarRing: View
-    private val avatar: Avatar
-    private val name: TextView
-    private val account: TextView
-    private val profileArrow: ImageView
-    private val statsCard: View
-    private val friends: TextView
-    private val groups: TextView
-    private val favorites: TextView
-    private val statDividers: List<View>
-    private val menuGroups: List<LinearLayout>
-    private val menuRows = mutableListOf<View>()
-    private val menuDividers = mutableListOf<View>()
-    private val themeStore = ThemeStore.shared(context)
-
-    private var scope: CoroutineScope? = null
-    private var userJob: Job? = null
+/** Reference Android My drawer. Shared settings and IM operations keep their native implementation. */
+class XingDunMinePageView(context: Context, private val close: () -> Unit, private val markRead: () -> Unit, private val createTeam: () -> Unit) : LinearLayout(context) {
+    private val ui = TravelUi(context)
+    private val refresh = SwipeRefreshLayout(context)
+    private val scroll = ScrollView(context)
+    private val content = ui.column()
+    private val profileCard = ui.column(20)
+    private val stats = ui.row()
     private var favoriteCount: Int? = null
+    private var cacheBytes: Long? = null
+    private var backendProfile: JsonObject? = null
+    private var active = false
+    private var ownerKey = key()
+    private var observer: Job? = null
+    private var request: Job? = null
+    private var storageValue: TextView? = null
+    private var storageProgress: ProgressBar? = null
+    private fun key() = XingDunSessionManager.currentSession()?.let { "${it.apiBaseUrl}|${it.companyId}|${it.timUserId}|${XingDunSessionManager.currentAuthenticationGeneration()}" }
+    private fun d(v: Int) = ui.d(v)
+    private fun s(id: Int) = context.getString(id)
+    private fun text(value: String, color: Int = INK) = ui.text(value, 12f, color).apply { textSize = 12f; typeface = Typeface.DEFAULT; minHeight = d(18); gravity = Gravity.CENTER_VERTICAL }
+    private fun label(id: Int, color: Int = INK) = text(s(id), color)
+    private fun icon(code: Int, size: Int = 20, color: Int = BLUE) = ui.icon(code, size, color).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
+    private fun box(color: Int = WHITE, radius: Int = 12) = ui.box(color, radius)
+    private fun tint(color: Int) = (color and 0x00FFFFFF) or 0x1A000000
+    private fun navigate(hide: Boolean = false, action: () -> Unit) { if (hide) close(); action() }
+    private fun feature(mode: String) = XingDunFeatureActivity.start(context, mode)
 
     init {
-        orientation = VERTICAL
-        LayoutInflater.from(context).inflate(R.layout.xingdun_page_mine, this, true)
-
-        header = findViewById(R.id.xingdun_mine_header)
-        content = findViewById(R.id.xingdun_mine_content)
-        profileCard = findViewById(R.id.xingdun_mine_profile_card)
-        avatarRing = findViewById(R.id.xingdun_mine_avatar_ring)
-        avatar = findViewById<Avatar>(R.id.xingdun_mine_avatar).apply {
-            setSize(Avatar.AvatarSize.XL)
-            setShape(Avatar.AvatarShape.RoundRectangle)
-        }
-        name = findViewById(R.id.xingdun_mine_name)
-        account = findViewById(R.id.xingdun_mine_account)
-        profileArrow = findViewById(R.id.xingdun_mine_profile_arrow)
-        statsCard = findViewById(R.id.xingdun_mine_stats_card)
-        friends = findViewById(R.id.xingdun_mine_friends)
-        groups = findViewById(R.id.xingdun_mine_groups)
-        favorites = findViewById(R.id.xingdun_mine_favorites)
-        statDividers = listOf(
-            findViewById(R.id.xingdun_mine_stats_divider_1),
-            findViewById(R.id.xingdun_mine_stats_divider_2),
-        )
-        menuGroups = listOf(
-            findViewById(R.id.xingdun_mine_quick_group),
-            findViewById(R.id.xingdun_mine_help_group),
-            findViewById(R.id.xingdun_mine_settings_group),
-        )
-
-        header.setTitle(context.getString(R.string.demo_page_me_title))
-        setupProfile()
-        setupStats()
-        setupMenus()
-        observeLifecycle()
-        applyTheme(themeStore.themeState.value.currentTheme.tokens.color)
+        orientation = VERTICAL; setBackgroundColor(BG)
+        addView(FrameLayout(context).apply {
+            addView(icon(0xe16a, 24, INK).apply { contentDescription = s(R.string.md_close); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES; isFocusable = true; setOnClickListener { close() } }, FrameLayout.LayoutParams(d(48), d(48), Gravity.LEFT))
+        }, LayoutParams(-1, d(48)))
+        scroll.id = R.id.md_drawer_scroll
+        scroll.isFillViewport = false; scroll.isVerticalScrollBarEnabled = false
+        scroll.addView(content, FrameLayout.LayoutParams(-1, -2)); refresh.addView(scroll)
+        refresh.setColorSchemeColors(BLUE); refresh.setOnRefreshListener { refreshData() }
+        addView(refresh, LayoutParams(-1, 0, 1f))
+        buildContent()
     }
-
-    private fun setupProfile() {
-        val openProfile = { SelfDetailActivity.start(context) }
-        profileCard.setOnClickListener { openProfile() }
-        avatar.setOnAvatarClickListener { openProfile() }
+    fun setActive(value: Boolean) {
+        active = value
+        if (value) { checkOwner(); renderProfile(); renderStats(); refreshData() }
+        else { request?.cancel(); refresh.isRefreshing = false }
     }
-
-    private fun setupStats() {
-        friends.setOnClickListener { openMainTab(MainActivity.TAB_CONTACTS) }
-        groups.setOnClickListener { XingDunGroupListActivity.start(context) }
-        favorites.setOnClickListener {
-            if (XingDunSessionManager.currentSession()?.features?.messageFavorite == true) {
-                XingDunFeatureActivity.start(context, XingDunFeatureActivity.MODE_FAVORITES)
-            }
-        }
-        renderStats(null)
+    private fun checkOwner() {
+        if (ownerKey != key()) { ownerKey = key(); favoriteCount = null; cacheBytes = null; backendProfile = null; content.removeAllViews(); buildContent(); scroll.scrollTo(0, 0); renderStorage() }
     }
-
-    private fun setupMenus() {
-        populateGroup(
-            menuGroups[0],
-            buildList {
-                if (XingDunSessionManager.currentSession()?.features?.redpacket == true) {
-                    add(menu(R.string.xingdun_redpacket_account, R.drawable.xingdun_ic_gift_white, XingDunFeatureActivity.MODE_REDPACKET_ACCOUNT))
-                }
-                add(menu(R.string.xingdun_reports, R.drawable.xingdun_ic_mine_report, XingDunFeatureActivity.MODE_REPORTS))
-                add(menu(R.string.xingdun_personal_qr, R.drawable.xingdun_ic_mine_qr, XingDunFeatureActivity.MODE_PERSONAL_QR))
-                add(menu(R.string.xingdun_share_poster, R.drawable.xingdun_ic_mine_poster, XingDunFeatureActivity.MODE_INVITE))
-            },
-        )
-        populateGroup(
-            menuGroups[1],
-            buildList {
-                add(menu(R.string.xingdun_help_center_title, R.drawable.xingdun_ic_mine_help, XingDunFeatureActivity.MODE_HELP))
-                add(menu(R.string.xingdun_feedback, R.drawable.xingdun_ic_mine_feedback, XingDunFeatureActivity.MODE_FEEDBACK))
-                if (XingDunSessionManager.currentSession()?.features?.customerService == true) {
-                    add(MenuItem(R.string.xingdun_contact_enterprise_support, R.drawable.xingdun_ic_mine_customer_service) {
-                        openEnterpriseCustomerService()
-                    })
-                }
-                add(menu(R.string.xingdun_user_agreement, R.drawable.xingdun_ic_mine_document, XingDunFeatureActivity.MODE_USER_AGREEMENT))
-                add(menu(R.string.xingdun_privacy_policy, R.drawable.xingdun_ic_mine_privacy, XingDunFeatureActivity.MODE_PRIVACY_POLICY))
-            },
-        )
-        populateGroup(
-            menuGroups[2],
-            listOf(
-                MenuItem(R.string.xingdun_system_settings, R.drawable.xingdun_ic_mine_settings) {
-                    XingDunSystemSettingsActivity.start(context)
-                },
-                menu(R.string.xingdun_about_platform, R.drawable.xingdun_ic_mine_info, XingDunFeatureActivity.MODE_ABOUT),
-            ),
-        )
-    }
-
-    private fun menu(titleRes: Int, iconRes: Int, mode: String) = MenuItem(titleRes, iconRes) {
-        XingDunFeatureActivity.start(context, mode)
-    }
-
-    private fun populateGroup(container: LinearLayout, items: List<MenuItem>) {
-        items.forEachIndexed { index, item ->
-            val row = LayoutInflater.from(context).inflate(R.layout.xingdun_item_mine_menu, container, false)
-            row.findViewById<ImageView>(R.id.xingdun_mine_menu_icon).setImageResource(item.iconRes)
-            row.findViewById<TextView>(R.id.xingdun_mine_menu_title).setText(item.titleRes)
-            row.contentDescription = context.getString(item.titleRes)
-            row.setOnClickListener { item.action() }
-            container.addView(row)
-            menuRows += row
-
-            if (index < items.lastIndex) {
-                val divider = View(context)
-                container.addView(
-                    divider,
-                    LayoutParams(LayoutParams.MATCH_PARENT, 1.dp()).apply {
-                        marginStart = 52.dp()
-                        marginEnd = 18.dp()
-                    },
-                )
-                menuDividers += divider
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        val owner = context as? LifecycleOwner ?: return
+        observer = owner.lifecycleScope.launch {
+            owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { LoginStore.shared.loginState.loginUserInfo.collect { checkOwner(); renderProfile(); renderStats() } }
+                launch { combine(ContactStore.shared.state.friendList, GroupStore.shared.state.joinedGroupList) { f, g -> f.size to g.size }.collect { renderStats() } }
             }
         }
     }
-
-    private fun observeLifecycle() {
-        (context as? LifecycleOwner)?.lifecycle?.addObserver(object : LifecycleEventObserver {
-            override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
-                when (event) {
-                    Lifecycle.Event.ON_START -> startObserving()
-                    Lifecycle.Event.ON_STOP -> stopObserving()
-                    else -> Unit
-                }
+    override fun onDetachedFromWindow() { observer?.cancel(); request?.cancel(); super.onDetachedFromWindow() }
+    private fun buildContent() {
+        content.setPadding(d(16), d(12), d(16), d(32))
+        profileCard.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0x1F4C6EF5, 0x0A4C6EF5)).apply { cornerRadius = d(16).toFloat(); setStroke(d(1), 0x1A4C6EF5) }
+        profileCard.setOnClickListener { navigate { SelfDetailActivity.start(context) } }
+        content.addView(profileCard, LayoutParams(-1, -2)); gap(12)
+        stats.background = box(WHITE, 16); stats.setPadding(0, d(16), 0, d(16))
+        content.addView(stats, LayoutParams(-1, -2)); gap(12)
+        content.addView(ui.row().apply {
+            background = box(); setPadding(d(6), d(14), d(6), d(14)); gravity = Gravity.TOP
+            val actions = listOf(Triple(R.string.md_read_all, 0xf6d2, { navigate(true, markRead) }), Triple(R.string.md_add_friend, 0xf278, { navigate(true) { feature(XingDunFeatureActivity.MODE_FRIEND_SEARCH) } }), Triple(R.string.md_create_team, 0xf0db, { navigate(true, createTeam) }), Triple(R.string.md_scan, 0xf00cc, { navigate(true) { feature(XingDunFeatureActivity.MODE_QR_SCANNER) } }))
+            actions.forEach { (label, code, click) -> addView(ui.column().apply {
+                gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, d(4), 0, d(4))
+                val actionIcon: View = if (label == R.string.md_add_friend || label == R.string.md_create_team) ImageView(context).apply {
+                    setImageResource(if (label == R.string.md_add_friend) R.drawable.mine_drawer_add_friend else R.drawable.mine_drawer_create_team)
+                    setPadding(d(10), d(10), d(10), d(10)); background = box(0xFFEEF2FF.toInt(), 14)
+                } else icon(code, 24).apply { background = box(0xFFEEF2FF.toInt(), 14) }
+                addView(actionIcon, LayoutParams(d(44), d(44))); addView(ui.space(8)); addView(this@XingDunMinePageView.label(label).apply { gravity = Gravity.CENTER; maxLines = 2 })
+                contentDescription = s(label); isFocusable = true; setOnClickListener { click() }
+            }, LayoutParams(0, -2, 1f)) }
+        }, LayoutParams(-1, -2)); gap(12)
+        group(listOfNotNull(
+            Row(R.string.md_qr, 0xf00cb, PURPLE) { navigate { feature(XingDunFeatureActivity.MODE_PERSONAL_QR) } },
+            Row(R.string.md_poster, 0xef27, 0xFF0EA5E9.toInt()) { navigate { feature(XingDunFeatureActivity.MODE_INVITE) } },
+            Row(R.string.md_blacklist, 0xf279, 0xFF64748B.toInt()) { navigate(true) { XingDunBlacklistActivity.start(context) } },
+            if (XingDunSessionManager.currentSession()?.features?.redpacket == true) Row(R.string.md_redpacket, 0xef2d, 0xFFE11D48.toInt()) { navigate { feature(XingDunFeatureActivity.MODE_REDPACKET_ACCOUNT) } } else null
+        ))
+        group(listOf(
+            Row(R.string.md_password, 0xf888, RED) { navigate { feature(XingDunFeatureActivity.MODE_CHANGE_PASSWORD) } },
+            Row(R.string.md_privacy, 0xf379, GREEN) { navigate { context.startActivity(Intent(context, XingDunProfilePrivacyActivity::class.java)) } },
+            Row(R.string.md_binding, 0xf85a, PURPLE) { navigate { context.startActivity(Intent(context, XingDunAccountBindingActivity::class.java)) } }
+        ), R.string.md_security)
+        content.addView(ui.row().apply {
+            background = box(); setPadding(d(20), d(16), d(20), d(16))
+            addView(icon(0xf01de, 20, GREEN).apply { background = box(tint(GREEN), 10) }, LayoutParams(d(36), d(36)))
+            addView(ui.column().apply {
+                addView(label(R.string.md_storage)); addView(ui.space(6))
+                storageProgress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply { max = 50000; progressTintList = android.content.res.ColorStateList.valueOf(GREEN); progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFFF1F3F9.toInt()) }
+                addView(storageProgress, LayoutParams(-1, d(6)))
+            }, LayoutParams(0, -2, 1f).apply { marginStart = d(12); marginEnd = d(12) })
+            storageValue = text("—", MUTED); addView(storageValue); isFocusable = true; setOnClickListener { clearCache() }
+        }, LayoutParams(-1, -2)); gap(12)
+        group(buildList {
+            add(Row(R.string.md_help, 0xf7e4, 0xFF3B82F6.toInt()) { navigate { feature(XingDunFeatureActivity.MODE_HELP) } })
+            add(Row(R.string.md_feedback, 0xf04f, GOLD) { navigate { feature(XingDunFeatureActivity.MODE_FEEDBACK) } })
+            add(Row(R.string.md_appeal, 0xf0c8, 0xFFDC2626.toInt()) { navigate { context.startActivity(Intent(context, XingDunAccountAppealActivity::class.java)) } })
+            add(Row(R.string.xingdun_reports, 0xf07b, MUTED) { navigate { feature(XingDunFeatureActivity.MODE_REPORTS) } })
+            if (XingDunSessionManager.currentSession()?.features?.customerService == true) add(Row(R.string.xingdun_contact_enterprise_support, 0xe155, BLUE) { navigate { openEnterpriseCustomerService() } })
+            add(Row(R.string.md_agreement, 0xefae, MUTED) { navigate { feature(XingDunFeatureActivity.MODE_USER_AGREEMENT) } })
+            add(Row(R.string.md_policy, 0xf2d0, GREEN) { navigate { feature(XingDunFeatureActivity.MODE_PRIVACY_POLICY) } })
+        }, R.string.md_help)
+        group(listOf(
+            Row(R.string.md_settings, 0xf36e, MUTED) { navigate { XingDunSystemSettingsActivity.start(context) } },
+            Row(R.string.xingdun_about_platform, 0xf815, BLUE, titleText = context.getString(R.string.md_about, context.applicationInfo.loadLabel(context.packageManager))) { navigate { feature(XingDunFeatureActivity.MODE_ABOUT) } }
+        ))
+        group(listOf(Row(R.string.md_logout, 0xf88b, RED, arrow = false) { logout() }))
+        content.addView(label(R.string.md_delete, 0xFF888888.toInt()).apply {
+            gravity = Gravity.CENTER; paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG; minHeight = d(48); isFocusable = true
+            setOnClickListener { navigate { feature(XingDunFeatureActivity.MODE_DEACTIVATE) } }
+        }, LayoutParams(-1, -2).apply { topMargin = d(4) })
+        renderProfile(); renderStats()
+    }
+    private data class Row(val title: Int, val code: Int, val color: Int, val arrow: Boolean = true, val titleText: String? = null, val click: () -> Unit)
+    private fun group(rows: List<Row>, title: Int? = null) {
+        if (title != null) content.addView(label(title, MUTED).apply { setPadding(d(4), 0, 0, d(8)) })
+        content.addView(ui.column().apply {
+            background = box(); clipToOutline = true
+            rows.forEachIndexed { index, item ->
+                if (index > 0) addView(View(context).apply { setBackgroundColor(DIVIDER) }, LayoutParams(-1, maxOf(1, d(1)/2)).apply { marginStart = d(20) })
+                addView(ui.row().apply {
+                    setPadding(d(20), d(14), d(20), d(14))
+                    addView(icon(item.code, 20, item.color).apply { background = box(tint(item.color), 10) }, LayoutParams(d(36), d(36)))
+                    addView(text(item.titleText ?: s(item.title), if (item.title == R.string.md_logout) RED else INK).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }, LayoutParams(0, -2, 1f).apply { marginStart = d(12); marginEnd = d(12) })
+                    if (item.arrow) addView(icon(0xe15f, 20, HINT))
+                    contentDescription = item.titleText ?: s(item.title); isFocusable = true; setOnClickListener { item.click() }
+                }, LayoutParams(-1, -2))
             }
-        }) ?: startObserving()
+        }, LayoutParams(-1, -2)); gap(12)
     }
-
-    private fun startObserving() {
-        if (scope != null) return
-        scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-        userJob = scope?.launch {
-            LoginStore.shared.loginState.loginUserInfo.collectLatest(::renderProfile)
+    private fun gap(size: Int) { content.addView(ui.space(size)) }
+    private fun renderProfile() {
+        profileCard.removeAllViews()
+        val session = XingDunSessionManager.currentSession(); val profile = LoginStore.shared.loginState.loginUserInfo.value?.takeIf { mineCanUseIMData(session?.timUserId, it.userID) }
+        val name = backendProfile?.opt("nickname")?.takeIf { it.isNotBlank() } ?: profile?.nickname?.takeIf { it.isNotBlank() } ?: session?.nickname?.takeIf { it.isNotBlank() } ?: session?.username.orEmpty()
+        val account = backendProfile?.opt("custom_id")?.takeIf { it.isNotBlank() } ?: session?.username?.takeIf { it.isNotBlank() } ?: session?.timUserId.orEmpty()
+        val signature = backendProfile?.opt("signature") ?: profile?.selfSignature.orEmpty()
+        profileCard.addView(ui.row().apply {
+            addView(FrameLayout(context).apply {
+                addView(FrameLayout(context).apply {
+                    background = box(0xFF5ACAA5.toInt(), 16); clipToOutline = true
+                    addView(text(name.takeLast(2), WHITE).apply { gravity = Gravity.CENTER }, FrameLayout.LayoutParams(-1, -1))
+                    val url = backendProfile?.opt("avatar")?.takeIf { it.isNotBlank() } ?: profile?.avatarURL
+                    url?.takeIf(::safeTravelMedia)?.let { addView(ui.image(it, 16), FrameLayout.LayoutParams(-1, -1)) }
+                }, FrameLayout.LayoutParams(-1, -1))
+                addView(View(context).apply { contentDescription = s(R.string.md_online); background = box(GREEN, 7).apply { setStroke(d(2), WHITE) } }, FrameLayout.LayoutParams(d(14), d(14), Gravity.BOTTOM or Gravity.RIGHT))
+            }, LayoutParams(d(72), d(72)))
+            addView(ui.column().apply {
+                addView(text(name).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }); addView(ui.space(6))
+                addView(text(account, BLUE).apply { background = box(0x144C6EF5, 10); setPadding(d(8), d(3), d(8), d(3)); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+            }, LayoutParams(0, -2, 1f).apply { marginStart = d(16) })
+            addView(icon(0xe15f, 24, HINT))
+        })
+        profileCard.addView(ui.space(14)); profileCard.addView(ui.row().apply {
+            background = box(if (signature.isBlank()) 0x66FFFFFF else 0x99FFFFFF.toInt(), 10); setPadding(d(12), d(10), d(12), d(10))
+            addView(icon(if (signature.isBlank()) 0xf030f else 0xe504, 18, HINT))
+            addView(text(signature.ifBlank { s(R.string.md_signature) }, if (signature.isBlank()) HINT else MUTED).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }, LayoutParams(0, -2, 1f).apply { marginStart = d(8) })
+        }, LayoutParams(-1, -2))
+        profileCard.contentDescription = listOf(name, account, signature.ifBlank { s(R.string.md_signature) }).joinToString("\n")
+    }
+    private fun renderStats() {
+        stats.removeAllViews()
+        val ready = mineCanUseIMData(XingDunSessionManager.currentSession()?.timUserId, LoginStore.shared.loginState.loginUserInfo.value?.userID)
+        val counts = listOf(if (ready) ContactStore.shared.state.friendList.value.size else null, if (ready) GroupStore.shared.state.joinedGroupList.value.size else null, favoriteCount)
+        val labels = listOf(R.string.md_friends, R.string.md_teams, R.string.md_favorites)
+        val colors = listOf(BLUE, PURPLE, GOLD); val icons = listOf(0xf005d, 0xf0db, 0xf5cf)
+        counts.forEachIndexed { index, value ->
+            stats.addView(ui.column().apply {
+                gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, d(8), 0, d(8))
+                addView(icon(icons[index], 22, colors[index]).apply { background = box(tint(colors[index]), 12) }, LayoutParams(d(40), d(40)))
+                addView(ui.space(8)); addView(text(value?.let(::mineMetric) ?: "—")); addView(ui.space(2)); addView(label(labels[index], MUTED))
+                contentDescription = "${value?.let(::mineMetric) ?: "—"}\n${s(labels[index])}"; isFocusable = true
+                if (index == 2 && XingDunSessionManager.currentSession()?.features?.messageFavorite != true) { isEnabled = false; alpha = .55f }
+                setOnClickListener { when(index) {
+                    0 -> navigate(true) { (context as? MainActivity)?.selectTabByName(MainActivity.TAB_CONTACTS) }
+                    1 -> navigate { XingDunGroupListActivity.start(context) }
+                    else -> navigate { feature(XingDunFeatureActivity.MODE_FAVORITES) }
+                } }
+            }, LayoutParams(0, -2, 1f))
         }
-        scope?.launch {
-            themeStore.themeState.collectLatest { applyTheme(it.currentTheme.tokens.color) }
+    }
+    private fun renderStorage() {
+        val bytes = cacheBytes; val mb = (bytes ?: 0L) / 1048576.0
+        storageValue?.text = when { bytes == null -> "—"; mb < 1 -> String.format(Locale.getDefault(), "%.0f KB", mb*1024); mb >= 1024 -> String.format(Locale.getDefault(), "%.1f GB", mb/1024); else -> String.format(Locale.getDefault(), "%.1f MB", mb) }
+        storageProgress?.progress = minOf(50000, (mb*100).toInt())
+        storageProgress?.progressTintList = android.content.res.ColorStateList.valueOf(when { mb < 300 -> GREEN; mb < 425 -> GOLD; else -> RED })
+    }
+    private fun refreshData() {
+        if (!active || request?.isActive == true) return
+        val owner = context as? LifecycleOwner ?: return
+        val session = XingDunSessionManager.currentSession() ?: return
+        val stamp = key()
+        request = owner.lifecycleScope.launch {
+            try { supervisorScope {
+                val profile = async { runCatching { XingDunSessionManager.apiClient().get<JsonElement>(session, "user/profile", emptyMap(), JsonElement::class.java).asJsonObject } }
+                val favorites = async { runCatching { if (session.features.messageFavorite) XingDunSessionManager.apiClient().get<JsonElement>(session, "message/favorites", mapOf("page" to "1", "page_size" to "1"), JsonElement::class.java).asJsonObject.get("total").asInt else 0 } }
+                val usage = async { runCatching { XingDunStorageManager.usage(context).totalBytes } }
+                val p = profile.await(); val f = favorites.await(); val u = usage.await()
+                if (key() != stamp) { checkOwner(); return@supervisorScope }
+                p.getOrNull()?.let { result ->
+                    check(result.opt("tim_user_id").ifBlank { session.timUserId } == session.timUserId)
+                    backendProfile = result
+                }
+                f.getOrNull()?.let { favoriteCount = it }; u.getOrNull()?.let { cacheBytes = it }
+                if (p.isFailure || f.isFailure || u.isFailure) Toast.makeText(context, R.string.md_refresh_failed, Toast.LENGTH_SHORT).show()
+                renderProfile(); renderStats(); renderStorage()
+            } } catch (e: CancellationException) { throw e } catch (_: Exception) { Toast.makeText(context, R.string.md_refresh_failed, Toast.LENGTH_SHORT).show() }
+            finally { refresh.isRefreshing = false }
         }
-        scope?.launch {
-            combine(
-                ContactStore.shared.state.friendList,
-                GroupStore.shared.state.joinedGroupList,
-                XingDunMessageFirstFramePreloader.joinedGroupLoadState,
-            ) { friends, groups, groupLoadState -> Triple(friends.size, groups.size, groupLoadState) }
-                .collectLatest { renderStats(favoriteCount) }
-        }
-        scope?.launch { refreshStats() }
     }
-
-    private fun stopObserving() {
-        userJob?.cancel()
-        userJob = null
-        scope?.cancel()
-        scope = null
+    private fun clearCache() {
+        AlertDialog.Builder(context).setTitle(R.string.md_clear_title).setMessage(R.string.md_clear_body).setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.md_clear) { _, _ ->
+                val owner = context as? LifecycleOwner ?: return@setPositiveButton
+                owner.lifecycleScope.launch {
+                    try { XingDunStorageManager.clear(context, XingDunCacheCategory.entries.toSet()); cacheBytes = XingDunStorageManager.usage(context).totalBytes; renderStorage(); Toast.makeText(context, R.string.md_cleared, Toast.LENGTH_SHORT).show() }
+                    catch (e: CancellationException) { throw e } catch (_: Exception) { Toast.makeText(context, R.string.md_storage_error, Toast.LENGTH_SHORT).show() }
+                }
+            }.show()
     }
-
-    private fun renderProfile(profile: UserProfile?) {
-        val session = XingDunSessionManager.currentSession()
-        val displayName = profile?.nickname?.takeIf(String::isNotBlank)
-            ?: session?.nickname?.takeIf(String::isNotBlank)
-            ?: profile?.userID.orEmpty()
-        val loginName = session?.username?.takeIf(String::isNotBlank) ?: displayName
-        name.text = displayName
-        account.text = context.getString(R.string.xingdun_login_username_format, loginName)
-        avatar.setContent(
-            Avatar.AvatarContent.Image(
-                url = profile?.avatarURL,
-                fallbackName = displayName,
-            ),
-        )
-    }
-
-    private suspend fun refreshStats() {
-        val session = XingDunSessionManager.currentSession()
-        val favoriteCount = if (session?.features?.messageFavorite == true) {
-            runCatching {
-                XingDunSessionManager.apiClient().get<JsonObject>(
-                    session,
-                    "message/favorites",
-                    mapOf("page" to "1", "page_size" to "1"),
-                    JsonObject::class.java,
-                ).get("total")?.asInt
-            }.getOrNull()
-        } else {
-            null
-        }
-        this.favoriteCount = favoriteCount
-        renderStats(favoriteCount)
-    }
-
     private fun openEnterpriseCustomerService() {
         val session = XingDunSessionManager.currentSession() ?: run {
             Toast.makeText(context, R.string.xingdun_session_expired, Toast.LENGTH_SHORT).show()
             return
         }
-        val activeScope = scope ?: return
+        val requestKey = key()
+        val activeScope = (context as? LifecycleOwner)?.lifecycleScope ?: return
         Toast.makeText(context, R.string.xingdun_loading, Toast.LENGTH_SHORT).show()
         activeScope.launch {
             runCatching {
@@ -287,6 +289,7 @@ class XingDunMinePageView @JvmOverloads constructor(
                     JsonObject::class.java,
                 )
             }.onSuccess { identity ->
+                if (key() != requestKey) return@onSuccess
                 val declaredEnabled = identity.get("customer_service_enabled")
                     ?.takeUnless { it.isJsonNull }
                     ?.let { runCatching { it.asBoolean }.getOrNull() }
@@ -329,63 +332,20 @@ class XingDunMinePageView @JvmOverloads constructor(
                     Toast.makeText(context, R.string.xingdun_customer_service_not_configured, Toast.LENGTH_SHORT).show()
                 }
             }.onFailure {
+                if (key() != requestKey) return@onFailure
                 Toast.makeText(context, R.string.xingdun_customer_service_load_retry, Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    private fun renderStats(favoriteCount: Int?) {
-        val friendCount = runCatching { ContactStore.shared.state.friendList.value.size }.getOrDefault(0)
-        val groupCount = runCatching { GroupStore.shared.state.joinedGroupList.value.size }.getOrDefault(0)
-        friends.text = context.getString(R.string.xingdun_metric_friends, friendCount)
-        groups.text = if (
-            XingDunMessageFirstFramePreloader.joinedGroupLoadStatus(XingDunSessionManager.currentSession()) ==
-            XingDunJoinedGroupLoadStatus.SUCCEEDED
-        ) {
-            context.getString(R.string.xingdun_metric_groups, groupCount)
-        } else {
-            context.getString(R.string.xingdun_metric_groups_pending)
-        }
-        favorites.text = context.getString(R.string.xingdun_metric_favorites, favoriteCount ?: 0)
-        favorites.alpha = if (XingDunSessionManager.currentSession()?.features?.messageFavorite == true) 1f else 0.55f
+    private fun logout() {
+        AlertDialog.Builder(context).setTitle(R.string.md_logout).setMessage(R.string.md_logout_body).setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.md_logout) { _, _ ->
+                close(); XingDunTenantSessionCoordinator.logout { context.startActivity(Intent(context, XingDunLaunchActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)) }
+            }.show()
     }
-
-    private fun applyTheme(colors: ColorTokens) {
-        setBackgroundColor(colors.bgColorTopBar)
-        content.setBackgroundColor(colors.bgColorTopBar)
-        val cards = listOf(profileCard, statsCard) + menuGroups
-        cards.forEach { it.background = roundedBackground(colors.bgColorOperate, 18f) }
-        avatarRing.background = roundedBackground(Color.TRANSPARENT, 16f, XINGDUN_GREEN, 2f)
-        name.setTextColor(colors.textColorPrimary)
-        account.setTextColor(colors.textColorTertiary)
-        profileArrow.setColorFilter(colors.textColorTertiary)
-        listOf(friends, groups, favorites).forEach { it.setTextColor(XINGDUN_GREEN) }
-        statDividers.forEach { it.setBackgroundColor(colors.strokeColorPrimary) }
-        menuRows.forEach { row ->
-            row.findViewById<TextView>(R.id.xingdun_mine_menu_title).setTextColor(colors.textColorPrimary)
-            row.findViewById<ImageView>(R.id.xingdun_mine_menu_icon).setColorFilter(XINGDUN_GREEN)
-            row.findViewById<ImageView>(R.id.xingdun_mine_menu_arrow).setColorFilter(colors.textColorTertiary)
-        }
-        menuDividers.forEach { it.setBackgroundColor(colors.strokeColorPrimary) }
-    }
-
-    private fun roundedBackground(color: Int, radiusDp: Float, strokeColor: Int? = null, strokeDp: Float = 0f) =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            setColor(color)
-            cornerRadius = radiusDp * resources.displayMetrics.density
-            if (strokeColor != null && strokeDp > 0f) {
-                setStroke((strokeDp * resources.displayMetrics.density).toInt(), strokeColor)
-            }
-        }
-
-    private fun openMainTab(tab: String) {
-        (context as? MainActivity)?.selectTabByName(tab)
-    }
-
-    private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
-
     private companion object {
-        val XINGDUN_GREEN: Int = Color.rgb(35, 179, 156)
+        const val BG = 0xFFF8F9FC.toInt(); const val WHITE = Color.WHITE; const val INK = 0xFF1A1A2E.toInt(); const val MUTED = 0xFF6B7280.toInt(); const val HINT = 0xFF9CA3AF.toInt(); const val DIVIDER = 0xFFE5E7EB.toInt()
+        const val BLUE = 0xFF4C6EF5.toInt(); const val PURPLE = 0xFF8B5CF6.toInt(); const val GOLD = 0xFFF59E0B.toInt(); const val GREEN = 0xFF22C55E.toInt(); const val RED = 0xFFEF4444.toInt()
     }
 }

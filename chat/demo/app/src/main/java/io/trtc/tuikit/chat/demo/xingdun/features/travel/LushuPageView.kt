@@ -121,10 +121,10 @@ class LushuPageView(context: Context, private val publish: () -> Unit) : LinearL
         val session = XingDunSessionManager.currentSession(); val profile = LoginStore.shared.loginState.loginUserInfo.value
         val name = profile?.nickname?.takeIf { it.isNotBlank() } ?: session?.nickname?.takeIf { it.isNotBlank() } ?: session?.username.orEmpty()
         header.addView(FrameLayout(context).apply {
-            background = ui.box(0xFF4C6FF4.toInt(), 20); clipToOutline = true; contentDescription = ui.s(T.mine)
+            background = ui.box(0xFF4C6FF4.toInt(), 20); clipToOutline = true; contentDescription = context.getString(R.string.md_open)
             addView(ui.text(name.takeLast(2).ifEmpty { "·" }, 14f, WHITE).apply { gravity = Gravity.CENTER }, FrameLayout.LayoutParams(-1, -1))
             profile?.avatarURL?.takeIf(::safeTravelMedia)?.let { addView(ui.image(it, 20), FrameLayout.LayoutParams(-1, -1)) }
-            setOnClickListener { (context as? Activity)?.findViewById<View>(R.id.demo_tab_me)?.performClick() }
+            setOnClickListener { (context as? io.trtc.tuikit.chat.demo.main.MainActivity)?.openMineDrawer() }
         }, LayoutParams(ui.d(36), ui.d(36)))
     }
     private fun render(keepScroll: Boolean = false) {

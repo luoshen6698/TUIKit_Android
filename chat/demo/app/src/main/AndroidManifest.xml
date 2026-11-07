@@ -19,6 +19,8 @@
         android:supportsRtl="true"
         android:theme="@style/demo_Theme_ChatView">
 
+        <activity android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunAccountBindingActivity" android:exported="false" android:theme="@style/Chat_UIKit_Theme" />
+        <activity android:name="io.trtc.tuikit.chat.demo.xingdun.features.XingDunAccountAppealActivity" android:exported="false" android:theme="@style/Chat_UIKit_Theme" android:windowSoftInputMode="adjustResize" />
         <activity android:name="io.trtc.tuikit.chat.demo.xingdun.features.travel.TravelActivity"
             android:exported="false" android:windowSoftInputMode="adjustResize"
             android:theme="@style/Chat_UIKit_Theme" />

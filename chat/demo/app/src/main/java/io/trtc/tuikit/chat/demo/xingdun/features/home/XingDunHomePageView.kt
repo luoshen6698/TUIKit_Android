@@ -89,10 +89,10 @@ class XingDunHomePageView(context: Context, private val verificationUnread: Stat
         val greeting=ui.s(when { hour<6->T.late;hour<11->T.morning;hour<14->T.noon;hour<18->T.afternoon;else->T.evening })
         identityHeader.addView(ui.column().apply { addView(ui.label(T.home,18f,INK,true));addView(ui.space(3));addView(ui.text(if(name.isBlank())greeting else ui.s(T.greeting,greeting,name),11f,MUTED)) },LayoutParams(0,-2,1f))
         val avatar=FrameLayout(context).apply {
-            background=ui.box(0xFF4C6FF4.toInt(),20);clipToOutline=true;contentDescription=ui.s(T.mine)
+            background=ui.box(0xFF4C6FF4.toInt(),20);clipToOutline=true;contentDescription=context.getString(R.string.md_open)
             addView(ui.text(name.takeLast(2).ifEmpty { "·" },14f,WHITE).apply{gravity=Gravity.CENTER},FrameLayout.LayoutParams(-1,-1))
             profile?.avatarURL?.takeIf { safeTravelMedia(it) }?.let{addView(ui.image(it,20),FrameLayout.LayoutParams(-1,-1))}
-            setOnClickListener { (context as? Activity)?.findViewById<View>(R.id.demo_tab_me)?.performClick() }
+            setOnClickListener { (context as? io.trtc.tuikit.chat.demo.main.MainActivity)?.openMineDrawer() }
         }
         identityHeader.addView(avatar,LayoutParams(ui.d(36),ui.d(36)))
     }

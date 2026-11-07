@@ -40,7 +40,6 @@ class XingDunChildBottomNavigation @JvmOverloads constructor(
             R.drawable.demo_ic_tab_messages_lines,
         ),
         Tab(MainActivity.TAB_CONTACTS, R.string.demo_tab_contacts, R.drawable.demo_ic_tab_contacts),
-        Tab(MainActivity.TAB_PROFILE, R.string.demo_tab_me, R.drawable.demo_ic_tab_me),
     ).filter { BuildConfig.XINGDUN_HOME_ENABLED || it.route != MainActivity.TAB_HOME }
     private val nav = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
