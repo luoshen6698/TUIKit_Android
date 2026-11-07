@@ -1,0 +1,22 @@
+<resources>
+    <string name="jd_journey_subtitle">围绕行程的对话</string>
+    <string name="jd_directory_subtitle">连接途友，找到同行的小队</string>
+    <string name="jd_search">搜索途友、账号或小队</string>
+    <string name="jd_all">全部</string>
+    <string name="jd_pinned">置顶</string>
+    <string name="jd_teams">小队</string>
+    <string name="jd_friends">途友</string>
+    <string name="jd_friend_count">途友 %1$d</string>
+    <string name="jd_team_count">小队 %1$d</string>
+    <string name="jd_friend_total">%1$d 位途友</string>
+    <string name="jd_team_total">%1$d 个小队</string>
+    <string name="jd_members">%1$d 位成员</string>
+    <string name="jd_no_friends">暂无途友</string>
+    <string name="jd_no_teams">暂无小队</string>
+    <string name="jd_friend_subtitle">和途友一起发现沿途风景</string>
+    <string name="jd_chat_with">与%1$s聊天</string>
+    <string name="jd_loading">正在加载…</string>
+    <string name="jd_retry">加载失败，点击重试</string>
+    <string name="jd_connecting">连接中…</string>
+    <string name="jd_members_pending">成员信息待同步</string>
+</resources>

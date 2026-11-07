@@ -1,0 +1,9 @@
+<resources>
+    <string name="journey_no_conversations">No conversations yet</string>
+    <string name="journey_no_pinned">No pinned conversations</string>
+    <string name="journey_no_teams">No team conversations</string>
+    <string name="journey_empty_hint">Start a conversation or add a companion</string>
+    <string name="journey_pinned_hint">Pin frequent conversations to keep in touch</string>
+    <string name="journey_team_hint">Your team conversations will appear here</string>
+    <string name="journey_is_pinned">Pinned</string>
+</resources>

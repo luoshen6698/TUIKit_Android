@@ -1,7 +1,7 @@
 <resources>
     <string name="demo_app_name">星盾 IM</string>
-    <string name="demo_tab_messages">消息</string>
-    <string name="demo_tab_contacts">通讯录</string>
+    <string name="demo_tab_messages">途中</string>
+    <string name="demo_tab_contacts">名册</string>
     <string name="demo_tab_me">我的</string>
     <string name="demo_settings_show_calls">显示通话记录</string>
     <string name="demo_tab_settings">设置</string>
@@ -163,8 +163,8 @@
     <string name="xingdun_deletion_pending">账号注销申请已受理，预计于 %1$s 后完成最终不可恢复清除。</string>
     <string name="xingdun_legal_document_unavailable">当前法律文档不可用。</string>
     <string name="demo_login_user_id_label">用户 ID</string>
-    <string name="demo_page_conversations_title">消息</string>
-    <string name="demo_page_contacts_title">通讯录</string>
+    <string name="demo_page_conversations_title">途中</string>
+    <string name="demo_page_contacts_title">名册</string>
     <string name="xingdun_global_search">全局搜索</string>
     <string name="xingdun_search_category_favorites">收藏</string>
     <string name="xingdun_more_message_actions">更多消息操作</string>

@@ -3,8 +3,8 @@
     <string name="demo_app_name">XingDun IM</string>
     <string name="xingdun_close_symbol" translatable="false">×</string>
     <string name="xingdun_success_symbol" translatable="false">✓</string>
-    <string name="demo_tab_messages">Messages</string>
-    <string name="demo_tab_contacts">Contacts</string>
+    <string name="demo_tab_messages">On the way</string>
+    <string name="demo_tab_contacts">Directory</string>
     <string name="demo_tab_me">Me</string>
     <string name="demo_settings_show_calls">Show Recent Calls</string>
     <string name="demo_tab_settings">Settings</string>
@@ -166,8 +166,8 @@
     <string name="xingdun_deletion_pending">Your account-deletion request is pending. Permanent deletion is expected after %1$s.</string>
     <string name="xingdun_legal_document_unavailable">This legal document is unavailable.</string>
     <string name="demo_login_user_id_label">User ID</string>
-    <string name="demo_page_conversations_title">Messages</string>
-    <string name="demo_page_contacts_title">Contacts</string>
+    <string name="demo_page_conversations_title">On the way</string>
+    <string name="demo_page_contacts_title">Directory</string>
     <string name="xingdun_global_search">Global search</string>
     <string name="xingdun_search_category_favorites">Favorites</string>
     <string name="xingdun_more_message_actions">More message actions</string>

@@ -1,0 +1,22 @@
+<resources>
+    <string name="jd_journey_subtitle">Conversations about your journey</string>
+    <string name="jd_directory_subtitle">Connect with companions and find your team</string>
+    <string name="jd_search">Search companions, accounts or teams</string>
+    <string name="jd_all">All</string>
+    <string name="jd_pinned">Pinned</string>
+    <string name="jd_teams">Teams</string>
+    <string name="jd_friends">Companions</string>
+    <string name="jd_friend_count">Companions %1$d</string>
+    <string name="jd_team_count">Teams %1$d</string>
+    <string name="jd_friend_total">%1$d companions</string>
+    <string name="jd_team_total">%1$d teams</string>
+    <string name="jd_members">%1$d members</string>
+    <string name="jd_no_friends">No companions yet</string>
+    <string name="jd_no_teams">No teams yet</string>
+    <string name="jd_friend_subtitle">Discover the scenery with your companions</string>
+    <string name="jd_chat_with">Chat with %1$s</string>
+    <string name="jd_loading">Loading…</string>
+    <string name="jd_retry">Loading failed. Tap to retry</string>
+    <string name="jd_connecting">Connecting…</string>
+    <string name="jd_members_pending">Member information pending</string>
+</resources>

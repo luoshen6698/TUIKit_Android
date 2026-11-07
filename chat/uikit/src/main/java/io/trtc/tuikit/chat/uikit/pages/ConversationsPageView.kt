@@ -188,6 +188,18 @@ class ConversationsPageView @JvmOverloads constructor(
         )
     }
 
+    fun setJourneyPresentation(header: View, controls: View) {
+        pageHeader.visibility = GONE
+        addView(header, 0, LayoutParams(-1, -2))
+        addView(controls, indexOfChild(coordinatorLayout), LayoutParams(-1, -2))
+        conversationListView.setJourneyPresentation()
+        setBackgroundColor(0xFFF7F9FA.toInt())
+    }
+
+    fun setJourneyCategory(category: io.trtc.tuikit.chat.uikit.components.conversationlist.ui.JourneyConversationCategory) {
+        conversationListView.setJourneyCategory(category)
+    }
+
     /** Reloads the official conversation store while preserving XingDun page customizations. */
     fun refresh(onComplete: (success: Boolean, description: String?) -> Unit = { _, _ -> }) {
         conversationListView.refresh(onComplete)

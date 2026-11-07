@@ -58,6 +58,7 @@ internal fun resolveConversationAvatarBadge(conversation: ConversationInfo): Ava
 
 class ConversationListAdapter(
     private val context: Context,
+    private val journeyStyle: Boolean = false,
     private val onItemClick: (ConversationInfo) -> Unit = {},
     private val onItemLongClick: (ConversationInfo, View) -> Unit = { _, _ -> }
 ) : ListAdapter<ConversationInfo, ConversationListAdapter.ConversationViewHolder>(DIFF) {
@@ -67,11 +68,11 @@ class ConversationListAdapter(
     private val summaryFormatter = MessageListMessageSummaryFormatter()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ConversationViewHolder {
-        val itemView = ConversationItemLayout(parent.context)
+        val itemView = ConversationItemLayout(parent.context, journeyStyle)
         itemView.layoutParams = RecyclerView.LayoutParams(
             RecyclerView.LayoutParams.MATCH_PARENT,
-            dp2px(parent.context, 72f)
-        )
+            dp2px(parent.context, if (journeyStyle) maxOf(68f, 23f + 36f * parent.resources.configuration.fontScale) else 72f)
+        ).apply { if (journeyStyle) { marginStart = dp2px(parent.context,16f); marginEnd = dp2px(parent.context,16f); bottomMargin = dp2px(parent.context,8f) } }
         return ConversationViewHolder(itemView)
     }
 
@@ -161,7 +162,7 @@ class ConversationListAdapter(
     }
 }
 
-class ConversationItemLayout(context: Context) : FrameLayout(context) {
+class ConversationItemLayout(context: Context, private val journeyStyle: Boolean = false) : FrameLayout(context) {
 
     private val avatar: Avatar
     private val presenceBinding: io.trtc.tuikit.chat.uikit.components.presence.PresenceAvatarBinding
@@ -170,6 +171,7 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
     private val timeView: TextView
     private val muteIcon: ImageView
     private val chevronIcon: ImageView
+    private val pinMarker = ImageView(context)
     private val pinnedAccent: View
     private val sendFailIcon: TextView
     private val sendingIndicator: ProgressBar
@@ -326,6 +328,23 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
             }
         )
 
+        if (journeyStyle) {
+            contentRow.setPadding(dp2px(context,12f), 0, dp2px(context,12f), 0)
+            avatar.setShape(Avatar.AvatarShape.Round)
+            titleView.textSize = 12f; titleView.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            subtitleView.textSize = 12f; timeView.textSize = 11f
+            middleColumn.removeView(titleView); rightColumn.removeView(timeView); rightColumn.removeView(muteIcon)
+            middleColumn.addView(LinearLayout(context).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                addView(titleView, LinearLayout.LayoutParams(0,-2,1f))
+                pinMarker.setImageResource(R.drawable.journey_ic_pin); pinMarker.contentDescription = context.getString(R.string.journey_is_pinned)
+                addView(pinMarker, LinearLayout.LayoutParams(dp2px(context,12f),dp2px(context,12f)).apply { marginStart = dp2px(context,4f) })
+                addView(timeView, LinearLayout.LayoutParams(-2,-2).apply { marginStart = dp2px(context,8f) })
+            }, 0, LinearLayout.LayoutParams(-1,-2))
+            subtitleRow.addView(muteIcon, LinearLayout.LayoutParams(dp2px(context,14f),dp2px(context,14f)))
+            contentRow.removeView(spacerMiddle); contentRow.removeView(rightColumn); contentRow.removeView(chevronIcon)
+            clipToOutline = true
+        }
         foreground = highlightOverlay
     }
 
@@ -402,6 +421,11 @@ class ConversationItemLayout(context: Context) : FrameLayout(context) {
         pinnedAccent.visibility = if (conversation.isPinned) VISIBLE else GONE
         bindMuteIcon(conversation, colors)
         bindSendStatus(previewMessage, colors)
+        if (journeyStyle) {
+            background = GradientDrawable().apply { setColor(if (conversation.isPinned) 0xFFEEF2FF.toInt() else Color.WHITE); cornerRadius = dp2px(context,18f).toFloat(); setStroke(dp2px(context,1f),0xFFE7E5E2.toInt()) }
+            titleView.setTextColor(0xFF30383D.toInt()); subtitleView.setTextColor(0xFF63717B.toInt()); timeView.setTextColor(0xFF9AA7B3.toInt())
+            pinnedAccent.visibility = GONE; pinMarker.visibility = if (conversation.isPinned) VISIBLE else GONE
+        }
     }
 
     fun setHighlighted(highlighted: Boolean, colors: ColorTokens) {

@@ -80,7 +80,10 @@ import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordin
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryState
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.AvatarBadgeView
-import io.trtc.tuikit.chat.uikit.pages.ContactsPageView
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunDirectoryPageView
+import io.trtc.tuikit.chat.demo.xingdun.features.JourneyPageHeader
+import io.trtc.tuikit.chat.demo.xingdun.features.JourneyFilters
+import io.trtc.tuikit.chat.uikit.components.conversationlist.ui.JourneyConversationCategory
 import io.trtc.tuikit.chat.uikit.pages.ConversationsPageView
 import io.trtc.tuikit.chat.uikit.pages.PopupMenuHelper
 import io.trtc.tuikit.chat.uikit.pages.PopupMenuItem
@@ -160,8 +163,11 @@ class MainActivity : BaseActivity() {
     private var contactsSearchButton: ImageView? = null
     private var contactsAddButton: ImageView? = null
     private var contactsHeaderActions: LinearLayout? = null
+    private var journeyCategory = JourneyConversationCategory.ALL
+    private var directoryCategory = 0
+    private var journeyHeader: JourneyPageHeader? = null
     private var conversationsPage: ConversationsPageView? = null
-    private var contactsPage: ContactsPageView? = null
+    private var contactsPage: XingDunDirectoryPageView? = null
     private var imConnectionNotice: IMConnectionNotice? = null
     private var customerServiceContacts: List<CustomerServiceContact> = emptyList()
     private var selectedTabIndex = 0
@@ -208,6 +214,8 @@ class MainActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         lushuState = savedInstanceState?.getBundle("lushu_state")
+        journeyCategory = JourneyConversationCategory.values().getOrNull(savedInstanceState?.getInt("journey_category") ?: 0) ?: JourneyConversationCategory.ALL
+        directoryCategory = savedInstanceState?.getInt("directory_category") ?: 0
         if (isFinishing) {
             return
         }
@@ -311,6 +319,8 @@ class MainActivity : BaseActivity() {
         outState.putBoolean("mine_drawer_open", ::drawerHost.isInitialized && drawerHost.isDrawerVisible(Gravity.RIGHT))
         outState.putBundle("lushu_state", (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.saveState() ?: lushuState)
         outState.putInt("main_tab", currentTabId)
+        outState.putInt("journey_category",journeyCategory.ordinal)
+        outState.putInt("directory_category",contactsPage?.category ?: directoryCategory)
         super.onSaveInstanceState(outState)
     }
 
@@ -322,7 +332,7 @@ class MainActivity : BaseActivity() {
         mainScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         XingDunConversationPreviewCleaner.cleanupExistingConversationPreviews(this)
         refreshUnreadCounts()
-        contactsPage?.let(::refreshCustomerServiceContacts)
+        contactsPage?.refresh()
 
         mainScope?.launch {
             themeStore.themeState.collectLatest { state ->
@@ -887,81 +897,21 @@ class MainActivity : BaseActivity() {
                 })
             }
         }
-        val addButton = ImageView(this).apply {
-            setImageResource(io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_add_circle)
-            contentDescription = getString(R.string.xingdun_more_message_actions)
-            layoutParams = ViewGroup.LayoutParams(24.dpToPx(), 24.dpToPx())
-        }
-        val searchButton = ImageView(this).apply {
-            setImageResource(io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_search)
-            contentDescription = getString(R.string.xingdun_global_search)
-            layoutParams = LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply {
-                marginEnd = 16.dpToPx()
-            }
-            setOnClickListener { SearchActivity.start(this@MainActivity) }
-        }
-        conversationsSearchButton = searchButton
-        conversationsAddButton = addButton
-        addButton.setOnClickListener { anchor ->
-            PopupMenuHelper(this).show(
-                anchor,
-                listOf(
-                    PopupMenuItem(
-                        title = getString(R.string.xingdun_start_group_chat),
-                        onClick = {
-                            ContactFlowLauncher.showCreateGroupChatPage(this) { conversationId ->
-                                ChatActivity.start(this, conversationId)
-                            }
-                        },
-                        iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_chat_add
-                    ),
-                    PopupMenuItem(
-                        title = getString(R.string.xingdun_add_friend_menu),
-                        onClick = {
-                            XingDunFeatureActivity.start(
-                                this,
-                                XingDunFeatureActivity.MODE_FRIEND_SEARCH,
-                                selectedTab = TAB_MESSAGES,
-                            )
-                        },
-                        iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_user_add
-                    ),
-                    PopupMenuItem(
-                        title = getString(R.string.xingdun_scan_qr),
-                        onClick = {
-                            XingDunFeatureActivity.start(
-                                this,
-                                XingDunFeatureActivity.MODE_QR_SCANNER,
-                                selectedTab = TAB_MESSAGES,
-                            )
-                        },
-                        iconResId = R.drawable.xingdun_ic_mine_qr
-                    ),
-                    PopupMenuItem(
-                        title = getString(R.string.xingdun_read_all),
-                        onClick = { markAllConversationsRead() },
-                        iconResId = R.drawable.xingdun_ic_read_all,
-                        enabled = !readAllCoordinator.isRunning,
-                    )
-                )
-            )
-        }
-        val headerActions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(searchButton)
-            addView(addButton)
-            addView(XingDunMineAvatarView(this@MainActivity), LinearLayout.LayoutParams(36.dpToPx(),36.dpToPx()).apply { marginStart = 12.dpToPx() })
-        }
         page.setup(
             config = actionConfig,
             showSearchBar = false,
             headerTitle = getString(R.string.demo_page_conversations_title),
-            headerRightAction = headerActions,
+
             onConversationClick = { conversationInfo ->
                 ChatActivity.start(this, conversationInfo.conversationID)
             }
         )
+        val header = JourneyPageHeader(this,R.string.demo_page_conversations_title,R.string.jd_journey_subtitle)
+        journeyHeader = header
+        val filters = JourneyFilters(this,listOf(getString(R.string.jd_all),getString(R.string.jd_pinned),getString(R.string.jd_teams)),journeyCategory.ordinal,38) { index ->
+            journeyCategory=JourneyConversationCategory.values()[index];page.setJourneyCategory(journeyCategory)
+        }
+        page.setJourneyPresentation(header,filters);page.setJourneyCategory(journeyCategory)
         applyIMConnectionNotice(page)
         return SwipeRefreshLayout(this).apply {
             setColorSchemeColors(0xFF23B39C.toInt())
@@ -997,10 +947,10 @@ class MainActivity : BaseActivity() {
 
     private fun applyIMConnectionNotice(page: ConversationsPageView) {
         val notice = imConnectionNotice
-        page.setConnectionNotice(notice?.let { getString(it.messageResID) }, notice?.warning == true)
+        journeyHeader?.setConnectionNotice(notice?.let { getString(it.messageResID) }); page.setConnectionNotice(null)
     }
 
-    private fun applyIMConnectionNotice(page: ContactsPageView) {
+    private fun applyIMConnectionNotice(page: XingDunDirectoryPageView) {
         val notice = imConnectionNotice
         page.setConnectionNotice(notice?.let { getString(it.messageResID) }, notice?.warning == true)
     }
@@ -1089,208 +1039,14 @@ class MainActivity : BaseActivity() {
     }
 
     private fun createContactsPage(): View {
-        val page = ContactsPageView(this)
-        contactsPage = page
-        applyIMConnectionNotice(page)
-        val searchButton = ImageView(this).apply {
-            setImageResource(io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_search)
-            contentDescription = getString(R.string.xingdun_global_search)
-            layoutParams = LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply {
-                marginEnd = 16.dpToPx()
-            }
-            setOnClickListener { SearchActivity.start(this@MainActivity) }
-        }
-        val addButton = ImageView(this).apply {
-            setImageResource(io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_add_circle)
-            contentDescription = getString(R.string.xingdun_more_contact_actions)
-            layoutParams = ViewGroup.LayoutParams(24.dpToPx(), 24.dpToPx())
-        }
-        contactsSearchButton = searchButton
-        contactsAddButton = addButton
-        addButton.setOnClickListener { anchor ->
-            PopupMenuHelper(this).show(
-                anchor,
-                listOf(
-                    PopupMenuItem(
-                        title = getString(R.string.xingdun_start_group_chat),
-                        onClick = {
-                            ContactFlowLauncher.showCreateGroupChatPage(this) { conversationId ->
-                                ChatActivity.start(this, conversationId)
-                            }
-                        },
-                        iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_chat_add
-                    ),
-                    PopupMenuItem(
-                        title = getString(R.string.xingdun_add_friend_menu),
-                        onClick = {
-                            XingDunFeatureActivity.start(
-                                this,
-                                XingDunFeatureActivity.MODE_FRIEND_SEARCH,
-                                selectedTab = TAB_CONTACTS,
-                            )
-                        },
-                        iconResId = io.trtc.tuikit.chat.uikit.R.drawable.uikit_ic_user_add
-                    ),
-                    PopupMenuItem(
-                        title = getString(R.string.xingdun_scan_qr),
-                        onClick = {
-                            XingDunFeatureActivity.start(
-                                this,
-                                XingDunFeatureActivity.MODE_QR_SCANNER,
-                                selectedTab = TAB_CONTACTS,
-                            )
-                        },
-                        iconResId = R.drawable.xingdun_ic_mine_qr
-                    )
-                )
-            )
-        }
-        val headerActions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(searchButton)
-            addView(addButton)
-            addView(XingDunMineAvatarView(this@MainActivity), LinearLayout.LayoutParams(36.dpToPx(),36.dpToPx()).apply { marginStart = 12.dpToPx() })
-        }
-        contactsHeaderActions = headerActions
-        configureContactsPage(page)
+        val page = XingDunDirectoryPageView(this,directoryCategory)
+        contactsPage=page;applyIMConnectionNotice(page)
         return SwipeRefreshLayout(this).apply {
-            setColorSchemeColors(0xFF23B39C.toInt())
-            addView(page, ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            ))
-            setOnRefreshListener {
-                page.refresh { isRefreshing = false }
-                refreshCustomerServiceContacts(page)
-            }
+            setColorSchemeColors(0xFF4B6975.toInt())
+            addView(page,ViewGroup.LayoutParams(-1,-1))
+            setOnChildScrollUpCallback { _,_ -> page.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.journey_directory_list)?.canScrollVertically(-1)==true }
+            setOnRefreshListener { page.refresh { isRefreshing=false } }
         }
-    }
-
-    private fun createContactsPageConfiguration() = ChatContactListConfig(
-            showGroupApplications = false,
-            showSearchBar = false,
-            excludedContactIDs = customerServiceContacts.map(CustomerServiceContact::userID).toSet(),
-        ).customizeItems {
-            replace(ContactListItemIDs.NEW_CONTACTS) { item ->
-                item.copy(
-                    title = getString(R.string.xingdun_new_friends),
-                    titleResID = 0,
-                    iconResID = R.drawable.xingdun_ic_contacts_new_friends,
-                    badgeCount = verificationUnreadCount,
-                    onClick = { XingDunVerificationMessagesActivity.start(this@MainActivity) }
-                )
-            }
-            replace(ContactListItemIDs.MY_GROUPS) { item ->
-                item.copy(
-                    title = getString(R.string.xingdun_my_groups),
-                    titleResID = 0,
-                    iconResID = R.drawable.xingdun_ic_contacts_groups,
-                    onClick = { XingDunGroupListActivity.start(this@MainActivity) }
-                )
-            }
-            replace(ContactListItemIDs.BLACKLIST) { item ->
-                item.copy(
-                    iconResID = R.drawable.xingdun_ic_contacts_blacklist,
-                    onClick = { XingDunBlacklistActivity.start(this@MainActivity) },
-                )
-            }
-            customerServiceContacts.forEachIndexed { index, service ->
-                add(ContactCustomItem(
-                    ID = "xingdun.customerService.$index",
-                    title = service.displayName,
-                    avatarURL = service.avatarURL,
-                    iconResID = if (service.avatarURL.isNullOrBlank()) {
-                        R.drawable.xingdun_ic_contacts_customer_service
-                    } else {
-                        0
-                    },
-                    sectionTitle = getString(R.string.xingdun_my_customer_service),
-                    onClick = {
-                        XingDunContactDetailActivity.start(
-                            this@MainActivity,
-                            service.userID,
-                            service.displayName,
-                            service.avatarURL,
-                        )
-                    },
-                ))
-            }
-        }
-
-    private fun refreshCustomerServiceContacts(page: ContactsPageView) {
-        val session = XingDunSessionManager.currentSession()
-        if (session?.features?.customerService != true) {
-            if (customerServiceContacts.isNotEmpty()) {
-                customerServiceContacts = emptyList()
-                configureContactsPage(page)
-            }
-            return
-        }
-        val scope = mainScope ?: return
-        scope.launch {
-            runCatching {
-                XingDunSessionManager.apiClient().get<JsonObject>(
-                    session,
-                    "cs/identity",
-                    emptyMap(),
-                    JsonObject::class.java,
-                )
-            }.onSuccess { identity ->
-                val enabled = identity.get("customer_service_enabled")
-                    ?.takeUnless { it.isJsonNull }
-                    ?.let { runCatching { it.asBoolean }.getOrNull() }
-                    ?: false
-                val assigned = identity.getAsJsonArray("customer_services")
-                    ?.mapNotNull { element ->
-                        element.takeIf { it.isJsonObject }?.asJsonObject?.let { service ->
-                            val userID = service.stringValue("tim_user_id") ?: return@let null
-                            CustomerServiceContact(
-                                userID = userID,
-                                displayName = service.stringValue("nickname")
-                                    ?: service.stringValue("custom_id")
-                                    ?: getString(R.string.xingdun_enterprise_customer_service),
-                                avatarURL = service.stringValue("avatar"),
-                            )
-                        }
-                    }
-                    .orEmpty()
-                val ordinaryEntryEnabled = identity.get("ordinary_entry_enabled")
-                    ?.takeUnless { it.isJsonNull }
-                    ?.let { runCatching { it.asBoolean }.getOrNull() }
-                    ?: false
-                val fallback = identity.stringValue("official_cs_tim_user_id")
-                    ?.takeIf { enabled && ordinaryEntryEnabled }
-                    ?.let { userID ->
-                        CustomerServiceContact(
-                            userID = userID,
-                            displayName = getString(R.string.xingdun_enterprise_customer_service),
-                            avatarURL = null,
-                        )
-                    }
-                val refreshed = if (enabled) {
-                    (assigned.ifEmpty { listOfNotNull(fallback) }).distinctBy(CustomerServiceContact::userID)
-                } else {
-                    emptyList()
-                }
-                if (refreshed != customerServiceContacts) {
-                    customerServiceContacts = refreshed
-                    configureContactsPage(page)
-                }
-            }
-        }
-    }
-
-    private fun configureContactsPage(page: ContactsPageView) {
-        // Rebuild only the official header customizations; the Store-backed contact list remains intact.
-        val refreshed = createContactsPageConfiguration()
-        page.setup(
-            config = refreshed,
-            headerTitle = getString(R.string.demo_page_contacts_title),
-            headerRightAction = contactsHeaderActions,
-            onContactClick = { contactInfo -> XingDunContactDetailActivity.start(this, contactInfo) },
-            onGroupClick = { contactInfo -> ChatActivity.start(this, "group_${contactInfo.userID}") },
-        )
     }
 
     private fun JsonObject.stringValue(name: String): String? =

@@ -45,6 +45,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 class ConversationListView @JvmOverloads constructor(
@@ -69,6 +70,12 @@ class ConversationListView @JvmOverloads constructor(
     private var anchorObserver: RecyclerView.AdapterDataObserver? = null
     private var swipeActionHelper: ItemTouchHelper? = null
     private val viewModelKey = "${ConversationListViewModel::class.java.name}:${System.identityHashCode(this)}"
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density + .5f).toInt()
+    private var journeyStyle = false
+    private val category = MutableStateFlow(JourneyConversationCategory.ALL)
+    private val journeyEmptyIcon by lazy { android.widget.ImageView(context) }
+    private val journeyEmptyHint by lazy { TextView(context) }
 
     private var onConversationClick: (ConversationInfo) -> Unit = {}
 
@@ -109,6 +116,7 @@ class ConversationListView @JvmOverloads constructor(
 
         adapter = ConversationListAdapter(
             context = context,
+            journeyStyle = journeyStyle,
             onItemClick = { conversation ->
                 this@ConversationListView.onConversationClick(conversation)
             },
@@ -133,6 +141,33 @@ class ConversationListView @JvmOverloads constructor(
         if (isAttachedToWindow) {
             bindViewModel()
         }
+    }
+
+    fun setJourneyPresentation() {
+        if (journeyStyle) return
+        journeyStyle = true
+        setup(config, onConversationClick)
+        dividerDecoration?.let { recyclerView.removeItemDecoration(it) }; dividerDecoration = null
+        recyclerView.setPadding(0, 0, 0, dp(16)); recyclerView.clipToPadding = false
+        emptyView.removeAllViews(); emptyView.gravity = Gravity.CENTER
+        emptyView.setPadding(0, 0, 0, dp(80))
+        journeyEmptyIcon.setImageResource(R.drawable.journey_ic_chat)
+        journeyEmptyIcon.setColorFilter(0xFF4B6975.toInt())
+        journeyEmptyIcon.setPadding(dp(22), dp(22), dp(22), dp(22))
+        journeyEmptyIcon.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFFEDF2F4.toInt()) }
+        emptyView.addView(journeyEmptyIcon, LinearLayout.LayoutParams(dp(80), dp(80)))
+        emptyTextView.textSize = 12f; emptyTextView.gravity = Gravity.CENTER
+        emptyView.addView(emptyTextView, LinearLayout.LayoutParams(-2,-2).apply { topMargin = dp(20) })
+        journeyEmptyHint.textSize = 12f; journeyEmptyHint.gravity = Gravity.CENTER; journeyEmptyHint.setTextColor(0xFF9AA7B3.toInt())
+        emptyView.addView(journeyEmptyHint, LinearLayout.LayoutParams(-2,-2).apply { topMargin = dp(8) })
+        setJourneyCategory(category.value)
+    }
+
+    fun setJourneyCategory(value: JourneyConversationCategory) {
+        category.value = value
+        emptyTextView.setText(when(value) { JourneyConversationCategory.ALL -> R.string.journey_no_conversations; JourneyConversationCategory.PINNED -> R.string.journey_no_pinned; JourneyConversationCategory.TEAM -> R.string.journey_no_teams })
+        journeyEmptyHint.setText(when(value) { JourneyConversationCategory.ALL -> R.string.journey_empty_hint; JourneyConversationCategory.PINNED -> R.string.journey_pinned_hint; JourneyConversationCategory.TEAM -> R.string.journey_team_hint })
+        recyclerView.scrollToPosition(0)
     }
 
     fun release() {
@@ -220,12 +255,17 @@ class ConversationListView @JvmOverloads constructor(
         scope.launch {
             combine(
                 viewModel.conversationList,
-                viewModel.initialLoadFinished
-            ) { list, initialLoadFinished -> list to initialLoadFinished }
+                viewModel.initialLoadFinished,
+                category
+            ) { list, initialLoadFinished, filter ->
+                list.filter { !journeyStyle || filter.accepts(it.isPinned, it.conversationID.startsWith("group_")) } to initialLoadFinished
+            }
                 .collectLatest { (list, initialLoadFinished) ->
                     currentPopup?.dismissImmediately()
                     pendingAnchorToTop = isFirstItemFullyVisible()
                     adapter.submitList(list)
+                    // A filtered first page may be empty while matching conversations exist later.
+                    if (journeyStyle && initialLoadFinished && category.value != JourneyConversationCategory.ALL && (list.size < 20 || ((recyclerView.layoutManager as? LinearLayoutManager)?.findLastVisibleItemPosition() ?: -1) >= list.size-3) && viewModel.hasMoreConversations.value) viewModel.loadMoreConversation()
                     emptyView.visibility = if (initialLoadFinished && list.isEmpty()) {
                         View.VISIBLE
                     } else {
@@ -238,8 +278,8 @@ class ConversationListView @JvmOverloads constructor(
             themeStore.themeState.collectLatest {
                 val colors = it.currentTheme.tokens.color
                 currentPopup?.dismissImmediately()
-                setBackgroundColor(colors.bgColorTopBar)
-                emptyTextView.setTextColor(colors.textColorTertiary)
+                setBackgroundColor(if (journeyStyle) 0xFFF7F9FA.toInt() else colors.bgColorTopBar)
+                emptyTextView.setTextColor(if (journeyStyle) 0xFF30383D.toInt() else colors.textColorTertiary)
                 adapter.notifyThemeChanged()
                 recyclerView.invalidateItemDecorations()
             }

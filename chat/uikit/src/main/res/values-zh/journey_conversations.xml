@@ -1,0 +1,9 @@
+<resources>
+    <string name="journey_no_conversations">暂无会话</string>
+    <string name="journey_no_pinned">暂无置顶会话</string>
+    <string name="journey_no_teams">暂无小队会话</string>
+    <string name="journey_empty_hint">开始新会话或添加途友吧</string>
+    <string name="journey_pinned_hint">将常用会话置顶，方便随时联系</string>
+    <string name="journey_team_hint">和小队的对话会显示在这里</string>
+    <string name="journey_is_pinned">已置顶</string>
+</resources>
