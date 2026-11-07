@@ -66,7 +66,9 @@ import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallSessionInitializer
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunBlacklistActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupListActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunVerificationMessagesActivity
-import io.trtc.tuikit.chat.demo.xingdun.features.workspace.XingDunWorkspacePageView
+import io.trtc.tuikit.chat.demo.xingdun.features.travel.LushuPageView
+import io.trtc.tuikit.chat.demo.xingdun.features.travel.TravelActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import io.trtc.tuikit.chat.demo.xingdun.features.home.XingDunHomePageView
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunMinePageView
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
@@ -126,9 +128,14 @@ class MainActivity : BaseActivity() {
         const val EXTRA_TARGET_TAB = "xingdun.target.tab"
         const val TAB_HOME = "home"
         const val TAB_MESSAGES = "messages"
-        const val TAB_WORKSPACE = "workspace"
+        const val TAB_LUSHU = "lushu"
         const val TAB_CONTACTS = "contacts"
         const val TAB_PROFILE = "profile"
+    }
+
+    private var lushuState: Bundle? = null
+    private val lushuPublisher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.published()
     }
 
     private lateinit var viewPager: ViewPager2
@@ -193,6 +200,7 @@ class MainActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lushuState = savedInstanceState?.getBundle("lushu_state")
         if (isFinishing) {
             return
         }
@@ -228,6 +236,13 @@ class MainActivity : BaseActivity() {
                 iconResId = R.drawable.xingdun_ic_tab_home
             ),
             BottomTab(
+                tabId = R.id.demo_tab_lushu,
+                root = findViewById(R.id.demo_tab_lushu),
+                icon = findViewById(R.id.demo_tab_lushu_icon),
+                text = findViewById(R.id.demo_tab_lushu_text),
+                iconResId = R.drawable.xingdun_ic_tab_lushu
+            ),
+            BottomTab(
                 tabId = R.id.demo_tab_messages,
                 root = findViewById(R.id.demo_tab_messages),
                 icon = findViewById(R.id.demo_tab_messages_icon),
@@ -242,13 +257,7 @@ class MainActivity : BaseActivity() {
                 text = findViewById(R.id.demo_tab_contacts_text),
                 iconResId = R.drawable.demo_ic_tab_contacts
             ),
-            BottomTab(
-                tabId = R.id.demo_tab_calls,
-                root = findViewById(R.id.demo_tab_calls),
-                icon = findViewById(R.id.demo_tab_calls_icon),
-                text = findViewById(R.id.demo_tab_calls_text),
-                iconResId = R.drawable.demo_ic_tab_calls
-            ),
+
             BottomTab(
                 tabId = R.id.demo_tab_me,
                 root = findViewById(R.id.demo_tab_me),
@@ -298,6 +307,7 @@ class MainActivity : BaseActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBundle("lushu_state", (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.saveState() ?: lushuState)
         outState.putInt("main_tab", currentTabId)
         super.onSaveInstanceState(outState)
     }
@@ -305,6 +315,7 @@ class MainActivity : BaseActivity() {
     override fun onStart() {
         super.onStart()
         (tabPageCache[R.id.demo_tab_home] as? XingDunHomePageView)?.setActive(currentTabId == R.id.demo_tab_home)
+        (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.setActive(currentTabId == R.id.demo_tab_lushu)
         mainScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         XingDunConversationPreviewCleaner.cleanupExistingConversationPreviews(this)
         refreshUnreadCounts()
@@ -366,6 +377,7 @@ class MainActivity : BaseActivity() {
 
     override fun onStop() {
         (tabPageCache[R.id.demo_tab_home] as? XingDunHomePageView)?.setActive(false)
+        (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.setActive(false)
         super.onStop()
         mainScope?.cancel()
         mainScope = null
@@ -373,6 +385,7 @@ class MainActivity : BaseActivity() {
 
     private fun applyColors(colors: ColorTokens) {
         (tabPageCache[R.id.demo_tab_home] as? XingDunHomePageView)?.updateColors()
+        (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.updateColors()
         updateStatusBarAreaColor(colors)
         bottomNavContainer.setBackgroundColor(colors.bgColorBottomBar)
         bottomNav.setBackgroundColor(colors.bgColorBottomBar)
@@ -415,7 +428,7 @@ class MainActivity : BaseActivity() {
         return tabPageCache.getOrPut(tabId) {
             when (tabId) {
                 R.id.demo_tab_home -> XingDunHomePageView(this, verificationUnreadCount)
-                R.id.demo_tab_calls -> createCallsPage()
+                R.id.demo_tab_lushu -> LushuPageView(this) { lushuPublisher.launch(TravelActivity.intent(this, "intent")) }.apply { restoreState(lushuState) }
                 R.id.demo_tab_contacts -> createContactsPage()
                 R.id.demo_tab_me -> createMePage()
                 else -> createConversationsPage()
@@ -445,6 +458,7 @@ class MainActivity : BaseActivity() {
         selectedTabIndex = index
         currentTabId = bottomTabs[index].tabId
         (tabPageCache[R.id.demo_tab_home] as? XingDunHomePageView)?.setActive(currentTabId == R.id.demo_tab_home)
+        (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.setActive(currentTabId == R.id.demo_tab_lushu)
         if (updatePager && viewPager.currentItem != index) {
             viewPager.setCurrentItem(index, false)
         }
@@ -1277,16 +1291,12 @@ class MainActivity : BaseActivity() {
     private fun JsonObject.stringValue(name: String): String? =
         get(name)?.takeUnless { it.isJsonNull }?.asString?.trim()?.takeIf(String::isNotEmpty)
 
-    private fun createCallsPage(): View {
-        return XingDunWorkspacePageView(this)
-    }
-
     private fun selectRequestedTab(intent: Intent?) {
         if (!::bottomTabs.isInitialized) return
         val requestedTabId = when (intent?.getStringExtra(EXTRA_TARGET_TAB)) {
             TAB_HOME -> defaultTabId
             TAB_MESSAGES -> R.id.demo_tab_messages
-            TAB_WORKSPACE -> R.id.demo_tab_calls
+            TAB_LUSHU -> R.id.demo_tab_lushu
             TAB_CONTACTS -> R.id.demo_tab_contacts
             TAB_PROFILE -> R.id.demo_tab_me
             else -> return

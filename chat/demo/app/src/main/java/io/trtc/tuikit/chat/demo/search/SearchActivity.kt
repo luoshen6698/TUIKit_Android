@@ -190,22 +190,7 @@ class SearchActivity : BaseActivity() {
                     XingDunFeatureActivity.start(this, XingDunFeatureActivity.MODE_FAVORITES)
                 }
             }
-            "workspace" -> {
-                startActivity(Intent(this, MainActivity::class.java).apply {
-                    putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_WORKSPACE)
-                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                })
-                finish()
-            }
-            "workspace_create" -> XingDunFeatureActivity.start(
-                this,
-                XingDunFeatureActivity.MODE_WORKSPACE_CREATE,
-                result.metadata["type"].orEmpty(),
-            )
-            "workspace_pending" -> XingDunFeatureActivity.start(
-                this,
-                XingDunFeatureActivity.MODE_WORKSPACE_PENDING,
-            )
+
         }
     }
 }

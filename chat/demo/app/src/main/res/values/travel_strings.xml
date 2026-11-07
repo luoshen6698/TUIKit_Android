@@ -112,4 +112,22 @@
     <string name="tx_hide_hint">Hide this comment and reduce similar recommendations</string>
     <string name="tx_report_hint">Report inappropriate content</string>
     <string name="tx_another_round">Another round</string>
+    <string name="tx_lushu">Routebook</string>
+    <string name="tx_lushu_subtitle">Discover routes and plan your next journey</string>
+    <string name="tx_map">Map</string>
+    <string name="tx_timeline">Timeline</string>
+    <string name="tx_my_routes">My routes</string>
+    <string name="tx_discover_routes">Discover routes</string>
+    <string name="tx_all">All</string>
+    <string name="tx_nationwide">All cities</string>
+    <string name="tx_no_routes">No routes yet</string>
+    <string name="tx_publish_route_hint">Share a travel intention</string>
+    <string name="tx_publish_intent">Create intention</string>
+    <string name="tx_route_published">Published and added to My routes</string>
+    <string name="tx_route_month">%1$s · %2$s</string>
+    <string name="tx_day_unit">Day</string>
+    <string name="tx_city_routes">%1$s · %2$d related routes</string>
+    <string name="tx_route_count">%1$d routes</string>
+    <string name="tx_close_city">Close city routes</string>
+    <string name="tx_platform_book">Platform routebook</string>
 </resources>

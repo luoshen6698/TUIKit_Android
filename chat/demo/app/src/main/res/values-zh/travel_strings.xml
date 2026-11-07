@@ -112,4 +112,22 @@
     <string name="tx_hide_hint">隐藏该留言并减少类似推荐</string>
     <string name="tx_report_hint">提交违规举报</string>
     <string name="tx_another_round">再看一轮</string>
+    <string name="tx_lushu">路书</string>
+    <string name="tx_lushu_subtitle">发现路线灵感，规划下一段旅程</string>
+    <string name="tx_map">地图</string>
+    <string name="tx_timeline">时间轴</string>
+    <string name="tx_my_routes">我的路书</string>
+    <string name="tx_discover_routes">发现路书</string>
+    <string name="tx_all">全部</string>
+    <string name="tx_nationwide">全国</string>
+    <string name="tx_no_routes">暂无路书</string>
+    <string name="tx_publish_route_hint">发布一条出行意向吧</string>
+    <string name="tx_publish_intent">去发布意向</string>
+    <string name="tx_route_published">发布成功，已加入我的路书</string>
+    <string name="tx_route_month">%1$s · %2$s月</string>
+    <string name="tx_day_unit">日</string>
+    <string name="tx_city_routes">%1$s · %2$d 个相关行程</string>
+    <string name="tx_route_count">%1$d 条</string>
+    <string name="tx_close_city">收起城市路线</string>
+    <string name="tx_platform_book">平台路书</string>
 </resources>

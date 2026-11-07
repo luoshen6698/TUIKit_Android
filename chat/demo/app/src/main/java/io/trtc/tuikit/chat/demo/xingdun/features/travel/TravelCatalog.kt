@@ -41,6 +41,8 @@ internal class TravelCatalog private constructor(val raw: JsonObject) {
     val ownRoute = raw.get("own_route")?.takeIf { it.isJsonObject }?.asJsonObject
     val articles = raw.rows("articles")
     val routes = raw.rows("routes").sortedBy { it.str("start_date") }
+    val cities = raw.rows("cities")
+    val statuses = raw.strings("status_options")
     val matches = raw.rows("matches")
     val templates = raw.rows("intent_templates")
     val styles = raw.strings("style_options")
@@ -66,8 +68,14 @@ internal class TravelCatalog private constructor(val raw: JsonObject) {
             listOf("title", "subtitle", "hero_title", "hero_subtitle").forEach { result.home.str(it) }
             listOf("hero_image", "intent_image", "editor_image").forEach { result.home.media(it) }
             listOf("day", "month", "weekday", "detail").forEach { result.calendar.str(it) }
-            val cities = raw.rows("cities"); val cityIds = cities.map { travelId(it) }.toSet()
+            val cities = result.cities; val cityIds = cities.map { travelId(it) }.toSet()
             listOf(result.articles, result.routes, result.matches, cities, result.templates).forEach { rows -> require(rows.map(::travelId).distinct().size == rows.size) }
+            cities.forEach { city ->
+                city.str("name")
+                val point = city.get("map_point")
+                require(point != null && point.isJsonArray && point.asJsonArray.size() == 2)
+                point.asJsonArray.forEach { v -> require(v.isJsonPrimitive && v.asJsonPrimitive.isNumber && v.asDouble.isFinite() && v.asDouble in 0.0..720.0) }
+            }
             (result.routes + result.matches).forEach { require(it.opt("city_id") in cityIds) }
             fun route(row: JsonObject) {
                 travelId(row)

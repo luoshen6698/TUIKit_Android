@@ -4,7 +4,6 @@
     <string name="xingdun_close_symbol" translatable="false">×</string>
     <string name="xingdun_success_symbol" translatable="false">✓</string>
     <string name="demo_tab_messages">Messages</string>
-    <string name="demo_tab_calls">Workspace</string>
     <string name="demo_tab_contacts">Contacts</string>
     <string name="demo_tab_me">Me</string>
     <string name="demo_settings_show_calls">Show Recent Calls</string>
@@ -166,14 +165,11 @@
     <string name="xingdun_deletion_cancelled">Your account-deletion request was cancelled.</string>
     <string name="xingdun_deletion_pending">Your account-deletion request is pending. Permanent deletion is expected after %1$s.</string>
     <string name="xingdun_legal_document_unavailable">This legal document is unavailable.</string>
-    <string name="xingdun_workspace_available">Workspace</string>
     <string name="demo_login_user_id_label">User ID</string>
     <string name="demo_page_conversations_title">Messages</string>
     <string name="demo_page_contacts_title">Contacts</string>
     <string name="xingdun_global_search">Global search</string>
     <string name="xingdun_search_category_favorites">Favorites</string>
-    <string name="xingdun_search_category_workspace">Workspace</string>
-    <string name="xingdun_search_workspace_entry">Workspace entry</string>
     <string name="xingdun_more_message_actions">More message actions</string>
     <string name="xingdun_more_contact_actions">More contact actions</string>
     <string name="xingdun_start_group_chat">Start group chat</string>
@@ -342,8 +338,6 @@
     <string name="demo_voice_custom_badge">Custom</string>
     <string name="demo_voice_delete">Delete</string>
     <string name="demo_voice_delete_failed">Delete failed</string>
-    <string name="xingdun_workspace_title">Workspace</string>
-    <string name="xingdun_workspace_description">Enterprise services, customer support and invitation tools are provided here.</string>
     <string name="xingdun_action_failed">The operation could not be completed.</string>
     <string name="xingdun_error_im_not_configured">This enterprise has not completed its IM configuration.</string>
     <string name="xingdun_error_im_provider">Tencent Cloud IM is not enabled for this enterprise.</string>
@@ -366,44 +360,6 @@
     <string name="xingdun_back">Back</string>
     <string name="xingdun_loading">Loading…</string>
     <string name="xingdun_submit">Submit</string>
-    <string name="xingdun_workspace_create">New application</string>
-    <string name="xingdun_workspace_my">My applications</string>
-    <string name="xingdun_workspace_pending">Pending My Approval</string>
-    <string name="xingdun_workspace_pending_empty">There are currently no applications pending.</string>
-    <string name="xingdun_workspace_detail">Application details</string>
-    <string name="xingdun_workspace_invalid_application">The application identifier is invalid.</string>
-    <string name="xingdun_workspace_withdraw">Withdraw application</string>
-    <string name="xingdun_workspace_withdrawn">Application withdrawn.</string>
-    <string name="xingdun_workspace_approve">Pass</string>
-    <string name="xingdun_workspace_reject">Dismiss</string>
-    <string name="xingdun_workspace_delete">Delete application</string>
-    <string name="xingdun_workspace_deleted">Application deleted.</string>
-    <string name="xingdun_workspace_decision_comment">Decision comment (up to 500 characters)</string>
-    <string name="xingdun_workspace_reject_comment_required">Enter a reason for rejection.</string>
-    <string name="xingdun_workspace_decided">Decision submitted.</string>
-    <string name="xingdun_workspace_empty">No applications yet</string>
-    <string name="xingdun_workspace_untitled">Untitled application</string>
-    <string name="xingdun_workspace_form_title">Application title</string>
-    <string name="xingdun_workspace_form_reason">Reason or notes</string>
-    <string name="xingdun_workspace_form_start">Start time (YYYY-MM-DD HH:mm:ss)</string>
-    <string name="xingdun_workspace_form_end">End time (YYYY-MM-DD HH:mm:ss)</string>
-    <string name="xingdun_workspace_form_amount">Amount</string>
-    <string name="xingdun_workspace_form_basic_information">Basic information</string>
-    <string name="xingdun_workspace_form_approver">Approver</string>
-    <string name="xingdun_workspace_form_reason_title">Reason</string>
-    <string name="xingdun_workspace_form_time_title">Application time</string>
-    <string name="xingdun_workspace_form_start_label">Start time</string>
-    <string name="xingdun_workspace_form_end_label">End time</string>
-    <string name="xingdun_workspace_form_amount_title">Reimbursement amount</string>
-    <string name="xingdun_workspace_default_title">%1$s Request</string>
-    <string name="xingdun_workspace_title_count">%1$d/128</string>
-    <string name="xingdun_workspace_reason_count">%1$d/5000</string>
-    <string name="xingdun_workspace_submit_application">➤  Submit application</string>
-    <string name="xingdun_workspace_title_invalid">The title is required and can contain up to 128 characters.</string>
-    <string name="xingdun_workspace_form_load_failed">Could not load application settings. Check your connection and try again.</string>
-    <string name="xingdun_workspace_submit_failed">Could not submit the application. Check your connection and try again.</string>
-    <string name="xingdun_workspace_title_required">Enter an application title.</string>
-    <string name="xingdun_workspace_submitted">Application submitted.</string>
     <string name="xingdun_customer_service">Customer service</string>
     <string name="xingdun_my_customer_service_format">My customer service · %1$s</string>
     <string name="xingdun_my_customer_service">My customer service</string>
@@ -794,7 +750,7 @@
     <string name="xingdun_deactivation_rules_section_3_title">3. Checks before requesting deactivation</string>
     <string name="xingdun_deactivation_rules_section_3_body">• Confirm the current account, enterprise, and affected data, and save information you are legally entitled to retain when needed.\n• Resolve unfinished red-packet, appeal, report, enterprise approval, or dispute matters.\n• Organization owners and accounts with critical administrative duties must transfer authority under enterprise rules.\n• Data may be subject to legal retention when an account is involved in a judicial or administrative investigation or a security incident.</string>
     <string name="xingdun_deactivation_rules_section_4_title">4. Immediate effects after submission</string>
-    <string name="xingdun_deactivation_rules_section_4_body">• The active business account is removed from the user table, and all devices, JWTs, UserSig issuance eligibility, and push identifiers are invalidated immediately.\n• The client signs out of Tencent IM, stops notifications and incoming-call registration, and clears local credentials, account data, and session state.\n• You can no longer sign in, send or receive messages, make calls, access the enterprise directory, or use Workspace.\n• Necessary display names may be replaced with “Deactivated User,” but messages already received by others are not removed.</string>
+    <string name="xingdun_deactivation_rules_section_4_body">• The active business account is removed from the user table, and all devices, JWTs, UserSig issuance eligibility, and push identifiers are invalidated immediately.\n• The client signs out of Tencent IM, stops notifications and incoming-call registration, and clears local credentials, account data, and session state.\n• You can no longer sign in, send or receive messages, make calls, access the enterprise directory.\n• Necessary display names may be replaced with “Deactivated User,” but messages already received by others are not removed.</string>
     <string name="xingdun_deactivation_rules_section_5_title">5. Controlled recovery and restoration</string>
     <string name="xingdun_deactivation_rules_section_5_body">To prevent mistakes and address enterprise relationships, security incidents, and disputes, deactivated account data and device snapshots enter a restricted server recovery area. You cannot restore the account yourself; recovery requires an enterprise administrator to verify your identity and organization relationship.\n\nYou may ask Help &amp; Feedback or an enterprise administrator for irreversible deletion during the recovery stage. After approval, administrators permanently remove the business identity and recovery snapshot.</string>
     <string name="xingdun_deactivation_rules_section_6_title">6. Tencent Cloud account identifier boundary</string>
@@ -959,7 +915,7 @@
     <string name="xingdun_custom_call_summary">[%1$s] Call ended</string>
     <string name="xingdun_custom_call_duration">[%1$s] Duration %2$s</string>
     <string name="xingdun_custom_report_notice">[Report] %1$s</string>
-    <string name="xingdun_custom_workspace_notice">[Workspace] %1$s</string>
+    <string name="xingdun_custom_workspace_notice">[System notice] %1$s</string>
     <string name="xingdun_custom_cs_notice">[Customer service] %1$s</string>
     <string name="xingdun_custom_group_notice">Group profile updated</string>
     <string name="xingdun_group_notice_members_invited">%1$s invited %2$s to the group.</string>
@@ -981,84 +937,15 @@
     <string name="xingdun_custom_unsupported">[Unsupported business message]</string>
     <string name="xingdun_updated">Updated</string>
     <string name="xingdun_retry">Retry</string>
-    <string name="xingdun_workspace_quick">Quick actions</string>
-    <string name="xingdun_workspace_category_attendance">Attendance and Leave</string>
-    <string name="xingdun_workspace_category_finance">Finance</string>
-    <string name="xingdun_workspace_category_hr">Human Resources</string>
-    <string name="xingdun_workspace_progress">Application progress</string>
-    <string name="xingdun_workspace_pending_with_count">Pending approvals · %1$d</string>
-    <string name="xingdun_workspace_my_with_count">My applications · %1$d</string>
-    <string name="xingdun_workspace_recent">Most recent application</string>
-    <string name="xingdun_workspace_enterprise_service">Enterprise service</string>
-    <string name="xingdun_workspace_guide_title">Start with a frequent workflow</string>
-    <string name="xingdun_workspace_guide_message">Your latest request appears below. All workflows remain available in three categories.</string>
-    <string name="xingdun_workspace_leave">Leave Request</string>
-    <string name="xingdun_workspace_travel">Business Travel Request</string>
-    <string name="xingdun_workspace_out">Out-of-Office Request</string>
-    <string name="xingdun_workspace_overtime">Overtime Request</string>
-    <string name="xingdun_workspace_reimburse">Reimbursement Request</string>
-    <string name="xingdun_workspace_purchase">Purchase Request</string>
-    <string name="xingdun_workspace_hr_need">Staffing Request</string>
-    <string name="xingdun_workspace_confirmation">Confirmation Request</string>
-    <string name="xingdun_workspace_resign">Resignation Request</string>
-    <string name="xingdun_workspace_no_records">No application records</string>
     <string name="xingdun_view_all">View all</string>
-    <string name="xingdun_workspace_flow_count">%1$d workflows</string>
-    <string name="xingdun_workspace_management">Application management</string>
-    <string name="xingdun_workspace_customer_service">Customer service</string>
-    <string name="xingdun_customer_service_dashboard">Customer-service workspace</string>
-    <string name="xingdun_workspace_load_failed">Could not load workspace data. Check your connection and try again.</string>
-    <string name="xingdun_workspace_filter_all">All</string>
-    <string name="xingdun_workspace_filter_attendance">Time Off</string>
-    <string name="xingdun_workspace_filter_finance">Finance</string>
-    <string name="xingdun_workspace_filter_hr">HR</string>
-    <string name="xingdun_workspace_status_submitted">Submitted</string>
-    <string name="xingdun_workspace_status_in_review">In Review</string>
-    <string name="xingdun_workspace_status_rejected">Dismissed</string>
-    <string name="xingdun_workspace_status_withdrawn">Withdrawn</string>
-    <string name="xingdun_workspace_list_load_failed">Could not load the application list. Please try again.</string>
-    <string name="xingdun_workspace_no_records_short">No record yet</string>
-    <string name="xingdun_workspace_amount_display">Amount: %1$s</string>
-    <string name="xingdun_workspace_confirm_approve">Approve this application?</string>
-    <string name="xingdun_workspace_confirm_approve_action">Approve</string>
-    <string name="xingdun_workspace_confirm_withdraw">Withdraw this application?</string>
-    <string name="xingdun_workspace_confirm_withdraw_action">Confirm withdrawal</string>
-    <string name="xingdun_workspace_confirm_delete">Deleting removes this application from the list. Continue?</string>
-    <string name="xingdun_workspace_confirm_delete_action">Confirm deletion</string>
-    <string name="xingdun_workspace_rejection_reason">Rejection reason</string>
-    <string name="xingdun_workspace_reject_title">Reject application</string>
-    <string name="xingdun_workspace_confirm_reject">Confirm rejection</string>
-    <string name="xingdun_workspace_reject_reason_hint">Enter a reason for rejection</string>
-    <string name="xingdun_workspace_reject_count">%1$d/500</string>
-    <string name="xingdun_workspace_processing">Processing</string>
-    <string name="xingdun_workspace_reject_failed">Could not reject the application. Please try again.</string>
-    <string name="xingdun_workspace_detail_reason">Reason</string>
-    <string name="xingdun_workspace_detail_start_time">Start time</string>
-    <string name="xingdun_workspace_detail_end_time">End time</string>
-    <string name="xingdun_workspace_detail_amount">Amount</string>
-    <string name="xingdun_workspace_detail_create_time">Submitted</string>
-    <string name="xingdun_workspace_detail_update_time">Updated</string>
-    <string name="xingdun_workspace_close_detail">Close application details</string>
-    <string name="xingdun_workspace_detail_load_failed">Could not load application details. Please try again.</string>
-    <string name="xingdun_workspace_detail_preview_title">Q3 customer visit travel request</string>
-    <string name="xingdun_workspace_detail_preview_reason">Visit the customer site to confirm the delivery plan and acceptance schedule.</string>
-    <string name="xingdun_workspace_withdraw_failed">Could not withdraw the application. Please try again.</string>
-    <string name="xingdun_workspace_delete_failed">Could not delete the application. Please try again.</string>
-    <string name="xingdun_workspace_no_available_types">No application type is currently available.</string>
-    <string name="xingdun_workspace_approver">Approver: %1$s</string>
-    <string name="xingdun_workspace_reason_invalid">The reason can contain up to 5,000 characters.</string>
-    <string name="xingdun_workspace_time_invalid">The end time must be later than the start time.</string>
-    <string name="xingdun_workspace_amount_invalid">Enter a valid amount up to CNY 99,999,999.99.</string>
-    <string name="xingdun_workspace_applicant">Applicant</string>
-    <string name="xingdun_workspace_approver_title">Approver</string>
-    <string name="xingdun_workspace_timeline">Approval timeline</string>
+    <string name="xingdun_customer_service_dashboard">Customer-service dashboard</string>
     <string name="xingdun_invited_count">Invited members: %1$d</string>
     <string name="xingdun_invite_qr">Invitation QR code</string>
     <string name="xingdun_invite_share_text">%1$s invited you to join XingDun.\nInvitation code: %2$s\n%3$s</string>
     <string name="xingdun_invite_poster_description">XingDun invitation poster</string>
     <string name="xingdun_platform_brand_name">XingDun IM Platform</string>
     <string name="xingdun_invite_poster_tagline">Connect your team securely and collaborate efficiently</string>
-    <string name="xingdun_invite_poster_invitation">%1$s invited you to join the enterprise workspace</string>
+    <string name="xingdun_invite_poster_invitation">%1$s invited you to join the team</string>
     <string name="xingdun_invite_poster_code">Invitation code  %1$s</string>
     <string name="xingdun_invite_poster_scan_hint">Scan the QR code to register for %1$s</string>
     <string name="xingdun_invite_poster_preparing">Preparing invitation poster...</string>
@@ -1465,12 +1352,6 @@
     <string-array name="xingdun_report_reason_labels">
         <item>Spam</item><item>Harassment or abuse</item><item>Fraud or scams</item><item>Violence or illegal activity</item><item>Sexual or explicit content</item><item>Other issue</item>
     </string-array>
-    <string-array name="xingdun_workspace_type_values" translatable="false">
-        <item>leave</item><item>travel</item><item>out</item><item>overtime</item><item>reimburse</item><item>purchase</item><item>hr_need</item><item>confirmation</item><item>resign</item>
-    </string-array>
-    <string-array name="xingdun_workspace_type_labels">
-        <item>Leave</item><item>Business travel</item><item>Off-site work</item><item>Overtime</item><item>Reimbursement</item><item>Purchase</item><item>Staffing request</item><item>Confirmation</item><item>Resignation</item>
-    </string-array>
     <string-array name="xingdun_feedback_type_values" translatable="false">
         <item>bug</item><item>suggestion</item><item>experience</item><item>account</item><item>other</item>
     </string-array>
@@ -1562,4 +1443,5 @@
     <string name="xingdun_group_management_recall_confirm_message">The message will be recalled for all group members. This action is recorded for audit.</string>
     <string name="xingdun_group_management_recall_success">Message recalled.</string>
     <string name="xingdun_group_management_recall_failed">Could not recall the message. Refresh group permissions and try again.</string>
+    <string name="demo_tab_lushu">Routebook</string>
 </resources>

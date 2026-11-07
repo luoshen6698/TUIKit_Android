@@ -1,7 +1,6 @@
 <resources>
     <string name="demo_app_name">Tencent Chat</string>
     <string name="demo_tab_messages">الرسائل</string>
-    <string name="demo_tab_calls">سجل المكالمات</string>
     <string name="demo_tab_contacts">جهات الاتصال</string>
     <string name="demo_tab_me">أنا</string>
     <string name="demo_settings_show_calls">عرض سجل المكالمات</string>

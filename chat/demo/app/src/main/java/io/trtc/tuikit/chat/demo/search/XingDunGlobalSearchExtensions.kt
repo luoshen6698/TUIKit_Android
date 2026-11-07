@@ -19,7 +19,6 @@ internal object XingDunGlobalSearchExtensions {
         if (keyword.isEmpty()) return emptyList()
 
         val favoriteResults = runCatching { favoriteResults(context, keyword) }.getOrDefault(emptyList())
-        val workspaceResults = workspaceResults(context, keyword)
         return buildList {
             if (favoriteResults.isNotEmpty()) add(
                 GlobalSearchExtensionSection(
@@ -28,13 +27,7 @@ internal object XingDunGlobalSearchExtensions {
                     results = favoriteResults,
                 )
             )
-            if (workspaceResults.isNotEmpty()) add(
-                GlobalSearchExtensionSection(
-                    id = "workspace",
-                    title = context.getString(R.string.xingdun_search_category_workspace),
-                    results = workspaceResults,
-                )
-            )
+
         }
     }
 
@@ -77,56 +70,6 @@ internal object XingDunGlobalSearchExtensions {
             )
         }.take(20)
     }
-
-    private fun workspaceResults(
-        context: Context,
-        keyword: String,
-    ): List<GlobalSearchExtensionResult> = listOf(
-        workspaceResult(
-            id = "workspace",
-            title = context.getString(R.string.xingdun_workspace_title),
-            subtitle = context.getString(R.string.xingdun_search_workspace_entry),
-            keywords = listOf("workspace", "应用", "办公"),
-            metadata = mapOf("kind" to "workspace"),
-        ),
-        workspaceResult(
-            id = "leave",
-            title = context.getString(R.string.xingdun_workspace_leave),
-            subtitle = context.getString(R.string.xingdun_search_workspace_entry),
-            keywords = listOf("leave", "休假", "审批"),
-            metadata = mapOf("kind" to "workspace_create", "type" to "leave"),
-        ),
-        workspaceResult(
-            id = "reimburse",
-            title = context.getString(R.string.xingdun_workspace_reimburse),
-            subtitle = context.getString(R.string.xingdun_search_workspace_entry),
-            keywords = listOf("reimburse", "费用", "审批"),
-            metadata = mapOf("kind" to "workspace_create", "type" to "reimburse"),
-        ),
-        workspaceResult(
-            id = "pending",
-            title = context.getString(R.string.xingdun_workspace_pending),
-            subtitle = context.getString(R.string.xingdun_search_workspace_entry),
-            keywords = listOf("pending", "审批", "审核", "申请"),
-            metadata = mapOf("kind" to "workspace_pending"),
-        ),
-    ).filter { result ->
-        result.title.matches(keyword) || result.subtitle.matches(keyword) ||
-            result.metadata["keywords"].orEmpty().matches(keyword)
-    }.map { result -> result.copy(metadata = result.metadata - "keywords") }
-
-    private fun workspaceResult(
-        id: String,
-        title: String,
-        subtitle: String,
-        keywords: List<String>,
-        metadata: Map<String, String>,
-    ) = GlobalSearchExtensionResult(
-        id = "workspace:$id",
-        title = title,
-        subtitle = subtitle,
-        metadata = metadata + ("keywords" to keywords.joinToString(" ")),
-    )
 
     private fun favoriteSummary(context: Context, type: String?): String = when (type?.uppercase()) {
         "PICTURE", "IMAGE" -> context.getString(R.string.xingdun_favorite_picture)

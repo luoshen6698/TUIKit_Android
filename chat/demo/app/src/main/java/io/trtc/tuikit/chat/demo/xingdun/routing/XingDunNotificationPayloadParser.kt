@@ -13,7 +13,7 @@ import java.util.Locale
 
 internal sealed interface XingDunNotificationDestination {
     data class Conversation(val conversationID: String) : XingDunNotificationDestination
-    enum class Tab : XingDunNotificationDestination { MESSAGES, CONTACTS, WORKSPACE, PROFILE }
+    enum class Tab : XingDunNotificationDestination { MESSAGES, CONTACTS, PROFILE }
 }
 
 /** Stable account identity only: credential renewal must not invalidate an otherwise identical account. */
@@ -127,7 +127,7 @@ internal object XingDunNotificationPayloadParser {
         }
         return when (route) {
             "friend_application", "group_application", "contacts" -> XingDunNotificationDestination.Tab.CONTACTS
-            "workspace", "customer_service" -> XingDunNotificationDestination.Tab.WORKSPACE
+            "customer_service" -> XingDunNotificationDestination.Tab.CONTACTS
             "profile" -> XingDunNotificationDestination.Tab.PROFILE
             "messages" -> XingDunNotificationDestination.Tab.MESSAGES
             else -> null

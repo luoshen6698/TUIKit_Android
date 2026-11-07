@@ -9,6 +9,10 @@ import org.junit.Test
 class XingDunNotificationPayloadParserTest {
     private val scope = XingDunNotificationScope(1, "xc2026", 1001, "https://example.com/prod/im/v1", "xd_xc2026_1")
 
+    @Test fun retiredWorkspaceNotificationCannotOpenRemovedFeature() {
+        assertNull(parse("""{"route":"workspace"}"""))
+    }
+
     @Test
     fun `existing XingDun private and group targets remain supported`() {
         assertConversation("c2c_xd_xc2026_2", """{"xd_push_version":1,"conversation_type":"c2c","target":"xd_xc2026_2"}""")
@@ -19,7 +23,7 @@ class XingDunNotificationPayloadParserTest {
     @Test
     fun `existing non conversation routes and VoIP fallback remain supported`() {
         assertEquals(XingDunNotificationDestination.Tab.CONTACTS, parse("""{"route":"friend_application"}"""))
-        assertEquals(XingDunNotificationDestination.Tab.WORKSPACE, parse("""{"route":"customer_service"}"""))
+        assertEquals(XingDunNotificationDestination.Tab.CONTACTS, parse("""{"route":"customer_service"}"""))
         assertEquals(XingDunNotificationDestination.Tab.PROFILE, parse("""{"xd_push_version":1,"route":"profile"}"""))
         assertEquals(XingDunNotificationDestination.Tab.MESSAGES, parse("""{"xd_push_version":1,"conversation_type":"system","target":"notice"}"""))
         assertEquals(XingDunNotificationDestination.Tab.MESSAGES, parse("""{"xd_voip_version":1}"""))

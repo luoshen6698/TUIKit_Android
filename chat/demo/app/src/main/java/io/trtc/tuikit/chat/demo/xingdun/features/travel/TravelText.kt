@@ -114,4 +114,22 @@ internal object T {
     val hide_hint = R.string.tx_hide_hint
     val report_hint = R.string.tx_report_hint
     val another_round = R.string.tx_another_round
+    val lushu = R.string.tx_lushu
+    val lushu_subtitle = R.string.tx_lushu_subtitle
+    val map = R.string.tx_map
+    val timeline = R.string.tx_timeline
+    val my_routes = R.string.tx_my_routes
+    val discover_routes = R.string.tx_discover_routes
+    val all = R.string.tx_all
+    val nationwide = R.string.tx_nationwide
+    val no_routes = R.string.tx_no_routes
+    val publish_route_hint = R.string.tx_publish_route_hint
+    val publish_intent = R.string.tx_publish_intent
+    val route_published = R.string.tx_route_published
+    val route_month = R.string.tx_route_month
+    val day_unit = R.string.tx_day_unit
+    val city_routes = R.string.tx_city_routes
+    val route_count = R.string.tx_route_count
+    val close_city = R.string.tx_close_city
+    val platform_book = R.string.tx_platform_book
 }

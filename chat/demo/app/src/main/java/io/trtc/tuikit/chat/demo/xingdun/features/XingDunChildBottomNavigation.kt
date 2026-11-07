@@ -32,6 +32,7 @@ class XingDunChildBottomNavigation @JvmOverloads constructor(
 
     private val tabs = listOf(
         Tab(MainActivity.TAB_HOME, R.string.xingdun_home_title, R.drawable.xingdun_ic_tab_home),
+        Tab(MainActivity.TAB_LUSHU, R.string.tx_lushu, R.drawable.xingdun_ic_tab_lushu),
         Tab(
             MainActivity.TAB_MESSAGES,
             R.string.demo_tab_messages,
@@ -39,7 +40,6 @@ class XingDunChildBottomNavigation @JvmOverloads constructor(
             R.drawable.demo_ic_tab_messages_lines,
         ),
         Tab(MainActivity.TAB_CONTACTS, R.string.demo_tab_contacts, R.drawable.demo_ic_tab_contacts),
-        Tab(MainActivity.TAB_WORKSPACE, R.string.demo_tab_calls, R.drawable.demo_ic_tab_calls),
         Tab(MainActivity.TAB_PROFILE, R.string.demo_tab_me, R.drawable.demo_ic_tab_me),
     ).filter { BuildConfig.XINGDUN_HOME_ENABLED || it.route != MainActivity.TAB_HOME }
     private val nav = LinearLayout(context).apply {

@@ -80,8 +80,6 @@ class SettingsPageView @JvmOverloads constructor(
     private val tvReadReceiptTitle: TextView
     private val tvReadReceiptDesc: TextView
 
-    private val switchCallsTab: Switch
-    private val tvCallsTabTitle: TextView
 
     private val btnLogout: TextView
 
@@ -152,8 +150,6 @@ class SettingsPageView @JvmOverloads constructor(
         tvReadReceiptTitle = findViewById(R.id.demo_tvReadReceiptTitle)
         tvReadReceiptDesc = findViewById(R.id.demo_tvReadReceiptDesc)
 
-        switchCallsTab = findViewById(R.id.demo_switchCallsTab)
-        tvCallsTabTitle = findViewById(R.id.demo_tvCallsTabTitle)
 
         btnLogout = findViewById(R.id.demo_btnLogout)
 
@@ -182,7 +178,6 @@ class SettingsPageView @JvmOverloads constructor(
         findViewById<View>(R.id.demo_divider4).visibility = View.GONE
         setupProductFeatureEntries()
         setupReadReceiptToggle()
-        setupCallsTabToggle()
         setupLogout()
         setupUserProfileClick()
         setupMetricActions()
@@ -267,7 +262,6 @@ class SettingsPageView @JvmOverloads constructor(
 
         tvReadReceiptTitle.setTextColor(colors.textColorSecondary)
         tvReadReceiptDesc.setTextColor(colors.textColorTertiary)
-        tvCallsTabTitle.setTextColor(colors.textColorSecondary)
         backButton?.setColorFilter(colors.textColorPrimary)
 
         btnLogout.setTextColor(colors.textColorError)
@@ -541,12 +535,6 @@ class SettingsPageView @JvmOverloads constructor(
         } else {
             context.getString(R.string.demo_settings_read_receipt_disabled_desc)
         }
-    }
-
-    private fun setupCallsTabToggle() {
-        tvCallsTabTitle.text = context.getString(R.string.xingdun_workspace_available)
-        switchCallsTab.setChecked(true)
-        switchCallsTab.isEnabled = false
     }
 
     private fun setupLogout() {

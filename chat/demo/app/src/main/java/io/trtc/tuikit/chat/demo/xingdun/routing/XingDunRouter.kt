@@ -86,7 +86,6 @@ object XingDunRouter {
             is XingDunNotificationDestination.Conversation -> ChatActivity.start(appContext, destination.conversationID)
             XingDunNotificationDestination.Tab.MESSAGES -> launchMain(MainActivity.TAB_MESSAGES)
             XingDunNotificationDestination.Tab.CONTACTS -> launchMain(MainActivity.TAB_CONTACTS)
-            XingDunNotificationDestination.Tab.WORKSPACE -> launchMain(MainActivity.TAB_WORKSPACE)
             XingDunNotificationDestination.Tab.PROFILE -> launchMain(MainActivity.TAB_PROFILE)
         }
     }

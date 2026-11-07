@@ -156,7 +156,7 @@ class TravelActivity : BaseActivity() {
         scroll(content);footer(ui.button(T.save_intent){
             var valid=true
             editorFields.forEach{(key,view)->val value=view.text.toString().trim();if(value.isEmpty()){view.error=ui.s(T.required,ui.s(when(key){"destination"->T.where;"dates"->T.dates;else->T.description}));valid=false};d.addProperty(key,value)}
-            if(valid)action(travelBody("action" to "save_intent","intent" to travelBody("destination" to d.str("destination"),"dates" to d.str("dates"),"description" to d.str("description"),"styles" to d["styles"]))){dirty=false;toast(T.saved);finish()}
+            if(valid)action(travelBody("action" to "save_intent","intent" to travelBody("destination" to d.str("destination"),"dates" to d.str("dates"),"description" to d.str("description"),"styles" to d["styles"]))){dirty=false;setResult(RESULT_OK);toast(T.saved);finish()}
         })
     }
     private fun route(c:TravelCatalog) {
@@ -290,6 +290,7 @@ class TravelActivity : BaseActivity() {
         val details=field(content,T.report_details,"",1000);content.addView(ui.space(20));content.addView(ui.button(T.report_submit){action(travelBody("action" to "report","article_id" to itemId,"id" to commentId,"reason" to reason,"details" to details.text.toString().trim())){dialog.dismiss();toast(T.reported)}});dialog.show()
     }
     companion object {
-        fun open(context:Context,page:String,id:String=""){context.startActivity(Intent(context,TravelActivity::class.java).putExtra("page",page).putExtra("id",id))}
+        fun intent(context:Context,page:String,id:String="") = Intent(context,TravelActivity::class.java).putExtra("page",page).putExtra("id",id)
+        fun open(context:Context,page:String,id:String=""){context.startActivity(intent(context,page,id))}
     }
 }
