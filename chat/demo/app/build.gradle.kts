@@ -3,9 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// Only the Huawei distribution opts in to the home page at build time.
+// Tuxing is the default home; a distributor can explicitly opt out at build time.
 val homeEnabled = (findProperty("XINGDUN_HOME_ENABLED") as String?
-    ?: System.getenv("XINGDUN_HOME_ENABLED") ?: "false").let {
+    ?: System.getenv("XINGDUN_HOME_ENABLED") ?: "true").let {
     require(it == "true" || it == "false") { "XINGDUN_HOME_ENABLED must be true or false." }
     it.toBoolean()
 }

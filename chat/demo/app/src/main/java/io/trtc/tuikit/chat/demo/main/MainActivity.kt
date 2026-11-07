@@ -414,7 +414,7 @@ class MainActivity : BaseActivity() {
     private fun getOrCreatePage(tabId: Int): View {
         return tabPageCache.getOrPut(tabId) {
             when (tabId) {
-                R.id.demo_tab_home -> XingDunHomePageView(this)
+                R.id.demo_tab_home -> XingDunHomePageView(this, verificationUnreadCount)
                 R.id.demo_tab_calls -> createCallsPage()
                 R.id.demo_tab_contacts -> createContactsPage()
                 R.id.demo_tab_me -> createMePage()
