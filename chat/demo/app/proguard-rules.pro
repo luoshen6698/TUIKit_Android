@@ -57,3 +57,22 @@
 -keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunVerificationMessagesActivity$ServerGroupInvitation { *; }
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken { *; }
+
+# My drawer wallet models are decoded reflectively by Gson in minified Release builds.
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketBalancePayload { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketUserPayload { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketClaimPayload { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketDetailPayload { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketClaimResultPayload { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketClaimRecordsPage { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketListItem { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketPage { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunReceivedRedpacketItem { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunReceivedRedpacketPage { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketBalanceLog { *; }
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunRedpacketBalanceLogPage { *; }
+# Account feedback receipts are likewise reflected outside the network model package.
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity$FeedbackSubmissionResult { *; }
+
+# The pending account-appeal fingerprint is also serialized reflectively across recreation.
+-keep class io.trtc.tuikit.chat.demo.xingdun.features.MineAppeal { *; }

@@ -36,7 +36,7 @@
     <string name="md_refresh_failed">Refresh failed. Pull down to retry</string>
     <string name="md_cleared">Cache cleared</string>
     <string name="md_binding_info">Contact information</string>
-    <string name="md_appeal_channel">Use account feedback to include the affected account, contact information and details. Keep the submission number returned by the server.</string>
+    <string name="md_appeal_channel">Enter the affected account, contact information and details. Appeals are handled through account feedback. Keep your submission reference.</string>
     <string name="md_appeal_account">Affected account</string>
     <string name="md_appeal_contact">Contact information</string>
     <string name="md_appeal_reason">Details (at least 10 characters)</string>
@@ -51,4 +51,5 @@
     <string name="md_account">Account</string>
     <string name="md_online">Online</string>
     <string name="md_storage_error">Storage information unavailable</string>
+    <string name="md_submit_failed">Could not submit. Please retry.</string>
 </resources>

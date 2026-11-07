@@ -60,6 +60,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
     private var ownerKey = key()
     private var observer: Job? = null
     private var request: Job? = null
+    private var customerServiceRequest: Job? = null
     private var storageValue: TextView? = null
     private var storageProgress: ProgressBar? = null
     private fun key() = XingDunSessionManager.currentSession()?.let { "${it.apiBaseUrl}|${it.companyId}|${it.timUserId}|${XingDunSessionManager.currentAuthenticationGeneration()}" }
@@ -88,7 +89,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
     fun setActive(value: Boolean) {
         active = value
         if (value) { checkOwner(); renderProfile(); renderStats(); refreshData() }
-        else { request?.cancel(); refresh.isRefreshing = false }
+        else { request?.cancel(); customerServiceRequest?.cancel(); refresh.isRefreshing = false }
     }
     private fun checkOwner() {
         if (ownerKey != key()) { ownerKey = key(); favoriteCount = null; cacheBytes = null; backendProfile = null; content.removeAllViews(); buildContent(); scroll.scrollTo(0, 0); renderStorage() }
@@ -103,7 +104,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
             }
         }
     }
-    override fun onDetachedFromWindow() { observer?.cancel(); request?.cancel(); super.onDetachedFromWindow() }
+    override fun onDetachedFromWindow() { observer?.cancel(); request?.cancel(); customerServiceRequest?.cancel(); super.onDetachedFromWindow() }
     private fun buildContent() {
         content.setPadding(d(16), d(12), d(16), d(32))
         profileCard.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0x1F4C6EF5, 0x0A4C6EF5)).apply { cornerRadius = d(16).toFloat(); setStroke(d(1), 0x1A4C6EF5) }
@@ -273,6 +274,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
             }.show()
     }
     private fun openEnterpriseCustomerService() {
+        if (customerServiceRequest?.isActive == true) return
         val session = XingDunSessionManager.currentSession() ?: run {
             Toast.makeText(context, R.string.xingdun_session_expired, Toast.LENGTH_SHORT).show()
             return
@@ -280,7 +282,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
         val requestKey = key()
         val activeScope = (context as? LifecycleOwner)?.lifecycleScope ?: return
         Toast.makeText(context, R.string.xingdun_loading, Toast.LENGTH_SHORT).show()
-        activeScope.launch {
+        customerServiceRequest = activeScope.launch {
             runCatching {
                 XingDunSessionManager.apiClient().get<JsonObject>(
                     session,
@@ -289,7 +291,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
                     JsonObject::class.java,
                 )
             }.onSuccess { identity ->
-                if (key() != requestKey) return@onSuccess
+                if (key() != requestKey || !active) return@onSuccess
                 val declaredEnabled = identity.get("customer_service_enabled")
                     ?.takeUnless { it.isJsonNull }
                     ?.let { runCatching { it.asBoolean }.getOrNull() }
@@ -332,7 +334,8 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
                     Toast.makeText(context, R.string.xingdun_customer_service_not_configured, Toast.LENGTH_SHORT).show()
                 }
             }.onFailure {
-                if (key() != requestKey) return@onFailure
+                if (it is CancellationException) throw it
+                if (key() != requestKey || !active) return@onFailure
                 Toast.makeText(context, R.string.xingdun_customer_service_load_retry, Toast.LENGTH_SHORT).show()
             }
         }

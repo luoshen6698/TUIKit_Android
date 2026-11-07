@@ -75,7 +75,7 @@ class XingDunAccountAppealActivity : BaseActivity() {
                 check(XingDunSessionManager.currentSession()?.timUserId==session.timUserId && XingDunSessionManager.currentAuthenticationGeneration()==gen)
                 check(receipt.get("id")?.asInt?.let{it>0}==true);val number=receipt.get("feedback_no")?.asString.orEmpty();check(number.isNotBlank())
                 pending="";requestId="";reason.text.clear();status.text=getString(R.string.md_appeal_sent,number)
-            }catch(e:CancellationException){throw e}catch(_:Exception){status.setText(R.string.tx_load_failed)}finally{busy=false;listOf(account,contact,reason,type,send).forEach{it.isEnabled=true}}
+            }catch(e:CancellationException){throw e}catch(_:Exception){status.setText(R.string.md_submit_failed)}finally{busy=false;listOf(account,contact,reason,type,send).forEach{it.isEnabled=true}}
         }
     }
 }

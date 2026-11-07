@@ -36,7 +36,7 @@
     <string name="md_refresh_failed">刷新失败，请下拉重试</string>
     <string name="md_cleared">缓存已清理</string>
     <string name="md_binding_info">绑定信息</string>
-    <string name="md_appeal_channel">请通过账号类反馈填写申诉账号、联系方式和详细说明，提交后保留服务端返回的编号。</string>
+    <string name="md_appeal_channel">请填写申诉账号、联系方式和详细说明。申诉将通过账号类反馈受理，提交后请保留受理编号。</string>
     <string name="md_appeal_account">申诉账号</string>
     <string name="md_appeal_contact">联系方式</string>
     <string name="md_appeal_reason">详细说明（至少10字）</string>
@@ -51,4 +51,5 @@
     <string name="md_account">账号</string>
     <string name="md_online">在线</string>
     <string name="md_storage_error">缓存统计暂不可用</string>
+    <string name="md_submit_failed">提交失败，请重试。</string>
 </resources>
