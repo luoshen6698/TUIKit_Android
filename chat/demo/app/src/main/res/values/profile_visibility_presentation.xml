@@ -1,0 +1,16 @@
+<resources>
+    <string name="pv_intro">Choose what you share</string>
+    <string name="pv_basic">Basic information</string>
+    <string name="pv_contact">Contact information</string>
+    <string name="pv_auto_save">Changes are saved automatically.</string>
+    <item name="pv_back" type="id" />
+    <item name="pv_refresh" type="id" />
+    <item name="pv_status" type="id" />
+    <item name="pv_retry" type="id" />
+    <item name="pv_scroll" type="id" />
+    <item name="pv_account" type="id" />
+    <item name="pv_signature" type="id" />
+    <item name="pv_birthday" type="id" />
+    <item name="pv_phone" type="id" />
+    <item name="pv_email" type="id" />
+</resources>

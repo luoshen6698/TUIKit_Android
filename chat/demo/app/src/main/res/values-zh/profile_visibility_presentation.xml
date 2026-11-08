@@ -1,0 +1,6 @@
+<resources>
+    <string name="pv_intro">由你决定，展示哪些资料</string>
+    <string name="pv_basic">基本资料</string>
+    <string name="pv_contact">联系方式</string>
+    <string name="pv_auto_save">更改后自动保存</string>
+</resources>
