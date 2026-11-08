@@ -11,7 +11,7 @@ internal object T {
     val plan = R.string.tx_plan
     val publish = R.string.tx_publish
     val find_routes = R.string.tx_find_routes
-    val verification = R.string.tx_verification
+    val verification = R.string.xingdun_verification_messages_title
     val teams = R.string.tx_teams
     val community = R.string.tx_community
     val community_sub = R.string.tx_community_sub

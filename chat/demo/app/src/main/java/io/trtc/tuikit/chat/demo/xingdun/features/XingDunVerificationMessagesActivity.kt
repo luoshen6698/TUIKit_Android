@@ -237,8 +237,8 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         orientation = LinearLayout.HORIZONTAL
         background = rounded(SEGMENT_BG, 10f)
         setPadding(3.dp(), 3.dp(), 3.dp(), 3.dp())
-        friendTab = segmentButton(R.string.xingdun_friend) { select(Tab.FRIEND) }
-        groupTab = segmentButton(R.string.xingdun_group) { select(Tab.GROUP) }
+        friendTab = segmentButton(R.string.xingdun_friend_requests_entry) { select(Tab.FRIEND) }
+        groupTab = segmentButton(R.string.xingdun_group_notifications_entry) { select(Tab.GROUP) }
         addView(friendTab, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         addView(groupTab, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
     }

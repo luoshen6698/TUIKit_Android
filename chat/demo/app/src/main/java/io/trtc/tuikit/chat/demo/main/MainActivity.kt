@@ -195,6 +195,8 @@ class MainActivity : BaseActivity() {
     private val contactStore by lazy { ContactStore.shared }
     private val groupStore by lazy { GroupStore.shared }
     private val verificationUnreadCount = MutableStateFlow(0)
+    private val friendVerificationUnread = MutableStateFlow(0)
+    private val groupVerificationUnread = MutableStateFlow(0)
     private val serverGroupInvitationUnread = MutableStateFlow(XingDunGroupInvitationUnread(null, 0))
     private var mainScope: CoroutineScope? = null
     private val imSDKListener = object : V2TIMSDKListener() {
@@ -379,8 +381,10 @@ class MainActivity : BaseActivity() {
                 groupStore.state.unreadApplicationCount,
                 serverGroupInvitationUnread
             ) { friendApplicationUnreadCount, groupApplicationUnreadCount, serverInvitations ->
-                friendApplicationUnreadCount + groupApplicationUnreadCount +
+                friendVerificationUnread.value = friendApplicationUnreadCount
+                groupVerificationUnread.value = groupApplicationUnreadCount +
                     serverInvitations.forOwner(XingDunSessionManager.currentUiSession()?.scopeKey)
+                friendVerificationUnread.value + groupVerificationUnread.value
             }.collectLatest { unreadCount ->
                 verificationUnreadCount.value = unreadCount
                 updateTabBadge(R.id.demo_tab_contacts, unreadCount)
@@ -1086,7 +1090,7 @@ class MainActivity : BaseActivity() {
     }
 
     private fun createContactsPage(): View {
-        val page = XingDunDirectoryPageView(this,directoryCategory)
+        val page = XingDunDirectoryPageView(this, directoryCategory, friendVerificationUnread, groupVerificationUnread)
         contactsPage=page;applyIMConnectionNotice(page)
         return SwipeRefreshLayout(this).apply {
             setColorSchemeColors(0xFF4B6975.toInt())

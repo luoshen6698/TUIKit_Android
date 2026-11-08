@@ -162,7 +162,7 @@ class XingDunHomePageView(context: Context, private val verificationUnread: Stat
             }
             action(T.publish,TravelIcons.edit_outlined){TravelActivity.open(context,"intent")}
             action(T.find_routes,TravelIcons.auto_awesome_outlined,catalog.matches.size){TravelActivity.open(context,"match")}
-            action(T.verification,TravelIcons.route_outlined,verificationUnread?.value ?: 0){context.startActivity(Intent(context,XingDunVerificationMessagesActivity::class.java).putExtra(XingDunVerificationMessagesActivity.EXTRA_GROUP_TAB, hasPendingGroupInvitations()))}
+            action(T.verification,TravelIcons.chat_bubble_outline,verificationUnread?.value ?: 0){context.startActivity(Intent(context,XingDunVerificationMessagesActivity::class.java).putExtra(XingDunVerificationMessagesActivity.EXTRA_GROUP_TAB, hasPendingGroupInvitations()))}
             action(T.teams,TravelIcons.groups_outlined){context.startActivity(Intent(context,XingDunGroupListActivity::class.java))}
         });addView(ui.space(24));addView(ui.label(T.community,14f,INK,true));addView(ui.space(6));addView(ui.label(T.community_sub,12f,MUTED))
     }
