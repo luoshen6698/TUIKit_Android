@@ -18,6 +18,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -28,6 +29,7 @@ import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
 import io.trtc.tuikit.atomicxcore.api.CompletionHandler
 import io.trtc.tuikit.atomicxcore.api.contact.ContactStore
+import io.trtc.tuikit.atomicxcore.api.contact.FriendApplicationType
 import io.trtc.tuikit.atomicxcore.api.group.GroupApplicationInfo
 import io.trtc.tuikit.atomicxcore.api.group.GroupStore
 import io.trtc.tuikit.atomicxcore.api.message.MessageInputStore
@@ -70,6 +72,8 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
 
     private var selectedTab = Tab.FRIEND
     private var friends: List<FriendApplication> = emptyList()
+    private var nativeFriends: List<FriendApplication> = emptyList()
+    private var nativeFriendLoadError: String? = null
     private var receivedFriends: List<FriendApplication> = emptyList()
     private var sentFriends: List<FriendApplication> = emptyList()
     private var receivedPage = 1
@@ -91,13 +95,17 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         if (isFinishing) return
         if (intent.getBooleanExtra(EXTRA_GROUP_TAB, false)) selectedTab = Tab.GROUP
         buildPage()
+        observeNativeFriends()
         observeNativeGroups()
         refresh()
     }
 
     override fun onStart() {
         super.onStart()
-        if (selectedTab == Tab.GROUP) {
+        if (selectedTab == Tab.FRIEND) {
+            refreshNativeFriends()
+            startGroupPolling()
+        } else {
             refreshNativeGroups()
             lifecycleScope.launch { refreshGroupApplicationsQuietly() }
             startGroupPolling()
@@ -258,6 +266,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         } else {
             groupPollingJob?.cancel()
             groupPollingJob = null
+            startGroupPolling()
         }
         refresh()
     }
@@ -270,6 +279,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         operationError = null
         render()
         val requestedTab = selectedTab
+        if (requestedTab == Tab.FRIEND) refreshNativeFriends()
         lifecycleScope.launch {
             try {
                 val session = XingDunSessionManager.currentSession()
@@ -285,13 +295,9 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                     receivedHasMore = received.hasMore
                     sentHasMore = sent.hasMore
                     mergeFriends()
-                    if (selectedTab == Tab.FRIEND && received.unreadCount > 0) {
+                    if (selectedTab == Tab.FRIEND && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && received.unreadCount > 0) {
                         runCatching { client.postEmpty(session, "friend/readApply", emptyMap<String, String>()) }
                     }
-                    if (selectedTab == Tab.FRIEND) contactStore.clearFriendApplicationUnreadCount(object : CompletionHandler {
-                        override fun onSuccess() = Unit
-                        override fun onFailure(code: Int, desc: String) = Unit
-                    })
                 } catch (error: Exception) {
                     if (error is CancellationException) throw error
                     friendLoadError = error.message.orEmpty().ifBlank { getString(R.string.xingdun_verification_load_failed) }
@@ -368,10 +374,45 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     }
 
     private fun mergeFriends() {
-        friends = (receivedFriends + sentFriends).sortedWith(
-            compareByDescending<FriendApplication> { it.createdAt.orEmpty() }
-                .thenByDescending(FriendApplication::id),
-        )
+        friends = mergeFriendApplications(receivedFriends + sentFriends, nativeFriends)
+    }
+
+    private fun observeNativeFriends() {
+        lifecycleScope.launch {
+            contactStore.state.friendApplicationList.collectLatest { applications ->
+                nativeFriends = applications.map { application ->
+                    FriendApplication(
+                        applyMsg = application.addWording,
+                        direction = if (application.type == FriendApplicationType.SENT) Direction.SENT else Direction.RECEIVED,
+                        nativeUserID = application.userID,
+                        fromUser = ApplicationUser(nickname = application.title, avatar = application.avatarURL, timUserId = application.userID),
+                        toUser = ApplicationUser(nickname = application.title, avatar = application.avatarURL, timUserId = application.userID),
+                    )
+                }
+                mergeFriends()
+                if (selectedTab == Tab.FRIEND) render()
+            }
+        }
+    }
+
+    private fun refreshNativeFriends() {
+        contactStore.loadFriendApplications(object : CompletionHandler {
+            override fun onSuccess() = runOnUiThread {
+                nativeFriendLoadError = null
+                if (selectedTab == Tab.FRIEND && !isFinishing && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                    render()
+                    // Acknowledge only after this source has actually loaded into the inbox.
+                    contactStore.clearFriendApplicationUnreadCount(object : CompletionHandler {
+                        override fun onSuccess() = Unit
+                        override fun onFailure(code: Int, desc: String) = Unit
+                    })
+                }
+            }
+            override fun onFailure(code: Int, desc: String) = runOnUiThread {
+                nativeFriendLoadError = desc.ifBlank { getString(R.string.xingdun_verification_load_failed) }
+                if (selectedTab == Tab.FRIEND) render()
+            }
+        })
     }
 
     private fun observeNativeGroups() {
@@ -401,11 +442,11 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     }
 
     private fun startGroupPolling() {
-        if (groupPollingJob?.isActive == true || selectedTab != Tab.GROUP) return
+        if (groupPollingJob?.isActive == true) return
         groupPollingJob = lifecycleScope.launch {
-            while (isActive && selectedTab == Tab.GROUP) {
+            while (isActive) {
                 delay(GROUP_REFRESH_INTERVAL_MS)
-                refreshGroupApplicationsQuietly()
+                if (selectedTab == Tab.GROUP) refreshGroupApplicationsQuietly() else refresh()
             }
         }
     }
@@ -435,14 +476,15 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     }
 
     private fun render() {
-        val loadError = if (selectedTab == Tab.FRIEND) friendLoadError else groupLoadError
+        val loadError = if (selectedTab == Tab.FRIEND) friendLoadError ?: nativeFriendLoadError else groupLoadError
         friendTab.background = rounded(if (selectedTab == Tab.FRIEND) Color.WHITE else Color.TRANSPARENT, 8f)
         groupTab.background = rounded(if (selectedTab == Tab.GROUP) Color.WHITE else Color.TRANSPARENT, 8f)
         clear.visibility = View.VISIBLE
         clear.isEnabled = selectedTab == Tab.FRIEND && friends.any { it.status != STATUS_PENDING }
         clear.alpha = if (clear.isEnabled) 1f else .35f
-        operationWarning.text = operationError.orEmpty()
-        operationWarning.visibility = if (operationError.isNullOrBlank()) View.GONE else View.VISIBLE
+        val warning = operationError ?: loadError
+        operationWarning.text = warning.orEmpty()
+        operationWarning.visibility = if (warning.isNullOrBlank()) View.GONE else View.VISIBLE
 
         val rows = if (selectedTab == Tab.FRIEND) {
             friends.map { VerificationRow.Friend(it) }
@@ -490,8 +532,11 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                 try {
                     val session = requireNotNull(XingDunSessionManager.currentSession())
                     XingDunSessionManager.apiClient().postEmpty(
-                        session, if (approve) "friend/agree" else "friend/reject", mapOf("apply_id" to application.id)
+                        session, if (approve) "friend/agree" else "friend/reject",
+                        if (application.nativeUserID != null) mapOf("from_tim_user_id" to application.nativeUserID)
+                        else mapOf("apply_id" to application.id)
                     )
+                    refreshNativeFriends()
                     if (approve) {
                         contactStore.loadFriends()
                         sendFriendAcceptedMessageAndOpen(application)
@@ -650,7 +695,8 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         adapter.notifyDataSetChanged()
     }
 
-    private fun friendRowKey(application: FriendApplication) = "friend:${application.id}"
+    private fun friendRowKey(application: FriendApplication) =
+        application.nativeUserID?.let { "native-friend:${application.direction}:$it" } ?: "friend:${application.id}"
 
     private fun serverGroupRowKey(invitation: ServerGroupInvitation) = "server-group:${invitation.id}"
 
@@ -695,11 +741,26 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         private const val FRIEND_PAGE_SIZE = 20
         private const val GROUP_REFRESH_INTERVAL_MS = 5_000L
 
+        internal fun mergeFriendApplications(
+            server: List<FriendApplication>, native: List<FriendApplication>
+        ): List<FriendApplication> {
+            val serverPending = server.filter { it.status == STATUS_PENDING }
+                .map { it.direction to it.user?.timUserId }.toSet()
+            val nativeOnly = native.distinctBy { it.direction to it.nativeUserID }
+                .filterNot { (it.direction to it.nativeUserID) in serverPending }
+            // SDK-only pending requests must remain visible above historical accepted/rejected rows.
+            return (server + nativeOnly).sortedWith(
+                compareBy<FriendApplication> { it.status != STATUS_PENDING }
+                    .thenBy { it.status == STATUS_PENDING && it.direction == Direction.SENT }
+                    .thenByDescending { it.createdAt.orEmpty() }.thenByDescending { it.id }
+            )
+        }
+
         fun start(context: Context) = context.startActivity(Intent(context, XingDunVerificationMessagesActivity::class.java))
     }
 
     private enum class Tab { FRIEND, GROUP }
-    private enum class Direction { RECEIVED, SENT }
+    internal enum class Direction { RECEIVED, SENT }
 
     private data class FriendApplicationPage(
         val total: Int = 0,
@@ -712,7 +773,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         val hasMore: Boolean = false,
     )
 
-    private data class FriendApplication(
+    internal data class FriendApplication(
         val id: Int = 0,
         @SerializedName(value = "from_user_id", alternate = ["fromUserId"])
         val fromUserId: Int = 0,
@@ -729,12 +790,13 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         val fromUser: ApplicationUser? = null,
         @SerializedName(value = "to_user", alternate = ["toUser"])
         val toUser: ApplicationUser? = null,
-        val direction: Direction = Direction.RECEIVED
+        val direction: Direction = Direction.RECEIVED,
+        @Transient val nativeUserID: String? = null,
     ) {
         val user: ApplicationUser? get() = if (direction == Direction.RECEIVED) fromUser else toUser
     }
 
-    private data class ApplicationUser(
+    internal data class ApplicationUser(
         val id: Int? = null,
         @SerializedName(value = "custom_id", alternate = ["customId"])
         val customId: String? = null,
