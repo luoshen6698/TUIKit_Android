@@ -68,7 +68,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
     private val passwordReset = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             password.text?.clear()
-            status.setText(R.string.xingdun_password_reset_login_message)
+            TravelAuthForm.message(this, getString(R.string.xingdun_password_reset_login_message))
         }
     }
 

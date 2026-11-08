@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="TravelAuthFieldError" parent="TextAppearance.MaterialComponents.Caption">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">#B3261E</item>
+    </style>
+    <string name="ta_reset_phone">Phone</string>
+    <string name="ta_reset_email">Email</string>
+    <string name="ta_invite_limit">Invitation code can contain up to 10 characters</string>
+    <item name="travel_registration_progress" type="id" />
+    <item name="travel_reset_progress" type="id" />
+    <item name="travel_reset_code_progress" type="id" />
+    <string name="ta_register_title">Register</string>
+    <string name="ta_recovery_title">Forgot Password?</string>
+    <string name="ta_reset_submit">Reset Password</string>
+    <string name="ta_reset_phone_target">Phone number</string>
+    <string name="ta_reset_email_target">Email address</string>
+    <string name="ta_reset_password_length">Password must be 6–32 characters</string>
+    <string name="ta_registered">Registration successful</string>
+    <item name="travel_registration_terms" type="id" />
+    <item name="travel_registration_privacy" type="id" />
+    <string name="ta_register_password_hint">Password (6+ chars)</string>
+    <string name="ta_reset_code_hint">6-digit code</string>
+</resources>

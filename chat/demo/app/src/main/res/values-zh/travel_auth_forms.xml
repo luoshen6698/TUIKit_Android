@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ta_reset_phone">手机号</string>
+    <string name="ta_reset_email">邮箱</string>
+    <string name="ta_invite_limit">邀请码最多10个字符</string>
+    <string name="ta_register_title">注册</string>
+    <string name="ta_recovery_title">忘记密码？</string>
+    <string name="ta_reset_submit">重置密码</string>
+    <string name="ta_reset_phone_target">手机号</string>
+    <string name="ta_reset_email_target">邮箱地址</string>
+    <string name="ta_reset_password_length">密码长度6–32位</string>
+    <string name="ta_registered">注册成功</string>
+    <string name="ta_register_password_hint">密码（至少6位）</string>
+    <string name="ta_reset_code_hint">请输入6位验证码</string>
+</resources>

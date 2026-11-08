@@ -10,6 +10,7 @@ internal data class XingDunEnvelope<T>(
 data class XingDunBootstrapConfiguration(
     val mode: String? = null,
     val showCompanyCode: Boolean? = null,
+    val showInviteCode: Boolean = false,
     val imProvider: String = "",
     val configured: Boolean = false,
     val companyCode: String = "",

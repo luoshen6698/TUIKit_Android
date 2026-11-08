@@ -10,6 +10,16 @@ import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.ProgressBar
+import android.widget.FrameLayout
+import android.view.Gravity
+import android.graphics.Typeface
+import android.os.Build
+import io.trtc.tuikit.chat.demo.xingdun.features.travel.TravelFlow
+import io.trtc.tuikit.chat.demo.xingdun.features.travel.TravelUi
+import io.trtc.tuikit.chat.demo.xingdun.legal.XingDunLegalActivity
+import android.view.inputmethod.EditorInfo
+import kotlinx.coroutines.CancellationException
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import com.journeyapps.barcodescanner.ScanContract
@@ -40,8 +50,9 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
     private lateinit var confirmation: EditText
     private lateinit var inviteCode: EditText
     private lateinit var agreementConsent: CheckBox
-    private lateinit var primaryAction: LinearLayout
+    private lateinit var primaryAction: View
     private lateinit var primaryActionLabel: TextView
+    private lateinit var formUi: TravelAuthForm
     private var phoneMode = false
     private var loading = false
     private var pendingSession: XingDunStoredSession? = null
@@ -60,6 +71,7 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
         bootstrap = selected
         setContentView(R.layout.xingdun_activity_registration)
         bindViews()
+        formUi = TravelAuthForm(this)
         bindBrand()
         bindActions()
         if (savedInstanceState?.getBoolean(STATE_PENDING_SESSION) == true) {
@@ -98,12 +110,36 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
             contentDescription = displayName
             loadLogo(lifecycleScope, null)
         }
-        XingDunAuthUiSupport.installLegalLinks(
-            this,
-            bootstrap,
-            findViewById(R.id.xingdun_registration_agreement_text),
-            prefixResource = R.string.ta_registration_consent_prefix
-        ) { status.setText(R.string.xingdun_legal_document_unavailable) }
+        val ui = TravelUi(this)
+        findViewById<FrameLayout>(R.id.xingdun_registration_agreement_text).apply {
+            removeAllViews()
+            addView(TravelFlow(this@XingDunRegistrationActivity, 0).apply {
+                addView(TextView(context).apply {
+                    setText(R.string.ta_registration_consent_prefix); textSize = 12f
+                    setTextColor(0xFF405E56.toInt()); minHeight = ui.d(48); gravity = Gravity.CENTER_VERTICAL
+                })
+                for ((viewId, title, privacy) in listOf(
+                    Triple(R.id.travel_registration_terms, R.string.xingdun_user_agreement_link, false),
+                    Triple(R.id.travel_registration_privacy, R.string.xingdun_privacy_policy_link, true)
+                )) addView(Button(context).apply {
+                    id = viewId; text = getString(title).removeSurrounding("《", "》")
+                    textSize = 12f; isAllCaps = false
+                    typeface = if (Build.VERSION.SDK_INT >= 28) Typeface.create(typeface, 600, false) else Typeface.DEFAULT_BOLD
+                    setTextColor(0xFF2F6055.toInt()); setBackgroundColor(Color.TRANSPARENT)
+                    minWidth = ui.d(48); minimumWidth = ui.d(48); minHeight = ui.d(48); minimumHeight = ui.d(48)
+                    setPadding(0, 0, 0, 0); gravity = Gravity.CENTER
+                    setOnClickListener {
+                        if (!loading) runCatching { XingDunLegalActivity.open(this@XingDunRegistrationActivity, privacy) }
+                            .onFailure { formUi.message(getString(R.string.xingdun_legal_document_unavailable), true) }
+                    }
+                })
+            })
+        }
+        TravelAuthForm.container(inviteCode)?.apply {
+            visibility = if (bootstrap.showInviteCode) View.VISIBLE else View.GONE
+            (layoutParams as? LinearLayout.LayoutParams)?.let { it.bottomMargin = 0; layoutParams = it }
+        }
+        if (!bootstrap.showInviteCode) inviteCode.text.clear()
     }
 
     private fun bindActions() {
@@ -124,6 +160,9 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
         }
         agreementConsent.setOnCheckedChangeListener { _, _ -> updateEnabled() }
         primaryAction.setOnClickListener { submit() }
+        listOf(phone, inviteCode).forEach { field -> field.setOnEditorActionListener { _, action, _ ->
+            if (action == EditorInfo.IME_ACTION_DONE) { submit(); true } else false
+        } }
         findViewById<Button>(R.id.xingdun_registration_back_login).setOnClickListener { finish() }
     }
 
@@ -140,18 +179,16 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
     }
 
     private fun submit() {
+        if (loading) return
+        formUi.hideKeyboard()
         pendingSession?.let {
             loginToIM(it)
             return
         }
         val identifier = if (phoneMode) phone.text.toString().trim() else username.text.toString().trim()
-        val error = firstValidationError(identifier)
-        if (error != null) {
-            status.setText(error.messageResource())
-            return
-        }
+        if (!validateForm()) return
         if (!agreementConsent.isChecked) {
-            status.setText(R.string.xingdun_consent_required)
+            formUi.message(getString(R.string.xingdun_consent_required), true)
             return
         }
         setLoading(true, getString(R.string.xingdun_registering))
@@ -165,7 +202,7 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
                         password.text.toString(),
                         confirmation.text.toString(),
                         nickname.text.toString(),
-                        inviteCode.text.toString()
+                        inviteCode.text.toString().takeIf { bootstrap.showInviteCode }.orEmpty()
                     )
                 } else {
                     XingDunSessionManager.register(
@@ -174,7 +211,7 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
                         password.text.toString(),
                         confirmation.text.toString(),
                         nickname.text.toString(),
-                        inviteCode.text.toString(),
+                        inviteCode.text.toString().takeIf { bootstrap.showInviteCode }.orEmpty(),
                         phone.text.toString()
                     )
                 }
@@ -182,26 +219,39 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
                 pendingSession = session
                 clearSensitiveInputs()
                 updatePendingState()
+                formUi.message(getString(R.string.ta_registered))
                 loginToIM(session)
             }.onFailure { errorValue ->
+                if (errorValue is CancellationException) throw errorValue
                 val presentation = XingDunAuthenticationErrorPresenter.registration(errorValue)
-                setLoading(false, getString(presentation.message))
-                focusRegistrationField(presentation.registrationField)
+                setLoading(false, "")
+                formUi.message(getString(presentation.message), true)
+                focusRegistrationField(presentation.registrationField, presentation.message)
             }
         }
     }
 
-    private fun firstValidationError(identifier: String): XingDunAuthenticationInputError? {
-        return if (phoneMode) {
-            XingDunAuthenticationInputValidator.phoneError(identifier)
-                ?: XingDunAuthenticationInputValidator.codeError(code.text.toString())
-        } else {
-            XingDunAuthenticationInputValidator.usernameError(identifier)
-        } ?: XingDunAuthenticationInputError.NICKNAME_LENGTH.takeIf { nickname.text.toString().trim().length > 20 }
-            ?: XingDunAuthenticationInputValidator.phoneError(phone.text.toString()).takeIf { !phoneMode && phone.text.isNotBlank() }
-            ?: XingDunAuthenticationInputError.PASSWORD_REQUIRED.takeIf { password.text.isEmpty() }
-            ?: XingDunAuthenticationInputError.PASSWORD_LENGTH.takeIf { !TravelAuthPolicy.validPassword(password.text.toString()) }
-            ?: XingDunAuthenticationInputValidator.confirmationError(password.text.toString(), confirmation.text.toString())
+    private fun validateForm(): Boolean {
+        formUi.clearErrors()
+        val checks = mutableListOf<Pair<EditText, XingDunAuthenticationInputError?>>()
+        if (phoneMode) {
+            checks += phone to XingDunAuthenticationInputValidator.phoneError(phone.text.toString())
+            checks += code to XingDunAuthenticationInputValidator.codeError(code.text.toString())
+        } else checks += username to XingDunAuthenticationInputValidator.usernameError(username.text.toString())
+        checks += password to when {
+            password.text.isEmpty() -> XingDunAuthenticationInputError.PASSWORD_REQUIRED
+            !TravelAuthPolicy.validPassword(password.text.toString()) -> XingDunAuthenticationInputError.PASSWORD_LENGTH
+            else -> null
+        }
+        checks += confirmation to XingDunAuthenticationInputValidator.confirmationError(password.text.toString(), confirmation.text.toString())
+        checks += nickname to XingDunAuthenticationInputError.NICKNAME_LENGTH.takeIf { nickname.text.toString().trim().length > 20 }
+        if (!phoneMode && phone.text.isNotBlank()) checks += phone to XingDunAuthenticationInputValidator.phoneError(phone.text.toString())
+        checks.forEach { (field, error) -> if (error != null) formUi.error(field, error.messageResource()) }
+        val inviteTooLong = bootstrap.showInviteCode && inviteCode.text.toString().length > 10
+        if (inviteTooLong) formUi.error(inviteCode, R.string.ta_invite_limit)
+        val first = checks.firstOrNull { it.second != null }?.first ?: inviteCode.takeIf { inviteTooLong }
+        first?.let(formUi::reveal)
+        return first == null
     }
 
     private fun loginToIM(session: XingDunStoredSession) {
@@ -211,7 +261,7 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
             session.timUserId,
             session.userSig,
             onFailure = { code, description ->
-                setLoading(false, getString(XingDunAuthenticationErrorPresenter.im(code, description)))
+                setLoading(false, ""); formUi.message(getString(XingDunAuthenticationErrorPresenter.im(code, description)), true)
             }
         )
     }
@@ -226,20 +276,30 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
             switchToInvitationEnterprise(route)
             return
         }
+        if (!bootstrap.showInviteCode) return
         inviteCode.setText(route.code)
         status.setText(R.string.xingdun_invitation_applied)
     }
 
     private fun setLoading(value: Boolean, message: String) {
         loading = value
-        status.text = message
+        status.text = ""
+        primaryActionLabel.visibility = if (value) View.INVISIBLE else View.VISIBLE
+        findViewById<ProgressBar>(R.id.travel_registration_progress).apply {
+            visibility = if (value) View.VISIBLE else View.GONE
+            contentDescription = message
+        }
         updateEnabled()
     }
 
     private fun updateEnabled() {
         primaryAction.isEnabled = !loading
         primaryAction.alpha = if(loading).55f else 1f
-        listOf(username,phone,nickname,password,confirmation,inviteCode,agreementConsent).forEach { it.isEnabled = !loading && pendingSession == null }
+        listOf(username,phone,code,nickname,password,confirmation,inviteCode,agreementConsent).forEach { it.isEnabled = !loading && pendingSession == null }
+        findViewById<Button>(R.id.xingdun_registration_back_login).isEnabled = !loading
+        listOf(R.id.travel_registration_terms, R.id.travel_registration_privacy).forEach {
+            findViewById<View>(it).isEnabled = !loading
+        }
         listOf(accountTab, phoneTab).forEach { it.isEnabled = !loading && pendingSession == null }
     }
 
@@ -260,7 +320,7 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
         updateEnabled()
     }
 
-    private fun focusRegistrationField(field: XingDunRegistrationField?) {
+    private fun focusRegistrationField(field: XingDunRegistrationField?, message: Int) {
         when (field) {
             XingDunRegistrationField.USERNAME -> username
             XingDunRegistrationField.PHONE -> phone
@@ -270,7 +330,7 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
             XingDunRegistrationField.CONFIRM_PASSWORD -> confirmation
             XingDunRegistrationField.INVITE_CODE -> inviteCode
             null -> null
-        }?.requestFocus()
+        }?.let { formUi.error(it, message); formUi.reveal(it) }
     }
 
     private fun switchToInvitationEnterprise(invitation: XingDunQRCodeRoute.Invitation) {
