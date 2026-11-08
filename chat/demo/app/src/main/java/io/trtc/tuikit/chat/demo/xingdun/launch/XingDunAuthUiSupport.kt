@@ -16,9 +16,7 @@ import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBootstrapConfiguration
 
 internal object XingDunAuthUiSupport {
     fun displayName(activity: Activity, bootstrap: XingDunBootstrapConfiguration): String =
-        bootstrap.platform?.platformName?.trim()?.takeIf(String::isNotEmpty)
-            ?: bootstrap.company?.name?.trim()?.takeIf(String::isNotEmpty)
-            ?: activity.getString(R.string.demo_app_name)
+        activity.getString(R.string.demo_app_name)
 
     fun logoUrl(bootstrap: XingDunBootstrapConfiguration): String? {
         val raw = bootstrap.platform?.platformLogo?.trim()?.takeIf(String::isNotEmpty)
@@ -43,9 +41,10 @@ internal object XingDunAuthUiSupport {
         activity: Activity,
         @Suppress("UNUSED_PARAMETER") bootstrap: XingDunBootstrapConfiguration,
         target: TextView,
+        prefixResource: Int = R.string.xingdun_agreement_prefix,
         onUnavailable: () -> Unit
     ) {
-        val prefix = activity.getString(R.string.xingdun_agreement_prefix)
+        val prefix = activity.getString(prefixResource)
         val agreement = activity.getString(R.string.xingdun_user_agreement_link)
         val connector = activity.getString(R.string.xingdun_agreement_connector)
         val privacy = activity.getString(R.string.xingdun_privacy_policy_link)

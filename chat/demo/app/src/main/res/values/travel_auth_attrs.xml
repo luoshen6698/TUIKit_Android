@@ -1,0 +1,1 @@
+<resources><declare-styleable name="TravelAuthLayout"><attr name="authScene" format="integer"/><attr name="authTitle" format="reference"/><attr name="authSubtitle" format="reference"/></declare-styleable></resources>

@@ -1,0 +1,27 @@
+<resources>
+    <string name="ta_login_subtitle">Sign in to %1$s</string>
+    <string name="ta_register_subtitle">Register a new account to get started</string>
+    <string name="ta_reset_subtitle">Verify by phone or email, then set a new login password.</string>
+    <string name="ta_create_account">Create Account</string>
+    <string name="ta_startup_headline">Your next trip\nstarts here.</string>
+    <string name="ta_tagline">Find inspiration. Plan your next journey.</string>
+    <string name="ta_ready">Getting ready…</string>
+    <string name="ta_code_prompt">Enter enterprise code</string>
+    <string name="ta_select_company">Switch enterprise</string>
+    <string name="ta_switch">Switch</string>
+    <string name="ta_code_required">Choose an enterprise before signing in or registering</string>
+    <string name="ta_current_company">Current enterprise: %1$s</string>
+    <string name="ta_company_failed">Could not update the enterprise. Check the code and retry</string>
+    <string name="ta_code_format">Enterprise code must contain 4–20 letters or digits</string>
+    <string name="ta_config_unavailable">Sign-in configuration is unavailable. Retry or contact an administrator</string>
+    <string name="ta_password_length">Use a password of 6–64 characters</string>
+    <string name="ta_nickname_optional">Nickname (optional)</string>
+    <string name="ta_phone_optional">Phone (optional)</string>
+    <string name="ta_invite_optional">Invitation code (optional)</string>
+    <string name="ta_nickname_limit">Nickname can contain up to 20 characters</string>
+    <string name="ta_registration_consent_prefix">I am at least 18 and have read and agree to\u0020</string>
+    <string name="ta_already_account">Already have an account?</string>
+    <string name="ta_no_account">New here?</string>
+    <string name="ta_password_label">Password (at least 6 characters)</string>
+    <string name="ta_first_privacy_body">Please read the Terms of Service and Privacy Policy before use.\n\nTo provide travel planning, companion collaboration and communication, we process account information and the plans, messages and files you choose to submit. Camera, microphone and photo permissions are requested only when needed. The Privacy Policy explains data handling, third-party SDKs and your rights.\n\nCommunication services start after you agree. You may decline and exit.</string>
+</resources>

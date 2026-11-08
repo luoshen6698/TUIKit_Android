@@ -85,20 +85,23 @@
 
         <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity"
+            android:configChanges="orientation|screenSize"
             android:exported="false"
-            android:theme="@style/Chat_UIKit_Theme"
+            android:theme="@style/TravelAuthTheme"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunRegistrationActivity"
+            android:configChanges="orientation|screenSize"
             android:exported="false"
-            android:theme="@style/Chat_UIKit_Theme"
+            android:theme="@style/TravelAuthTheme"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunPasswordResetActivity"
+            android:configChanges="orientation|screenSize"
             android:exported="false"
-            android:theme="@style/Chat_UIKit_Theme"
+            android:theme="@style/TravelAuthTheme"
             android:windowSoftInputMode="adjustResize" />
 
         <activity

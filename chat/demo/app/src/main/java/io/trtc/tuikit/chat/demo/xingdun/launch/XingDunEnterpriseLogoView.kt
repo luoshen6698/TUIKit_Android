@@ -64,6 +64,7 @@ class XingDunEnterpriseLogoView @JvmOverloads constructor(
         setImageResource(R.drawable.xingdun_brand_logo)
     }
 
+    private var travelBrand = false
     private var angle = 0f
     private var logoLoadJob: Job? = null
     private var logoRequestGeneration = 0
@@ -113,7 +114,7 @@ class XingDunEnterpriseLogoView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        if (ringBounds.isEmpty) return
+        if (travelBrand || ringBounds.isEmpty) return
         canvas.drawOval(ringBounds, baseRingPaint)
         val startAngle = -90f + angle
         val sweepAngle = 104f
@@ -123,6 +124,14 @@ class XingDunEnterpriseLogoView @JvmOverloads constructor(
         val dotX = ringBounds.centerX() + kotlin.math.cos(radians).toFloat() * radius
         val dotY = ringBounds.centerY() + kotlin.math.sin(radians).toFloat() * radius
         canvas.drawCircle(dotX, dotY, 3.5f * density, signalDotPaint)
+    }
+
+    fun useTravelBrand() {
+        travelBrand = true; animator.cancel()
+        logo.background = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = 10f*density }
+        (logo.layoutParams as LayoutParams).apply { setMargins(0,0,0,0);logo.layoutParams=this }
+        logo.scaleType = ImageView.ScaleType.FIT_CENTER
+        invalidate()
     }
 
     fun loadLogo(scope: CoroutineScope, remoteUrl: String?) {
@@ -145,6 +154,7 @@ class XingDunEnterpriseLogoView @JvmOverloads constructor(
     }
 
     private fun updateAnimationState() {
+        if (travelBrand) { animator.cancel(); return }
         val shouldAnimate = isVisible && systemAnimationsEnabled()
         if (shouldAnimate && !animator.isStarted) {
             animator.start()

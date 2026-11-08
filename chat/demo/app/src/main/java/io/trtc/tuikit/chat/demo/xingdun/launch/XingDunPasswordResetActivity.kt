@@ -11,7 +11,6 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import androidx.core.widget.doAfterTextChanged
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
@@ -105,7 +104,7 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
         findViewById<TextView>(R.id.xingdun_password_reset_brand_name).text = displayName
         findViewById<XingDunEnterpriseLogoView>(R.id.xingdun_password_reset_logo).apply {
             contentDescription = displayName
-            loadLogo(lifecycleScope, XingDunAuthUiSupport.logoUrl(bootstrap))
+            loadLogo(lifecycleScope, null)
         }
     }
 
@@ -123,12 +122,20 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
 
     private fun updateMode(usePhone: Boolean) {
         requestGeneration++
+        if (phoneMode != usePhone) target.text.clear()
         phoneMode = usePhone
-        phoneTab.background = AppCompatResources.getDrawable(this, if (phoneMode) R.drawable.xingdun_bg_enterprise_segment_selected else R.drawable.xingdun_bg_enterprise_segment)
-        emailTab.background = AppCompatResources.getDrawable(this, if (phoneMode) R.drawable.xingdun_bg_enterprise_segment else R.drawable.xingdun_bg_enterprise_segment_selected)
-        phoneTab.setTextColor(if (phoneMode) SELECTED_TEXT_COLOR else UNSELECTED_TEXT_COLOR)
-        emailTab.setTextColor(if (phoneMode) UNSELECTED_TEXT_COLOR else SELECTED_TEXT_COLOR)
+        val ui = io.trtc.tuikit.chat.demo.xingdun.features.travel.TravelUi(this)
+        listOf(phoneTab to phoneMode, emailTab to !phoneMode).forEach { (tab, selected) ->
+            tab.backgroundTintList = null
+            tab.background = ui.box(if (selected) 0xFF2F6055.toInt() else 0x80FFFFFF.toInt(), 12).apply {
+                setStroke(ui.d(1), 0xBFFFFFFF.toInt())
+            }
+            tab.setTextColor(if (selected) Color.WHITE else 0xFF2F6055.toInt())
+        }
         targetLabel.setText(if (phoneMode) R.string.xingdun_phone else R.string.xingdun_email)
+        findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.travel_reset_target_container).hint = getString(if (phoneMode) R.string.xingdun_bound_phone_placeholder else R.string.xingdun_bound_email_placeholder)
+        findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.travel_reset_target_container)
+            .setStartIconDrawable(if (phoneMode) R.drawable.travel_auth_phone else R.drawable.travel_auth_email)
         target.setHint(if (phoneMode) R.string.xingdun_bound_phone_placeholder else R.string.xingdun_bound_email_placeholder)
         target.inputType = if (phoneMode) InputType.TYPE_CLASS_PHONE else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
         target.setAutofillHints(if (phoneMode) View.AUTOFILL_HINT_PHONE else View.AUTOFILL_HINT_EMAIL_ADDRESS)
@@ -204,7 +211,8 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
         } else {
             XingDunAuthenticationInputValidator.emailError(targetValue)
         }) ?: XingDunAuthenticationInputValidator.codeError(code.text.toString())
-            ?: XingDunAuthenticationInputValidator.passwordError(newPassword.text.toString(), listOf(targetValue))
+            ?: XingDunAuthenticationInputError.PASSWORD_REQUIRED.takeIf { newPassword.text.isEmpty() }
+            ?: XingDunAuthenticationInputError.PASSWORD_LENGTH.takeIf { !TravelAuthPolicy.validPassword(newPassword.text.toString()) }
             ?: XingDunAuthenticationInputValidator.confirmationError(newPassword.text.toString(), confirmation.text.toString())
         if (validationError != null) {
             status.setText(validationError.messageResource())
@@ -250,7 +258,7 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
         XingDunAuthenticationInputError.CODE_REQUIRED -> R.string.xingdun_code_required
         XingDunAuthenticationInputError.CODE_FORMAT -> R.string.xingdun_code_invalid
         XingDunAuthenticationInputError.PASSWORD_REQUIRED -> R.string.xingdun_new_password_required
-        XingDunAuthenticationInputError.PASSWORD_LENGTH -> R.string.xingdun_password_length
+        XingDunAuthenticationInputError.PASSWORD_LENGTH -> R.string.ta_password_length
         XingDunAuthenticationInputError.PASSWORD_WHITESPACE -> R.string.xingdun_password_whitespace
         XingDunAuthenticationInputError.PASSWORD_CATEGORIES -> R.string.xingdun_password_categories
         XingDunAuthenticationInputError.PASSWORD_IDENTIFIER -> R.string.xingdun_password_identifier
@@ -260,8 +268,4 @@ class XingDunPasswordResetActivity : BaseLoginActivity() {
         else -> R.string.xingdun_authentication_failed
     }
 
-    companion object {
-        private val SELECTED_TEXT_COLOR = Color.rgb(18, 63, 58)
-        private val UNSELECTED_TEXT_COLOR = Color.rgb(102, 125, 121)
-    }
 }

@@ -6,7 +6,13 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.view.Gravity
+import android.view.ViewGroup
 import android.widget.Button
+import android.text.InputFilter
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import io.trtc.tuikit.chat.demo.xingdun.features.travel.TravelUi
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantBoundary
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -49,6 +55,9 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
     private lateinit var forgotPassword: Button
     private var isLoading = false
     private var recoveryRouted = false
+    private var codeVisible = true
+    private var companyGeneration = 0
+    private var pendingInvitation: Uri? = null
     private var resolvedBootstrap: XingDunBootstrapConfiguration? = null
     private val initialNoticeResId: Int by lazy { intent.getIntExtra(EXTRA_NOTICE_RES_ID, 0) }
     private val autoRestoreAllowed: Boolean by lazy {
@@ -69,23 +78,21 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         bindViews()
         if (!applySelectedEnterprise()) return
         applyThemeColors(themeStore.themeState.value.currentTheme.tokens.color)
-        if (openInvitationRegistration(intent?.data)) return
+        pendingInvitation = intent?.data
         primaryAction.setOnClickListener { authenticate() }
-        switchMode.setOnClickListener { startActivity(Intent(this, XingDunRegistrationActivity::class.java)) }
+        switchMode.setOnClickListener { if (ensureCompany()) startActivity(Intent(this, XingDunRegistrationActivity::class.java)) }
         findViewById<Button>(R.id.xingdun_language).setOnClickListener { showLanguageSelector() }
         setupAgreementLinks()
         privacyConsent.setOnCheckedChangeListener { _, _ -> updatePrimaryActionEnabled() }
         forgotPassword.setOnClickListener {
-            passwordReset.launch(Intent(this, XingDunPasswordResetActivity::class.java))
+            if (ensureCompany()) passwordReset.launch(Intent(this, XingDunPasswordResetActivity::class.java))
         }
         switchEnterprise.setOnClickListener { switchEnterprise() }
+        companyCode.setOnClickListener { switchEnterprise() }
+        findViewById<Button>(R.id.travel_auth_retry).setOnClickListener { loadLoginPolicy() }
         updatePrimaryActionEnabled()
         refreshDeletionStatus()
-        if (autoRestoreAllowed) {
-            checkVersionThenRestore()
-        } else {
-            setLoading(false, initialNoticeResId.takeIf { it != 0 }?.let(::getString).orEmpty())
-        }
+        checkVersionThenRestore()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -121,37 +128,80 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
 
     private fun applySelectedEnterprise(): Boolean {
         val bootstrap = XingDunSessionManager.currentEnterprise()
-        if (bootstrap == null) {
-            startActivity(Intent(this, XingDunEnterpriseAccessActivity::class.java).apply {
-                data = intent?.data
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            })
-            finish()
-            return false
-        }
         resolvedBootstrap = bootstrap
-        val displayName = XingDunAuthUiSupport.displayName(this, bootstrap)
+        val displayName = getString(R.string.demo_app_name)
         brandName.text = displayName
-        loginSubtitle.text = getString(R.string.xingdun_login_platform_account, displayName)
-        copyright.text = bootstrap.platform?.siteCopyright?.trim()?.takeIf(String::isNotEmpty) ?: displayName
+        loginSubtitle.text = getString(R.string.ta_login_subtitle,displayName)
+        copyright.text = displayName
         enterpriseLogo.contentDescription = displayName
-        enterpriseLogo.loadLogo(lifecycleScope, XingDunAuthUiSupport.logoUrl(bootstrap))
-        companyCode.setText(bootstrap.companyCode)
-        selectedEnterprise.text = getString(
-            R.string.xingdun_selected_enterprise,
-            bootstrap.company?.name?.takeIf(String::isNotBlank) ?: bootstrap.companyCode,
-            bootstrap.companyCode
-        )
-        switchEnterprise.visibility = if (bootstrap.mode.equals("simple", ignoreCase = true)) View.GONE else View.VISIBLE
-        XingDunSessionManager.currentSession()?.takeIf {
-            !it.companyCode.equals(bootstrap.companyCode, ignoreCase = true)
-        }?.let { XingDunSessionManager.clear() }
+        enterpriseLogo.loadLogo(lifecycleScope,null)
+        codeVisible = TravelAuthPolicy.showsCompanyCode(bootstrap?.showCompanyCode,bootstrap?.mode)
+        renderCompany()
         return true
+    }
+
+    private fun renderCompany() {
+        val bootstrap=resolvedBootstrap
+        val selected=!codeVisible || TravelCompanySelection.matches(bootstrap)
+        findViewById<View>(R.id.travel_company_group).visibility=if(codeVisible)View.VISIBLE else View.GONE
+        companyCode.setText(if(selected)bootstrap?.companyCode.orEmpty() else "")
+        selectedEnterprise.text=if(selected && bootstrap!=null)getString(R.string.ta_current_company,bootstrap.company?.name?.takeIf(String::isNotBlank)?:bootstrap.companyCode)else getString(R.string.ta_code_required)
+    }
+
+    private fun ensureCompany():Boolean {
+        if(isLoading)return false
+        if(resolvedBootstrap?.configured!=true){status.setText(if(codeVisible)R.string.ta_code_required else R.string.ta_config_unavailable);return false}
+        if(codeVisible && !TravelCompanySelection.matches(resolvedBootstrap)){status.setText(R.string.ta_code_required);return false}
+        return true
+    }
+
+    private fun loadLoginPolicy() {
+        val generation=++companyGeneration
+        setLoading(true,getString(R.string.xingdun_startup_loading_enterprise))
+        lifecycleScope.launch {
+            try {
+                val policy=XingDunSessionManager.startupConfiguration()
+                if(generation!=companyGeneration)return@launch
+                codeVisible=TravelAuthPolicy.showsCompanyCode(policy.showCompanyCode,policy.mode)
+                val complete:()->Unit = {
+                    if(generation==companyGeneration && !isFinishing){
+                        renderCompany();findViewById<View>(R.id.travel_auth_retry).visibility=if(!codeVisible && resolvedBootstrap?.configured!=true)View.VISIBLE else View.GONE
+                        setLoading(false,if(!codeVisible && resolvedBootstrap?.configured!=true)getString(R.string.ta_config_unavailable)else initialNoticeResId.takeIf{it!=0}?.let(::getString).orEmpty())
+                        pendingInvitation?.let { openInvitationRegistration(it) }
+                    }
+                }
+                if(!codeVisible && policy.configured && XingDunSessionManager.currentSession()==null) {
+                    commitCompany(policy,false,generation,complete)
+                } else {
+                    if(!codeVisible && !policy.configured)resolvedBootstrap=null
+                    complete()
+                }
+            }catch(error:CancellationException){throw error}catch(_:Exception){
+                if(generation==companyGeneration){setLoading(false,getString(R.string.ta_config_unavailable));findViewById<View>(R.id.travel_auth_retry).visibility=View.VISIBLE}
+            }
+        }
+    }
+
+    private fun commitCompany(next:XingDunBootstrapConfiguration,manual:Boolean,generation:Int,complete:()->Unit) {
+        val identity=checkNotNull(XingDunTenantBoundary.identity(next))
+        val current=XingDunTenantBoundary.identity(XingDunSessionManager.currentSession())
+        val selected=XingDunTenantBoundary.identity(XingDunSessionManager.currentEnterprise())
+        val loggedIn=com.tencent.qcloud.tuicore.TUILogin.getLoginUser().orEmpty().isNotBlank()
+        val different=(current!=null && !current.matches(identity)) || (selected!=null && !selected.matches(identity))
+        val commit:()->Unit = {
+            if(generation==companyGeneration && !isFinishing && !isDestroyed){
+                if(resolvedBootstrap?.let(TravelAuthPolicy::selectionKey)!=TravelAuthPolicy.selectionKey(next)){privacyConsent.isChecked=false;password.text.clear()}
+                XingDunSessionManager.selectEnterprise(next)
+                if(manual)TravelCompanySelection.record(next)
+                resolvedBootstrap=next;complete()
+            }
+        }
+        if(different && (loggedIn||current!=null))XingDunTenantSessionCoordinator.switchEnterprise(commit)else commit()
     }
 
     private fun restoreSession() {
         if (routeToRecoveryIfSessionExists()) return
-        setLoading(false, initialNoticeResId.takeIf { it != 0 }?.let(::getString).orEmpty())
+        loadLoginPolicy()
     }
 
     private fun routeToRecoveryIfSessionExists(allowRecovery: Boolean = true): Boolean {
@@ -215,6 +265,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
     }
 
     private fun authenticate() {
+        if (!ensureCompany()) return
         val company = companyCode.text.toString().trim()
         val account = username.text.toString().trim()
         val passwordValue = password.text.toString()
@@ -273,42 +324,54 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
     }
 
     private fun setupAgreementLinks() {
-        val bootstrap = resolvedBootstrap ?: run {
-            status.setText(R.string.xingdun_enterprise_lookup_required)
-            return
-        }
+        val bootstrap = resolvedBootstrap ?: XingDunBootstrapConfiguration()
         XingDunAuthUiSupport.installLegalLinks(this, bootstrap, agreementText) {
             status.setText(R.string.xingdun_legal_document_unavailable)
         }
     }
 
-    private fun switchEnterprise() {
-        setLoading(true, getString(R.string.xingdun_switching_enterprise))
-        XingDunTenantSessionCoordinator.switchEnterprise {
-            startActivity(Intent(this, XingDunEnterpriseAccessActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            })
-            finish()
+    private fun switchEnterprise(prefill:String?=null) {
+        if(isLoading || !codeVisible)return
+        val generation=++companyGeneration
+        val ui=TravelUi(this);val dialog=BottomSheetDialog(this)
+        val panel=ui.column(24).apply{setBackgroundColor(0xFFF9F8F3.toInt())}
+        panel.addView(ui.label(R.string.ta_select_company,18f,TravelAuthLayout.INK,true));panel.addView(ui.space(16))
+        val input=EditText(this).apply { id=R.id.travel_company_input;hint=getString(R.string.ta_code_prompt);textSize=14f;setSingleLine();setText(prefill?:companyCode.text.toString());filters=arrayOf(InputFilter.LengthFilter(20));inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS }
+        panel.addView(input,LinearLayout.LayoutParams(-1,ui.d(56)))
+        val error=ui.text("",12f,0xFFB3261E.toInt());panel.addView(error);panel.addView(ui.space(16))
+        val confirm=ui.button(R.string.demo_about_confirm,color=0xFF2F6055.toInt()){}
+        panel.addView(confirm);dialog.setContentView(android.widget.ScrollView(this).apply{addView(panel)})
+        confirm.setOnClickListener {
+            val code=TravelAuthPolicy.normalizedCode(input.text.toString())
+            if(code==null){error.setText(R.string.ta_code_format);return@setOnClickListener}
+            input.isEnabled=false;confirm.isEnabled=false;dialog.setCancelable(false);setLoading(true,getString(R.string.xingdun_enterprise_connecting))
+            lifecycleScope.launch {
+                try {
+                    val next=XingDunSessionManager.discoverEnterprise(code,null)
+                    if(generation!=companyGeneration)return@launch
+                    commitCompany(next,true,generation){
+                        codeVisible=TravelAuthPolicy.showsCompanyCode(next.showCompanyCode,next.mode);renderCompany();setupAgreementLinks();setLoading(false);dialog.dismiss()
+                        pendingInvitation?.let { openInvitationRegistration(it) }
+                    }
+                }catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){
+                    if(generation==companyGeneration){error.setText(R.string.ta_company_failed);input.isEnabled=true;confirm.isEnabled=true;dialog.setCancelable(true);setLoading(false)}
+                }
+            }
         }
+        dialog.show();dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);dialog.behavior.state=com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
     }
 
     private fun openInvitationRegistration(uri: Uri?): Boolean {
-        if (uri == null) return false
-        val invitation = runCatching { XingDunQRCodeParser.parse(uri.toString()) }.getOrNull()
-            as? XingDunQRCodeRoute.Invitation ?: return false
-        val currentCompany = resolvedBootstrap?.companyCode
-        if (invitation.companyCode != null && !invitation.companyCode.equals(currentCompany, ignoreCase = true)) {
-            setLoading(true, getString(R.string.xingdun_switching_enterprise))
-            XingDunTenantSessionCoordinator.switchEnterprise {
-                startActivity(Intent(this, XingDunEnterpriseAccessActivity::class.java).apply {
-                    data = uri
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                })
-                finish()
-            }
+        if(uri==null)return false
+        val invitation=runCatching{XingDunQRCodeParser.parse(uri.toString())}.getOrNull() as? XingDunQRCodeRoute.Invitation?:return false
+        pendingInvitation=uri
+        if(invitation.companyCode!=null && !invitation.companyCode.equals(resolvedBootstrap?.companyCode,true)) {
+            if(codeVisible)switchEnterprise(invitation.companyCode)else status.setText(R.string.ta_company_failed)
             return true
         }
-        startActivity(Intent(this, XingDunRegistrationActivity::class.java).apply { data = uri })
+        if(!ensureCompany()){if(codeVisible)switchEnterprise(invitation.companyCode);return true}
+        pendingInvitation=null
+        startActivity(Intent(this,XingDunRegistrationActivity::class.java).apply{data=uri})
         return true
     }
 
@@ -339,14 +402,19 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         switchMode.isEnabled = !loading
         forgotPassword.isEnabled = !loading
         switchEnterprise.isEnabled = !loading
+        companyCode.isEnabled = !loading
+        username.isEnabled = !loading;password.isEnabled = !loading;privacyConsent.isEnabled = !loading
         status.text = message
     }
 
     private fun updatePrimaryActionEnabled() {
         if (::primaryAction.isInitialized) {
-            primaryAction.isEnabled = !isLoading && privacyConsent.isChecked
+            primaryAction.isEnabled = !isLoading
+            primaryAction.alpha = if(isLoading).55f else 1f
         }
     }
+
+    override fun onDestroy(){companyGeneration++;super.onDestroy()}
 
     companion object {
         const val EXTRA_NOTICE_RES_ID = "xingdun_authentication_notice_res_id"

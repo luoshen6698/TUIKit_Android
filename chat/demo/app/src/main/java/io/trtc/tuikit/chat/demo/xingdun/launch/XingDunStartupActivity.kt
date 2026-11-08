@@ -84,6 +84,7 @@ class XingDunStartupActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
+        setTheme(R.style.TravelAuthTheme)
         super.onCreate(savedInstanceState)
         XingDunRouter.markStartupPending()
         setContentView(R.layout.xingdun_activity_startup_loading)
@@ -108,8 +109,8 @@ class XingDunStartupActivity : AppCompatActivity() {
             val padding = (24 * resources.displayMetrics.density).toInt()
             setPadding(padding, padding / 2, padding, 0)
             addView(TextView(context).apply {
-                setText(R.string.xingdun_first_privacy_body)
-                textSize = 16f
+                setText(R.string.ta_first_privacy_body)
+                textSize = 12f
             })
             addView(Button(context).apply {
                 setText(R.string.xingdun_user_agreement_link)
@@ -532,7 +533,7 @@ class XingDunStartupActivity : AppCompatActivity() {
 
     private fun routeToEnterpriseAccess() {
         routeOnce(
-            Intent(this, XingDunEnterpriseAccessActivity::class.java).apply {
+            Intent(this, XingDunLaunchActivity::class.java).apply {
                 data = intent?.data
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             }

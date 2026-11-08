@@ -96,12 +96,13 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
         findViewById<TextView>(R.id.xingdun_registration_brand_name).text = displayName
         findViewById<XingDunEnterpriseLogoView>(R.id.xingdun_registration_logo).apply {
             contentDescription = displayName
-            loadLogo(lifecycleScope, XingDunAuthUiSupport.logoUrl(bootstrap))
+            loadLogo(lifecycleScope, null)
         }
         XingDunAuthUiSupport.installLegalLinks(
             this,
             bootstrap,
-            findViewById(R.id.xingdun_registration_agreement_text)
+            findViewById(R.id.xingdun_registration_agreement_text),
+            prefixResource = R.string.ta_registration_consent_prefix
         ) { status.setText(R.string.xingdun_legal_document_unavailable) }
     }
 
@@ -173,7 +174,8 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
                         password.text.toString(),
                         confirmation.text.toString(),
                         nickname.text.toString(),
-                        inviteCode.text.toString()
+                        inviteCode.text.toString(),
+                        phone.text.toString()
                     )
                 }
             }.onSuccess { session ->
@@ -195,8 +197,10 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
                 ?: XingDunAuthenticationInputValidator.codeError(code.text.toString())
         } else {
             XingDunAuthenticationInputValidator.usernameError(identifier)
-        } ?: XingDunAuthenticationInputValidator.nicknameError(nickname.text.toString())
+        } ?: XingDunAuthenticationInputError.NICKNAME_LENGTH.takeIf { nickname.text.toString().trim().length > 20 }
+            ?: XingDunAuthenticationInputValidator.phoneError(phone.text.toString()).takeIf { !phoneMode && phone.text.isNotBlank() }
             ?: XingDunAuthenticationInputError.PASSWORD_REQUIRED.takeIf { password.text.isEmpty() }
+            ?: XingDunAuthenticationInputError.PASSWORD_LENGTH.takeIf { !TravelAuthPolicy.validPassword(password.text.toString()) }
             ?: XingDunAuthenticationInputValidator.confirmationError(password.text.toString(), confirmation.text.toString())
     }
 
@@ -233,7 +237,9 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
     }
 
     private fun updateEnabled() {
-        primaryAction.isEnabled = !loading && agreementConsent.isChecked
+        primaryAction.isEnabled = !loading
+        primaryAction.alpha = if(loading).55f else 1f
+        listOf(username,phone,nickname,password,confirmation,inviteCode,agreementConsent).forEach { it.isEnabled = !loading && pendingSession == null }
         listOf(accountTab, phoneTab).forEach { it.isEnabled = !loading && pendingSession == null }
     }
 
@@ -292,7 +298,9 @@ class XingDunRegistrationActivity : BaseLoginActivity() {
         XingDunAuthenticationInputError.PHONE_FORMAT -> R.string.xingdun_phone_invalid
         XingDunAuthenticationInputError.CODE_REQUIRED -> R.string.xingdun_code_required
         XingDunAuthenticationInputError.CODE_FORMAT -> R.string.xingdun_code_invalid
-        XingDunAuthenticationInputError.NICKNAME_LENGTH -> R.string.xingdun_nickname_too_long
+        XingDunAuthenticationInputError.NICKNAME_LENGTH -> R.string.ta_nickname_limit
+        XingDunAuthenticationInputError.PASSWORD_LENGTH -> R.string.ta_password_length
+        XingDunAuthenticationInputError.PASSWORD_REQUIRED -> R.string.xingdun_login_password_required
         XingDunAuthenticationInputError.CONFIRM_PASSWORD_REQUIRED -> R.string.xingdun_confirm_password_required
         XingDunAuthenticationInputError.PASSWORD_MISMATCH -> R.string.xingdun_password_mismatch
         else -> R.string.xingdun_registration_fields_invalid

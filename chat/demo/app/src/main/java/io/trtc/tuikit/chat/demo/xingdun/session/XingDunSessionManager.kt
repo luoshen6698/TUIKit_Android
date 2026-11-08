@@ -139,6 +139,13 @@ object XingDunSessionManager {
         )
     }
 
+    /** Read the server-owned login policy without persisting an unresolved/default selection. */
+    suspend fun startupConfiguration(): XingDunBootstrapConfiguration {
+        val value = client.resolveEnterprise(null, null)
+        if (value.configured) validateBootstrap(value, value.companyCode)
+        return value
+    }
+
     suspend fun attemptSimpleEnterprise(): XingDunBootstrapConfiguration? {
         val bootstrap = discoverEnterprise(null, null)
         if (!bootstrap.mode.equals("simple", ignoreCase = true)) return null
@@ -227,7 +234,8 @@ object XingDunSessionManager {
         password: String,
         confirmPassword: String,
         nickname: String,
-        inviteCode: String?
+        inviteCode: String?,
+        phone: String? = null
     ): XingDunStoredSession {
         val ticket = authenticationCommitGate.begin()
         val bootstrap = authenticationBootstrap(companyCode, ticket)
@@ -235,6 +243,7 @@ object XingDunSessionManager {
             resolveApiBaseUrl(bootstrap),
             XingDunRegisterRequest(
                 username = username.trim(),
+                phone = phone?.trim()?.takeIf(String::isNotEmpty),
                 password = password,
                 confirmPassword = confirmPassword,
                 nickname = nickname.trim(),

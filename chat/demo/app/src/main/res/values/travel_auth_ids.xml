@@ -1,0 +1,19 @@
+<resources>
+<item type="id" name="xingdun_brand_name"/>
+<item type="id" name="xingdun_auth_logo"/>
+<item type="id" name="xingdun_welcome_title"/>
+<item type="id" name="xingdun_login_subtitle"/>
+<item type="id" name="xingdun_registration_brand_name"/>
+<item type="id" name="xingdun_registration_logo"/>
+<item type="id" name="xingdun_registration_close"/>
+<item type="id" name="xingdun_password_reset_brand_name"/>
+<item type="id" name="xingdun_password_reset_logo"/>
+<item type="id" name="xingdun_password_reset_close"/>
+<item type="id" name="xingdun_startup_status"/>
+<item type="id" name="xingdun_startup_retry"/>
+<item type="id" name="xingdun_startup_progress"/>
+<item type="id" name="travel_company_input"/>
+<item type="id" name="travel_company_group"/>
+<item type="id" name="travel_auth_retry"/>
+<item type="id" name="xingdun_language"/>
+</resources>

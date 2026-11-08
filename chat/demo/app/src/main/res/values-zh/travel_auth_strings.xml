@@ -1,0 +1,27 @@
+<resources>
+    <string name="ta_login_subtitle">登录%1$s账号</string>
+    <string name="ta_register_subtitle">注册新账号，开始使用</string>
+    <string name="ta_reset_subtitle">通过手机号或邮箱验证身份，然后设置新的登录密码。</string>
+    <string name="ta_create_account">创建账号</string>
+    <string name="ta_startup_headline">下一段旅程\n从这里开始</string>
+    <string name="ta_tagline">发现旅行灵感，整理下一段旅程</string>
+    <string name="ta_ready">准备下一段旅程</string>
+    <string name="ta_code_prompt">请输入企业码</string>
+    <string name="ta_select_company">切换企业</string>
+    <string name="ta_switch">切换</string>
+    <string name="ta_code_required">请先选择企业，再登录或注册</string>
+    <string name="ta_current_company">当前企业：%1$s</string>
+    <string name="ta_company_failed">企业信息更新失败，请检查企业码后重试</string>
+    <string name="ta_code_format">企业码需为4至20位字母或数字</string>
+    <string name="ta_config_unavailable">登录配置暂不可用，请重试或联系管理员</string>
+    <string name="ta_password_length">密码长度需为6至64个字符</string>
+    <string name="ta_nickname_optional">昵称（选填）</string>
+    <string name="ta_phone_optional">手机号（选填）</string>
+    <string name="ta_invite_optional">邀请码（选填）</string>
+    <string name="ta_nickname_limit">昵称最多20个字符</string>
+    <string name="ta_registration_consent_prefix">我已满18周岁，并已阅读同意</string>
+    <string name="ta_already_account">已有账号？</string>
+    <string name="ta_no_account">还没有账号？</string>
+    <string name="ta_password_label">密码（至少6位）</string>
+    <string name="ta_first_privacy_body">使用前，请先阅读下方《用户协议》和《隐私政策》。\n\n为提供旅行规划、同行协作和通讯服务，我们会处理账号信息及您主动提交的行程、消息、文件等内容。相机、麦克风和相册等权限仅在使用相关功能时申请。隐私政策说明了信息处理规则、第三方 SDK 和您的个人信息权利。\n\n您同意后才会启动通讯服务；如不同意，可选择退出。</string>
+</resources>

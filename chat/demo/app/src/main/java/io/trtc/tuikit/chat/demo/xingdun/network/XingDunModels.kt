@@ -9,6 +9,7 @@ internal data class XingDunEnvelope<T>(
 
 data class XingDunBootstrapConfiguration(
     val mode: String? = null,
+    val showCompanyCode: Boolean? = null,
     val imProvider: String = "",
     val configured: Boolean = false,
     val companyCode: String = "",
@@ -309,7 +310,8 @@ data class XingDunRegisterRequest(
     val userAgreementVersion: String,
     val privacyPolicyVersion: String,
     val consentSource: String = "android_registration",
-    val consentEvidenceId: String
+    val consentEvidenceId: String,
+    val phone: String? = null
 )
 
 data class XingDunPhoneRegisterRequest(
