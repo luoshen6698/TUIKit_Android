@@ -210,6 +210,7 @@ object XingDunSessionManager {
     }
 
     private fun validateBootstrap(bootstrap: XingDunBootstrapConfiguration, requestedCode: String?) {
+        require(bootstrap.appCode == null || bootstrap.appCode == BuildConfig.XINGDUN_APP_CODE) { message(R.string.xingdun_error_company_mismatch) }
         require(bootstrap.configured) { message(R.string.xingdun_error_im_not_configured) }
         require(bootstrap.imProvider.equals("tencent", ignoreCase = true)) { message(R.string.xingdun_error_im_provider) }
         require(bootstrap.companyCode.isNotBlank()) { message(R.string.xingdun_error_company_mismatch) }

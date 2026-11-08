@@ -68,6 +68,11 @@ val generateOfflinePushManifest by tasks.registering {
     }
 }
 
+val clientAppCode = (findProperty("XINGDUN_APP_CODE") as String? ?: System.getenv("XINGDUN_APP_CODE")) ?: "xuyinfang"
+val clientReleaseChannel = (findProperty("XINGDUN_RELEASE_CHANNEL") as String? ?: System.getenv("XINGDUN_RELEASE_CHANNEL")) ?: "universal"
+require(Regex("^[a-z][a-z0-9_-]{0,31}$").matches(clientAppCode)) { "Invalid XINGDUN_APP_CODE" }
+require(Regex("^[a-z][a-z0-9_-]{0,31}$").matches(clientReleaseChannel)) { "Invalid XINGDUN_RELEASE_CHANNEL" }
+
 android {
     sourceSets.getByName("main").java.srcDir(
         if (offlinePushEnabled) "src/offlinePush/java" else "src/noOfflinePush/java"
@@ -88,6 +93,8 @@ android {
         buildConfigField("boolean", "XINGDUN_HOME_ENABLED", homeEnabled.toString())
         buildConfigField("String", "XINGDUN_API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "XINGDUN_ENVIRONMENT", "\"prod\"")
+        buildConfigField("String", "XINGDUN_APP_CODE", "\"$clientAppCode\"")
+        buildConfigField("String", "XINGDUN_RELEASE_CHANNEL", "\"$clientReleaseChannel\"")
         // Vendor manifests require these placeholders. Unconfigured debug builds use non-routable
         // values; push-enabled release builds are blocked by verifyReleaseConfiguration.
         manifestPlaceholders["HONOR_APPID"] = honorAppId.ifBlank { "0" }

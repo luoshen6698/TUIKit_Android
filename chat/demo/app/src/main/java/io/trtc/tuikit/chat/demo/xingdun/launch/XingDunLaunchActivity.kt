@@ -205,8 +205,13 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
                         pendingInvitation?.let { openInvitationRegistration(it) }
                     }
                 }
-                if(!codeVisible && policy.configured && XingDunSessionManager.currentSession()==null) {
-                    commitCompany(policy,false,generation,complete)
+                // Refresh the selected tenant as well: brand flags can change while its
+                // identity remains the same, and registration reads the stored bootstrap.
+                val selected = resolvedBootstrap?.takeIf { codeVisible && it.configured }
+                val next = if (selected != null && selected.companyCode != policy.companyCode)
+                    XingDunSessionManager.discoverEnterprise(selected.companyCode, null) else policy
+                if(next.configured && XingDunSessionManager.currentSession()==null) {
+                    commitCompany(next,false,generation,complete)
                 } else {
                     if(!codeVisible && !policy.configured)resolvedBootstrap=null
                     complete()

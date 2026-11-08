@@ -91,6 +91,7 @@ class XingDunApiClient(
     ): XingDunBootstrapConfiguration {
         val urlBuilder = centralBaseUrl().toHttpUrl().newBuilder()
             .addPathSegments("config/bootstrap")
+        XingDunClientReleaseIdentity.current().forEach { (key, value) -> urlBuilder.addQueryParameter(key, value) }
         companyCode?.takeIf(String::isNotBlank)?.let {
             urlBuilder.addQueryParameter("company_code", it)
         }
@@ -301,6 +302,7 @@ class XingDunApiClient(
         val builder = Request.Builder()
             .url(url)
             .header("Accept", "application/json")
+            .header("X-App-Code", BuildConfig.XINGDUN_APP_CODE)
             .header("User-Agent", userAgent())
             .header("X-XingDun-Device-ID", sessionStore.deviceId())
             .header("X-XingDun-Client-Platform", "android")

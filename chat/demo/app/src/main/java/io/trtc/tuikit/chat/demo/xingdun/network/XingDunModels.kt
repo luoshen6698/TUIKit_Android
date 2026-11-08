@@ -8,6 +8,7 @@ internal data class XingDunEnvelope<T>(
 )
 
 data class XingDunBootstrapConfiguration(
+    val appCode: String? = null,
     val mode: String? = null,
     val showCompanyCode: Boolean? = null,
     val showInviteCode: Boolean = false,
