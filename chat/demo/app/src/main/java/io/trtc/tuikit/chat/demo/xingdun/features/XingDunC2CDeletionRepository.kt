@@ -29,10 +29,7 @@ internal object XingDunC2CDeletionRepository {
     fun isDeleted(conversationID: String, messageID: String): Boolean = applicationContext
         ?.let { messageID in deletedIDs(it, conversationID) } == true
 
-    fun accountKey(): String? {
-        val session = XingDunSessionManager.currentSession() ?: return null
-        return accountKey(session)
-    }
+    fun accountKey(): String? = XingDunSessionManager.currentUiSession()?.accountKey
 
     internal fun accountKey(session: io.trtc.tuikit.chat.demo.xingdun.network.XingDunStoredSession): String? {
         val tenant = XingDunTenantBoundary.identity(session)?.key ?: return null
@@ -42,7 +39,7 @@ internal object XingDunC2CDeletionRepository {
     }
 
     fun deletedIDs(context: Context, conversationID: String): Set<String> {
-        val session = XingDunSessionManager.currentSession() ?: return emptySet()
+        val session = XingDunSessionManager.currentUiSession() ?: return emptySet()
         val peer = XingDunC2CDeletionPolicy.peer(conversationID, session.timUserId) ?: return emptySet()
         return markers(context).read(peer)
     }

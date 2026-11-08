@@ -29,7 +29,7 @@ internal class TravelUi(val context: Context) {
     }
     fun label(id: Int, size: Float = 14f, color: Int = INK, bold: Boolean = false) = text(s(id), size, color, bold)
     fun icon(code: Int, size: Int = 22, color: Int = ACCENT, description: String? = null) = text(String(Character.toChars(code)), size.toFloat(), color).apply {
-        textSize = size.toFloat(); typeface = Typeface.createFromAsset(context.assets, "fonts/travel-material-icons.otf"); gravity = Gravity.CENTER; contentDescription = description
+        textSize = size.toFloat(); typeface = travelIconTypeface(context); gravity = Gravity.CENTER; contentDescription = description
     }
     fun image(path: String, radius: Int = 0) = ImageView(context).apply {
         scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(PALE)
@@ -79,6 +79,11 @@ internal class TravelUi(val context: Context) {
         else -> s(T.load_failed)
     }
     companion object {
+        @Volatile private var cachedIconTypeface: Typeface? = null
+        private fun travelIconTypeface(context: Context): Typeface = cachedIconTypeface ?: synchronized(this) {
+            cachedIconTypeface ?: Typeface.createFromAsset(context.applicationContext.assets, "fonts/travel-material-icons.otf").also { cachedIconTypeface = it }
+        }
+
         val BG = Color.rgb(247,249,250); val INK = Color.rgb(48,56,61); val MUTED = Color.rgb(154,167,179); val ACCENT = Color.rgb(75,105,117)
         val BRONZE = Color.rgb(146,119,87); val BORDER = Color.rgb(231,229,226); val SECONDARY = Color.rgb(99,113,123); val PALE = Color.rgb(237,242,244); val FIELD = Color.rgb(244,243,241); const val WHITE = Color.WHITE
     }

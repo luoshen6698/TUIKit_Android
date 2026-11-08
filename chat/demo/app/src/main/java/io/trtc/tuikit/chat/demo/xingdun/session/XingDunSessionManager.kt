@@ -60,6 +60,15 @@ object XingDunSessionManager {
 
     fun currentSession(): XingDunStoredSession? = if (::store.isInitialized) store.loadBoundSession() else null
 
+    private val uiSessionCache by lazy {
+        XingDunUiSessionCache(::currentMessageReadStamp) {
+            if (::store.isInitialized) store.loadDisplayBoundSession() else null
+        }
+    }
+
+    internal fun currentUiSession(): XingDunUiSession? = uiSessionCache.current()
+
+
     internal fun currentAuthenticationGeneration(): Long? =
         if (currentSession() != null) authenticationCommitGate.currentGeneration() else null
 

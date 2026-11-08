@@ -171,6 +171,9 @@ class MainActivity : BaseActivity() {
     private var imConnectionNotice: IMConnectionNotice? = null
     private var customerServiceContacts: List<CustomerServiceContact> = emptyList()
     private var selectedTabIndex = 0
+    private var renderedTabIndex = -1
+    private var iconColors: List<Int>? = null
+    private val tabIcons = mutableMapOf<Pair<Int, Boolean>, Drawable>()
     private val defaultTabId = if (BuildConfig.XINGDUN_HOME_ENABLED) R.id.demo_tab_home else R.id.demo_tab_messages
     private var currentTabId = defaultTabId
     private val tabPageCache = mutableMapOf<Int, View>()
@@ -235,6 +238,11 @@ class MainActivity : BaseActivity() {
             )
         }
 
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (isTaskRoot) moveTaskToBack(false) else finish()
+            }
+        })
         setupMineDrawer()
         mainContainer = findViewById(R.id.demo_mainContainer)
         viewPager = findViewById(R.id.demo_viewPager)
@@ -493,10 +501,17 @@ class MainActivity : BaseActivity() {
         if (!::bottomTabs.isInitialized) {
             return
         }
+        val nextColors = listOf(colors.bgColorBubbleOwn, colors.textColorLink, colors.textColorTertiary)
+        val themeChanged = iconColors != nextColors
+        if (themeChanged) { iconColors = nextColors; tabIcons.clear() }
+        if (!themeChanged && renderedTabIndex == selectedTabIndex) return
+        val previous = renderedTabIndex
+        renderedTabIndex = selectedTabIndex
         bottomTabs.forEachIndexed { index, tab ->
+            if (!themeChanged && previous >= 0 && index != previous && index != selectedTabIndex) return@forEachIndexed
             val selected = index == selectedTabIndex
             tab.root.background = null
-            tab.icon.setImageDrawable(renderTabIcon(tab, colors, selected))
+            tab.icon.setImageDrawable(tabIcons.getOrPut(tab.tabId to selected) { renderTabIcon(tab, colors, selected) })
             tab.text.setTextColor(
                 if (selected) {
                     colors.textColorLink

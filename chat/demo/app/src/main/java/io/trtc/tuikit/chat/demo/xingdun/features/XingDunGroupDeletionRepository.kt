@@ -22,7 +22,7 @@ internal object XingDunGroupDeletionRepository {
     private val listeners = CopyOnWriteArraySet<(String) -> Unit>()
     private val visibility = XingDunGroupDeletionVisibilityState()
     private val failedQueries = ConcurrentHashMap.newKeySet<String>()
-    private fun scopeKey(conversationID: String) = "${XingDunC2CDeletionRepository.accountKey()}:${XingDunSessionManager.currentAuthenticationGeneration()}:$conversationID"
+    private fun scopeKey(conversationID: String) = XingDunSessionManager.currentUiSession()?.let { "${it.accountKey}:${it.authenticationGeneration}:$conversationID" } ?: "null:null:$conversationID"
 
     fun initialize(context: Context) { applicationContext = context.applicationContext }
     private fun preferences(context: Context) = context.applicationContext.getSharedPreferences("xingdun_group_authoritative_deletions_v1", Context.MODE_PRIVATE)
@@ -36,11 +36,9 @@ internal object XingDunGroupDeletionRepository {
         val appContext = context.applicationContext
         return XingDunMessageDisplayFilter(
             currentScope = {
-                val session = XingDunSessionManager.currentSession()
-                val generation = XingDunSessionManager.currentAuthenticationGeneration()
-                val account = session?.let(XingDunC2CDeletionRepository::accountKey)
-                if (session == null || generation == null || account == null) null
-                else XingDunMessageDisplayScope(account, generation, session.timUserId)
+                XingDunSessionManager.currentUiSession()?.let { session ->
+                    XingDunMessageDisplayScope(session.accountKey, session.authenticationGeneration, session.timUserId)
+                }
             },
             deletedIDs = { conversation, scope ->
                 val group = XingDunGroupDeletionPolicy.group(conversation)
@@ -70,7 +68,7 @@ internal object XingDunGroupDeletionRepository {
     fun canDisplay(conversationID: String, message: MessageInfo): Boolean {
         if (XingDunGroupDeletionPolicy.group(conversationID) == null) return true
         val key = scopeKey(conversationID)
-        val self = XingDunSessionManager.currentSession()?.timUserId ?: return false
+        val self = XingDunSessionManager.currentUiSession()?.timUserId ?: return false
         val own = message.isSentBySelf && message.from.userID == self
         return visibility.canDisplay(key, message.msgID, isDeleted(conversationID, message.msgID),
             own && message.status == MessageStatus.SENDING, own && message.status == MessageStatus.SEND_FAIL)

@@ -47,6 +47,10 @@ class XingDunHomePageView(context: Context, private val verificationUnread: Stat
     private var request: Job? = null
     private var error: Throwable? = null
     private var active = false
+    private var renderedCatalog: TravelCatalog? = null
+    private var renderedError: Throwable? = null
+    private var hasRendered = false
+    private var headerKey: List<String?>? = null
     private var lastDay = TravelDates.todayKey()
     init {
         orientation = VERTICAL; setBackgroundColor(BG)
@@ -56,14 +60,14 @@ class XingDunHomePageView(context: Context, private val verificationUnread: Stat
         refresh.addView(list); refresh.setColorSchemeColors(ACCENT); refresh.setOnRefreshListener { load(true) }
         addView(refresh, LayoutParams(-1, 0, 1f)); header()
     }
-    fun updateColors() { setBackgroundColor(BG); header(); feed.notifyDataSetChanged() }
-    fun setActive(value: Boolean) { active = value; if (value && isAttachedToWindow) { header(); val day=TravelDates.todayKey(); load(day!=lastDay); lastDay=day } }
+    fun updateColors() { setBackgroundColor(BG); header() }
+    fun setActive(value: Boolean) { if(active==value)return; active = value; if (value && isAttachedToWindow) { header(); val day=TravelDates.todayKey(); load(day!=lastDay); lastDay=day } }
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         val owner = context as? LifecycleOwner ?: return
         observer = owner.lifecycleScope.launch {
             owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch { store.snapshots.collect { feed.notifyDataSetChanged() } }
+                launch { store.snapshots.collect { refreshFeedIfChanged() } }
                 launch { verificationUnread?.collect { feed.notifyItemChanged(0) } }
                 launch { LoginStore.shared.loginState.loginUserInfo.collect { header() } }
                 launch { if (active) { header(); val day=TravelDates.todayKey(); load(day!=lastDay);lastDay=day } }
@@ -78,15 +82,25 @@ class XingDunHomePageView(context: Context, private val verificationUnread: Stat
         error = null
         request = owner.lifecycleScope.launch {
             try { store.load(force) } catch (e: CancellationException) { throw e } catch (e: Exception) { error=e; if (store.current!=null) Toast.makeText(context, ui.error(e), Toast.LENGTH_LONG).show() }
-            finally { refresh.isRefreshing=false; feed.notifyDataSetChanged() }
+            finally { refresh.isRefreshing=false; refreshFeedIfChanged() }
+        }
+    }
+    private fun refreshFeedIfChanged() {
+        val catalog = store.current
+        if (!hasRendered || catalog !== renderedCatalog || error !== renderedError) {
+            hasRendered = true; renderedCatalog = catalog; renderedError = error
+            feed.notifyDataSetChanged()
         }
     }
     private fun header() {
-        identityHeader.removeAllViews(); identityHeader.setPadding(ui.d(16),ui.d(7),ui.d(16),ui.d(7))
-        val session=XingDunSessionManager.currentSession(); val profile=LoginStore.shared.loginState.loginUserInfo.value
+        val session=XingDunSessionManager.currentUiSession(); val profile=LoginStore.shared.loginState.loginUserInfo.value
         val name=profile?.nickname?.takeIf { it.isNotBlank() } ?: session?.nickname?.takeIf { it.isNotBlank() } ?: session?.username.orEmpty()
         val hour=TravelDates.hour()
         val greeting=ui.s(when { hour<6->T.late;hour<11->T.morning;hour<14->T.noon;hour<18->T.afternoon;else->T.evening })
+        val nextKey = listOf(session?.scopeKey,name,profile?.avatarURL,greeting)
+        if (headerKey == nextKey) return
+        headerKey = nextKey
+        identityHeader.removeAllViews(); identityHeader.setPadding(ui.d(16),ui.d(7),ui.d(16),ui.d(7))
         identityHeader.addView(ui.column().apply { addView(ui.label(T.home,18f,INK,true));addView(ui.space(3));addView(ui.text(if(name.isBlank())greeting else ui.s(T.greeting,greeting,name),11f,MUTED)) },LayoutParams(0,-2,1f))
         val avatar=FrameLayout(context).apply {
             background=ui.box(0xFF4C6FF4.toInt(),20);clipToOutline=true;contentDescription=context.getString(R.string.md_open)

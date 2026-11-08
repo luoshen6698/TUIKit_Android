@@ -49,7 +49,7 @@ internal class JourneyFilters(context: Context, labels: List<String>, selected: 
         }
         addView(segments,LayoutParams(-1,ui.d(height)));select(selected)
     }
-    fun labels(values:List<String>, semantics:List<String> = values) { buttons.forEachIndexed { i,b -> b.text=values[i];b.contentDescription=semantics[i] } }
+    fun labels(values:List<String>, semantics:List<String> = values) { buttons.forEachIndexed { i,b -> if(b.text.toString()!=values[i])b.text=values[i];if(b.contentDescription!=semantics[i])b.contentDescription=semantics[i] } }
     fun select(index:Int) {
         selectedIndex=index
         buttons.forEachIndexed { i,b -> b.isSelected=i==index;b.background=ui.box(if(i==index)TravelUi.PALE else android.graphics.Color.TRANSPARENT,18);b.setTextColor(if(i==index)TravelUi.ACCENT else TravelUi.MUTED) }

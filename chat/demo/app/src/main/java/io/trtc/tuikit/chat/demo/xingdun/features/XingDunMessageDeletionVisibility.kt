@@ -20,9 +20,9 @@ internal object XingDunMessageDeletionVisibility {
         SearchMessageVisibility.setQuoteHiddenProvider(XingDunGroupDeletionRepository::quoteHidden)
         SearchMessageVisibility.setVerificationFailureProvider(XingDunGroupDeletionRepository::verificationFailed)
         SearchMessageVisibility.setSessionProvider {
-            val account = XingDunC2CDeletionRepository.accountKey()
-            val generation = io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager.currentAuthenticationGeneration()
-            if (account == null || generation == null) null else "$account:$generation"
+            io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager.currentUiSession()?.let {
+                "${it.accountKey}:${it.authenticationGeneration}"
+            }
         }
         io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchGroupHistoryAccess.setProvider { conversation ->
             XingDunGroupSettingsAccess.authorize(conversation.removePrefix("group_"), "history")

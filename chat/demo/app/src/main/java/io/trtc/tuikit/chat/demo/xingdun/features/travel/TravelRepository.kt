@@ -4,6 +4,8 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonElement
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiException
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -56,14 +58,14 @@ internal class TravelRepository(
 }
 internal object TravelStore {
     val repository = TravelRepository(
-        scope = { XingDunSessionManager.currentSession()?.let { "${it.apiBaseUrl}|${it.companyId}|${it.timUserId}|${XingDunSessionManager.currentAuthenticationGeneration()}" } },
-        request = { body ->
+        scope = { XingDunSessionManager.currentUiSession()?.scopeKey },
+        request = { body -> withContext(Dispatchers.IO) {
             val session = checkNotNull(XingDunSessionManager.currentSession())
             val api = XingDunSessionManager.apiClient()
             val data: JsonElement = if (body == null) api.get(session, "travel/catalog", emptyMap(), JsonElement::class.java)
             else api.post(session, "travel/action", body, JsonElement::class.java)
             require(data.isJsonObject) { "Invalid travel document" }
             data.asJsonObject
-        },
+        } },
     )
 }

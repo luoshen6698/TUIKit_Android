@@ -2,10 +2,14 @@ package io.trtc.tuikit.chat.demo.xingdun.features
 
 import com.tencent.mmkv.MMKV
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
-import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantBoundary
 import java.security.MessageDigest
 
 internal object XingDunLocalMessageMarkRepository {
+    private val keyCache = object : LinkedHashMap<String, String>(16, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > 64
+    }
+    private var keyOwner: Pair<String, String>? = null
+
     fun isMarked(conversationID: String, messageID: String): Boolean =
         messageID.isNotBlank() && markedIDs(conversationID).contains(messageID)
 
@@ -27,9 +31,12 @@ internal object XingDunLocalMessageMarkRepository {
     }
 
     private fun storageKey(conversationID: String): String? {
-        val session = XingDunSessionManager.currentSession() ?: return null
-        val tenant = XingDunTenantBoundary.identity(session)?.key ?: return null
-        return scopeKey(tenant, session.timUserId, conversationID)
+        val session = XingDunSessionManager.currentUiSession() ?: return null
+        val owner = session.tenantKey to session.timUserId
+        return synchronized(keyCache) {
+            if (keyOwner != owner) { keyCache.clear(); keyOwner = owner }
+            keyCache.getOrPut(conversationID) { scopeKey(session.tenantKey, session.timUserId, conversationID) }
+        }
     }
 
     internal fun scopeKey(tenantKey: String, userID: String, conversationID: String): String {

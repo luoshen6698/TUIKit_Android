@@ -6,6 +6,8 @@ import io.trtc.tuikit.atomicxcore.api.message.MessageListStore
 import io.trtc.tuikit.chat.uikit.components.search.viewmodel.SearchMessageVisibility
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -34,11 +36,11 @@ internal class XingDunC2CDeletionController(
 
     fun start() {
         if (job?.isActive == true || account == null) return
-        checkedAt.clear()
         XingDunC2CDeletionRepository.addListener(listener)
         job = scope.launch {
+            withContext(Dispatchers.IO) { mutex.withLock { checkedAt.clear() } }
             launch { store.state.messageList.collect { reconcile() } }
-            while (isActive && account == XingDunC2CDeletionRepository.accountKey()) {
+            while (isActive && account == withContext(Dispatchers.IO) { XingDunC2CDeletionRepository.accountKey() }) {
                 reconcile()
                 delay(15_000)
             }
@@ -51,33 +53,37 @@ internal class XingDunC2CDeletionController(
         XingDunC2CDeletionRepository.removeListener(listener)
     }
 
-    private suspend fun reconcile() = mutex.withLock {
-        if (account != XingDunC2CDeletionRepository.accountKey()) return@withLock
-        try {
-            val messages = store.state.messageList.value.toList()
-            val now = System.currentTimeMillis()
-            val known = XingDunC2CDeletionRepository.deletedIDs(context, conversationID)
-            val candidates = SearchMessageVisibility.candidateIDs(messages) +
-                listOfNotNull(XingDunPinnedMessageRepository.directPin(context, conversationID)?.messageId)
-            val ids = candidates.filter(XingDunC2CDeletionPolicy::validID)
-                .filter { it !in known && now - (checkedAt[it] ?: 0L) >= 15_000 }.toSet()
+    private suspend fun reconcile() = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            if (account != XingDunC2CDeletionRepository.accountKey()) return@withLock
             try {
-                for (chunk in ids.chunked(100)) {
-                    XingDunC2CDeletionRepository.check(context, conversationID, chunk.toSet())
-                    chunk.forEach { checkedAt[it] = now }
+                val messages = store.state.messageList.value.toList()
+                val now = System.currentTimeMillis()
+                val known = XingDunC2CDeletionRepository.deletedIDs(context, conversationID)
+                val candidates = SearchMessageVisibility.candidateIDs(messages) +
+                    listOfNotNull(XingDunPinnedMessageRepository.directPin(context, conversationID)?.messageId)
+                val ids = candidates.filter(XingDunC2CDeletionPolicy::validID)
+                    .filter { it !in known && now - (checkedAt[it] ?: 0L) >= 15_000 }.toSet()
+                try {
+                    for (chunk in ids.chunked(100)) {
+                        XingDunC2CDeletionRepository.check(context, conversationID, chunk.toSet())
+                        chunk.forEach { checkedAt[it] = now }
+                    }
+                } catch (error: CancellationException) { throw error }
+                catch (_: Exception) { /* Known tombstones stay hidden while a failed lookup retries. */ }
+                if (account != XingDunC2CDeletionRepository.accountKey()) return@withLock
+                val deleted = XingDunC2CDeletionRepository.deletedIDs(context, conversationID)
+                val due = messages.filter { it.msgID in deleted }
+                if (due.isNotEmpty()) withContext(Dispatchers.Main.immediate) {
+                    suspendCancellableCoroutine<Unit> { continuation ->
+                        store.deleteMessages(due, object : CompletionHandler {
+                            override fun onSuccess() { if (continuation.isActive) continuation.resume(Unit) }
+                            override fun onFailure(code: Int, desc: String) { if (continuation.isActive) continuation.resume(Unit) }
+                        })
+                    }
                 }
             } catch (error: CancellationException) { throw error }
-            catch (_: Exception) { /* Preserve new rows; already persisted tombstones must still stay hidden offline. */ }
-            if (account != XingDunC2CDeletionRepository.accountKey()) return@withLock
-            val deleted = XingDunC2CDeletionRepository.deletedIDs(context, conversationID)
-            val due = messages.filter { it.msgID in deleted }
-            if (due.isNotEmpty()) suspendCancellableCoroutine<Unit> { continuation ->
-                store.deleteMessages(due, object : CompletionHandler {
-                    override fun onSuccess() { if (continuation.isActive) continuation.resume(Unit) }
-                    override fun onFailure(code: Int, desc: String) { if (continuation.isActive) continuation.resume(Unit) }
-                })
-            }
-        } catch (error: CancellationException) { throw error }
-        catch (_: Exception) { /* No optimistic deletion; reconnect/history will retry the authoritative read. */ }
+            catch (_: Exception) { /* No optimistic deletion; reconnect/history retries the authoritative read. */ }
+        }
     }
 }

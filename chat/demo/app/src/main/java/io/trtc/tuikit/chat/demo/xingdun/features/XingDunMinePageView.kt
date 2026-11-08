@@ -63,7 +63,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
     private var customerServiceRequest: Job? = null
     private var storageValue: TextView? = null
     private var storageProgress: ProgressBar? = null
-    private fun key() = XingDunSessionManager.currentSession()?.let { "${it.apiBaseUrl}|${it.companyId}|${it.timUserId}|${XingDunSessionManager.currentAuthenticationGeneration()}" }
+    private fun key() = XingDunSessionManager.currentUiSession()?.scopeKey
     private fun d(v: Int) = ui.d(v)
     private fun s(id: Int) = context.getString(id)
     private fun text(value: String, color: Int = INK) = ui.text(value, 12f, color).apply { textSize = 12f; typeface = Typeface.DEFAULT; minHeight = d(18); gravity = Gravity.CENTER_VERTICAL }
@@ -129,7 +129,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
             Row(R.string.md_qr, 0xf00cb, PURPLE) { navigate { feature(XingDunFeatureActivity.MODE_PERSONAL_QR) } },
             Row(R.string.md_poster, 0xef27, 0xFF0EA5E9.toInt()) { navigate { feature(XingDunFeatureActivity.MODE_INVITE) } },
             Row(R.string.md_blacklist, 0xf279, 0xFF64748B.toInt()) { navigate(true) { XingDunBlacklistActivity.start(context) } },
-            if (XingDunSessionManager.currentSession()?.features?.redpacket == true) Row(R.string.md_redpacket, 0xef2d, 0xFFE11D48.toInt()) { navigate { feature(XingDunFeatureActivity.MODE_REDPACKET_ACCOUNT) } } else null
+            if (XingDunSessionManager.currentUiSession()?.features?.redpacket == true) Row(R.string.md_redpacket, 0xef2d, 0xFFE11D48.toInt()) { navigate { feature(XingDunFeatureActivity.MODE_REDPACKET_ACCOUNT) } } else null
         ))
         group(listOf(
             Row(R.string.md_password, 0xf888, RED) { navigate { feature(XingDunFeatureActivity.MODE_CHANGE_PASSWORD) } },
@@ -151,7 +151,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
             add(Row(R.string.md_feedback, 0xf04f, GOLD) { navigate { feature(XingDunFeatureActivity.MODE_FEEDBACK) } })
             add(Row(R.string.md_appeal, 0xf0c8, 0xFFDC2626.toInt()) { navigate { context.startActivity(Intent(context, XingDunAccountAppealActivity::class.java)) } })
             add(Row(R.string.xingdun_reports, 0xf07b, MUTED) { navigate { feature(XingDunFeatureActivity.MODE_REPORTS) } })
-            if (XingDunSessionManager.currentSession()?.features?.customerService == true) add(Row(R.string.xingdun_contact_enterprise_support, 0xe155, BLUE) { navigate { openEnterpriseCustomerService() } })
+            if (XingDunSessionManager.currentUiSession()?.features?.customerService == true) add(Row(R.string.xingdun_contact_enterprise_support, 0xe155, BLUE) { navigate { openEnterpriseCustomerService() } })
             add(Row(R.string.md_agreement, 0xefae, MUTED) { navigate { feature(XingDunFeatureActivity.MODE_USER_AGREEMENT) } })
             add(Row(R.string.md_policy, 0xf2d0, GREEN) { navigate { feature(XingDunFeatureActivity.MODE_PRIVACY_POLICY) } })
         }, R.string.md_help)
@@ -186,7 +186,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
     private fun gap(size: Int) { content.addView(ui.space(size)) }
     private fun renderProfile() {
         profileCard.removeAllViews()
-        val session = XingDunSessionManager.currentSession(); val profile = LoginStore.shared.loginState.loginUserInfo.value?.takeIf { mineCanUseIMData(session?.timUserId, it.userID) }
+        val session = XingDunSessionManager.currentUiSession(); val profile = LoginStore.shared.loginState.loginUserInfo.value?.takeIf { mineCanUseIMData(session?.timUserId, it.userID) }
         val name = backendProfile?.opt("nickname")?.takeIf { it.isNotBlank() } ?: profile?.nickname?.takeIf { it.isNotBlank() } ?: session?.nickname?.takeIf { it.isNotBlank() } ?: session?.username.orEmpty()
         val account = backendProfile?.opt("custom_id")?.takeIf { it.isNotBlank() } ?: session?.username?.takeIf { it.isNotBlank() } ?: session?.timUserId.orEmpty()
         val signature = backendProfile?.opt("signature") ?: profile?.selfSignature.orEmpty()
@@ -215,7 +215,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
     }
     private fun renderStats() {
         stats.removeAllViews()
-        val ready = mineCanUseIMData(XingDunSessionManager.currentSession()?.timUserId, LoginStore.shared.loginState.loginUserInfo.value?.userID)
+        val ready = mineCanUseIMData(XingDunSessionManager.currentUiSession()?.timUserId, LoginStore.shared.loginState.loginUserInfo.value?.userID)
         val counts = listOf(if (ready) ContactStore.shared.state.friendList.value.size else null, if (ready) GroupStore.shared.state.joinedGroupList.value.size else null, favoriteCount)
         val labels = listOf(R.string.md_friends, R.string.md_teams, R.string.md_favorites)
         val colors = listOf(BLUE, PURPLE, GOLD); val icons = listOf(0xf005d, 0xf0db, 0xf5cf)
@@ -225,7 +225,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
                 addView(icon(icons[index], 22, colors[index]).apply { background = box(tint(colors[index]), 12) }, LayoutParams(d(40), d(40)))
                 addView(ui.space(8)); addView(text(value?.let(::mineMetric) ?: "—")); addView(ui.space(2)); addView(label(labels[index], MUTED))
                 contentDescription = "${value?.let(::mineMetric) ?: "—"}\n${s(labels[index])}"; isFocusable = true
-                if (index == 2 && XingDunSessionManager.currentSession()?.features?.messageFavorite != true) { isEnabled = false; alpha = .55f }
+                if (index == 2 && XingDunSessionManager.currentUiSession()?.features?.messageFavorite != true) { isEnabled = false; alpha = .55f }
                 setOnClickListener { when(index) {
                     0 -> navigate(true) { (context as? MainActivity)?.selectTabByName(MainActivity.TAB_CONTACTS) }
                     1 -> navigate { XingDunGroupListActivity.start(context) }

@@ -53,11 +53,14 @@ class LushuPageView(context: Context, private val publish: () -> Unit) : LinearL
     private var observer: Job? = null
     private var request: Job? = null
     private var active = false
+    private var displayedCatalog: TravelCatalog? = null
+    private var displayedError: Throwable? = null
+    private var hasLoadedPresentation = false
     private var error: Throwable? = null
     private var account = scope()
     private var timelineList: RecyclerView? = null
     private var savedScroll: android.os.Parcelable? = null
-    private fun scope() = XingDunSessionManager.currentSession()?.let { "${it.apiBaseUrl}|${it.companyId}|${it.timUserId}|${XingDunSessionManager.currentAuthenticationGeneration()}" }
+    private fun scope() = XingDunSessionManager.currentUiSession()?.let { "${it.apiBaseUrl}|${it.companyId}|${it.timUserId}|${it.authenticationGeneration}" }
 
     init {
         orientation = VERTICAL; setBackgroundColor(BG)
@@ -78,6 +81,7 @@ class LushuPageView(context: Context, private val publish: () -> Unit) : LinearL
         savedScroll = scroll; render()
     }
     fun setActive(value: Boolean) {
+        if (active == value) return
         active = value
         if (value && isAttachedToWindow) { checkAccount(); renderHeader(); load() }
     }
@@ -88,7 +92,7 @@ class LushuPageView(context: Context, private val publish: () -> Unit) : LinearL
         val owner = context as? LifecycleOwner ?: return
         observer = owner.lifecycleScope.launch {
             owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch { store.snapshots.collect { checkAccount(); render(keepScroll = true) } }
+                launch { store.snapshots.collect { checkAccount(); renderIfChanged() } }
                 launch { LoginStore.shared.loginState.loginUserInfo.collect { checkAccount(); renderHeader(); if (active) load() } }
                 if (active) load()
             }
@@ -110,7 +114,14 @@ class LushuPageView(context: Context, private val publish: () -> Unit) : LinearL
             try { store.load(force) } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 error = e
                 if (store.current != null) Toast.makeText(context, ui.error(e), Toast.LENGTH_LONG).show()
-            } finally { render(keepScroll = true) }
+            } finally { renderIfChanged() }
+        }
+    }
+    private fun renderIfChanged() {
+        val catalog = store.current
+        if (!hasLoadedPresentation || catalog !== displayedCatalog || error !== displayedError) {
+            hasLoadedPresentation = true; displayedCatalog = catalog; displayedError = error
+            render(keepScroll = true)
         }
     }
     private fun renderHeader() {
@@ -118,7 +129,7 @@ class LushuPageView(context: Context, private val publish: () -> Unit) : LinearL
         header.addView(ui.column().apply {
             addView(ui.label(T.lushu, 18f, INK, true)); addView(ui.space(3)); addView(ui.label(T.lushu_subtitle, 11f, MUTED).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
         }, LayoutParams(0, -2, 1f))
-        val session = XingDunSessionManager.currentSession(); val profile = LoginStore.shared.loginState.loginUserInfo.value
+        val session = XingDunSessionManager.currentUiSession(); val profile = LoginStore.shared.loginState.loginUserInfo.value
         val name = profile?.nickname?.takeIf { it.isNotBlank() } ?: session?.nickname?.takeIf { it.isNotBlank() } ?: session?.username.orEmpty()
         header.addView(FrameLayout(context).apply {
             background = ui.box(0xFF4C6FF4.toInt(), 20); clipToOutline = true; contentDescription = context.getString(R.string.md_open)

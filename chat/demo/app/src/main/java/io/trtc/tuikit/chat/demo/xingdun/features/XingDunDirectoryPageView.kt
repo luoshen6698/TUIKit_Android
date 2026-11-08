@@ -53,6 +53,7 @@ internal class XingDunDirectoryPageView(context: Context, initialCategory:Int=0)
     private val signatures=HashMap<String,String?>()
     private val requested=HashSet<String>()
     private val permits=Semaphore(4)
+    private val collator=Collator.getInstance(Locale.CHINA)
     private data class Row(val id:String,val name:String,val subtitle:String,val avatar:String?,val team:Boolean,val footer:Boolean=false)
     private var rows=listOf<Row>()
     private val adapter=DirectoryAdapter()
@@ -61,8 +62,8 @@ internal class XingDunDirectoryPageView(context: Context, initialCategory:Int=0)
         list.adapter=adapter;body.addView(list,FrameLayout.LayoutParams(-1,-1));body.addView(state,FrameLayout.LayoutParams(-1,-1));addView(body,LayoutParams(-1,0,1f));render()
     }
     private fun key():String {
-        val s=XingDunSessionManager.currentSession()?:return ""
-        return "${s.apiBaseUrl}|${s.companyId}|${s.timUserId}|${XingDunSessionManager.currentAuthenticationGeneration()}"
+        val s=XingDunSessionManager.currentUiSession()?:return ""
+        return s.scopeKey
     }
     override fun onAttachedToWindow() {
         super.onAttachedToWindow();val lifecycle=context as? LifecycleOwner?:return
@@ -80,16 +81,15 @@ internal class XingDunDirectoryPageView(context: Context, initialCategory:Int=0)
     fun refresh(done:()->Unit={}) {
         val token=++revision;val account=key();loading=true;failed=false;requested.clear();signatures.clear();render()
         var remaining=3
-        fun complete(success:Boolean){post { if(token!=revision || account!=key() || !isAttachedToWindow)return@post;failed=failed||!success;remaining--;if(remaining==0){loading=false;render();adapter.notifyDataSetChanged();done()} }}
+        fun complete(success:Boolean){post { if(token!=revision || account!=key() || !isAttachedToWindow)return@post;failed=failed||!success;remaining--;if(remaining==0){loading=false;render();done()} }}
         fun callback()=object:CompletionHandler{override fun onSuccess(){complete(true)};override fun onFailure(code:Int,desc:String){complete(false)}}
         ContactStore.shared.loadFriends(callback());GroupStore.shared.loadJoinedGroups(callback());ContactStore.shared.loadBlackList(callback())
         ContactStore.shared.loadFriendApplications();GroupStore.shared.loadApplications()
     }
     private fun render() {
-        val session=XingDunSessionManager.currentSession()
+        val session=XingDunSessionManager.currentUiSession()
         val ready=mineCanUseIMData(session?.timUserId,LoginStore.shared.loginState.loginUserInfo.value?.userID)
         val blocked=ContactStore.shared.state.blackList.value.map { it.userID }.toSet()
-        val collator=Collator.getInstance(Locale.CHINA)
         val friends=if(ready)ContactStore.shared.state.friendList.value.filter { it.userID !in blocked }.distinctBy { it.userID }.sortedWith { a,b->collator.compare(a.displayName,b.displayName) }.map {
             Row(it.userID,it.displayName,signatures[it.userID]?:context.getString(R.string.jd_friend_subtitle),it.avatarURL,false)
         }else emptyList()
@@ -111,9 +111,11 @@ internal class XingDunDirectoryPageView(context: Context, initialCategory:Int=0)
     }
     private fun requestSignature(row:Row) {
         if(row.team||!requested.add(row.id))return
-        val session=XingDunSessionManager.currentSession()?:return;val account=key();val token=revision
+        val account=key();val token=revision
         scope?.launch {
             try {
+                val session=withContext(Dispatchers.IO) { XingDunSessionManager.currentSession() } ?: return@launch
+                if(account!=key() || token!=revision)return@launch
                 val profile=permits.withPermit { XingDunSessionManager.apiClient().get<JsonObject>(session,"user/detail",mapOf("tim_user_id" to row.id),JsonObject::class.java) }
                 if(account==key() && token==revision){signatures[row.id]=directorySignature(profile);render()}
             }catch(e:CancellationException){throw e}catch(_:Exception){ /* Private or unavailable profiles keep the safe generic subtitle. */ }

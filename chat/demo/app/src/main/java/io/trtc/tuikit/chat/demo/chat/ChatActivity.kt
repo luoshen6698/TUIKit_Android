@@ -122,6 +122,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
@@ -320,8 +321,8 @@ class ChatActivity : BaseActivity() {
         pinnedMessageSummary = findViewById(R.id.demo_pinnedMessageSummary)
         pinnedMessageCount = findViewById(R.id.demo_pinnedMessageCount)
         pinnedMessageChevron = findViewById(R.id.demo_pinnedMessageChevron)
-        messageFavoriteEnabled = XingDunSessionManager.currentSession()?.features?.messageFavorite == true
-        messagePinEnabled = XingDunSessionManager.currentSession()?.features?.messagePin == true
+        messageFavoriteEnabled = XingDunSessionManager.currentUiSession()?.features?.messageFavorite == true
+        messagePinEnabled = XingDunSessionManager.currentUiSession()?.features?.messagePin == true
         canManagePinnedMessages = conversationID.startsWith(C2C_CONVERSATION_ID_PREFIX)
         pinnedMessageBar.setOnClickListener {
             pinnedMessagesLauncher.launch(
@@ -349,7 +350,7 @@ class ChatActivity : BaseActivity() {
         val isGroupConversation = conversationID.startsWith(GROUP_CONVERSATION_ID_PREFIX)
         chatTitleIcon.visibility = if (isGroupConversation) View.VISIBLE else View.GONE
         val featureAvailability = XingDunRuntimeFeaturePolicy.chatAvailability(
-            features = XingDunSessionManager.currentSession()?.features,
+            features = XingDunSessionManager.currentUiSession()?.features,
             isDirectConversation = isC2CConversation,
             isGroupConversation = isGroupConversation,
         )
@@ -438,7 +439,7 @@ class ChatActivity : BaseActivity() {
                 requireNotNull(groupDeletionActions),
             ) { failed -> retryStatus.visibility = if (failed) View.VISIBLE else View.GONE }
         }
-        if (XingDunSessionManager.currentSession()?.features?.autoDelete == true) {
+        if (XingDunSessionManager.currentUiSession()?.features?.autoDelete == true) {
             autoDeleteController = io.trtc.tuikit.chat.demo.xingdun.features.XingDunAutoDeleteController(
                 this, conversationID, requireNotNull(activityScope), requireNotNull(chatPageView.messageStore()),
             )
@@ -446,7 +447,7 @@ class ChatActivity : BaseActivity() {
         V2TIMManager.getMessageManager().addAdvancedMsgListener(groupPermissionListener)
 
         if (messageFavoriteEnabled) {
-            activityScope?.launch { runCatching { XingDunMessageFavoriteRepository.loadRecent() } }
+            activityScope?.launch { runCatching { withContext(Dispatchers.IO) { XingDunMessageFavoriteRepository.loadRecent() } } }
         }
 
         if (messagePinEnabled) {
@@ -935,12 +936,12 @@ class ChatActivity : BaseActivity() {
 
     private fun loadPinnedMessages(force: Boolean = false) {
         if (!messagePinEnabled || activityScope == null) return
-        XingDunPinnedMessageRepository.cached(conversationID)?.let {
-            pinnedPage = it
-            renderPinnedMessageBar()
-        }
         activityScope?.launch {
-            runCatching { XingDunPinnedMessageRepository.load(this@ChatActivity, conversationID, force) }
+            withContext(Dispatchers.IO) { XingDunPinnedMessageRepository.cached(conversationID) }?.let {
+                pinnedPage = it
+                renderPinnedMessageBar()
+            }
+            runCatching { withContext(Dispatchers.IO) { XingDunPinnedMessageRepository.load(this@ChatActivity, conversationID, force) } }
                 .onSuccess {
                     pinnedPage = it
                     renderPinnedMessageBar()
