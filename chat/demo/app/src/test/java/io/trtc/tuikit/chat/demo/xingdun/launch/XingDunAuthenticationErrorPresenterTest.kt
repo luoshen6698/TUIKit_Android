@@ -54,6 +54,21 @@ class XingDunAuthenticationErrorPresenterTest {
     }
 
     @Test
+    fun registrationSeparatesClientCompatibilityFromServiceOutage() {
+        for ((code, resource) in listOf(
+            42601 to R.string.xingdun_registration_client_update_required,
+            42210 to R.string.xingdun_registration_client_invalid,
+            50020 to R.string.xingdun_registration_service_unavailable,
+        )) {
+            val result = XingDunAuthenticationErrorPresenter.registration(
+                XingDunApiException(code, 200, "private server details")
+            )
+            assertEquals(resource, result.message)
+            assertEquals(null, result.registrationField)
+        }
+    }
+
+    @Test
     fun registrationMapsFieldAndKeepsUnknownMessagePrivate() {
         assertEquals(
             XingDunAuthenticationErrorPresentation(

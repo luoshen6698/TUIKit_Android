@@ -64,6 +64,12 @@ internal object XingDunAuthenticationErrorPresenter {
         if (apiError.businessCode == 42209) {
             return XingDunAuthenticationErrorPresentation(R.string.xingdun_registration_consent_invalid)
         }
+        if (apiError.businessCode == 42601) {
+            return XingDunAuthenticationErrorPresentation(R.string.xingdun_registration_client_update_required)
+        }
+        if (apiError.businessCode == 42210) {
+            return XingDunAuthenticationErrorPresentation(R.string.xingdun_registration_client_invalid)
+        }
         if (apiError.businessCode == 50020) {
             return XingDunAuthenticationErrorPresentation(R.string.xingdun_registration_service_unavailable)
         }
