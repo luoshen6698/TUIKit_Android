@@ -1,7 +1,6 @@
 package io.trtc.tuikit.chat.demo.xingdun.features
 
 import android.content.Context
-import android.content.Intent
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
@@ -23,7 +22,6 @@ import io.trtc.tuikit.chat.uikit.components.presence.PresenceAvatarBinding
 import io.trtc.tuikit.chat.uikit.components.widgets.Avatar
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.text.Collator
@@ -36,10 +34,7 @@ internal fun directorySignature(profile: JsonObject): String? {
 }
 
 /** The directory reads the same native IM stores as chat; rows never create copied contacts. */
-internal class XingDunDirectoryPageView(
-    context: Context, initialCategory: Int,
-    private val friendUnread: StateFlow<Int>, private val groupUnread: StateFlow<Int>
-) : LinearLayout(context) {
+internal class XingDunDirectoryPageView(context: Context, initialCategory:Int=0) : LinearLayout(context) {
     private val ui=TravelUi(context)
     private val header=JourneyPageHeader(context,R.string.demo_page_contacts_title,R.string.jd_directory_subtitle)
     private val filters=JourneyFilters(context,listOf("",""),initialCategory.coerceIn(0,1),34) { category=it;render() }
@@ -62,14 +57,8 @@ internal class XingDunDirectoryPageView(
     private data class Row(val id:String,val name:String,val subtitle:String,val avatar:String?,val team:Boolean,val footer:Boolean=false)
     private var rows=listOf<Row>()
     private val adapter=DirectoryAdapter()
-    private val friendRequestBadge = ui.text("", 11f, -1, true)
-    private val groupInvitationBadge = ui.text("", 11f, -1, true)
     init {
-        orientation=VERTICAL;setBackgroundColor(TravelUi.BG);addView(header)
-        addView(verificationEntries(), LayoutParams(-1, -2).apply {
-            marginStart=ui.d(16);marginEnd=ui.d(16);bottomMargin=ui.d(12)
-        })
-        addView(filters)
+        orientation=VERTICAL;setBackgroundColor(TravelUi.BG);addView(header);addView(filters)
         list.adapter=adapter;body.addView(list,FrameLayout.LayoutParams(-1,-1));body.addView(state,FrameLayout.LayoutParams(-1,-1));addView(body,LayoutParams(-1,0,1f));render()
     }
     private fun key():String {
@@ -81,8 +70,7 @@ internal class XingDunDirectoryPageView(
         profiles=SupervisorJob();scope=CoroutineScope(Dispatchers.Main.immediate+checkNotNull(profiles))
         owner=key()
         observer=lifecycle.lifecycleScope.launch { lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            combine(ContactStore.shared.state.friendList,GroupStore.shared.state.joinedGroupList,ContactStore.shared.state.blackList,LoginStore.shared.loginState.loginUserInfo,
-                combine(friendUnread,groupUnread) { friends, groups -> friends to groups }) { _,_,_,_,_->Unit }.collect {
+            combine(ContactStore.shared.state.friendList,GroupStore.shared.state.joinedGroupList,ContactStore.shared.state.blackList,LoginStore.shared.loginState.loginUserInfo) { _,_,_,_->Unit }.collect {
                 if(owner!=key()){owner=key();signatures.clear();requested.clear();refresh()};render()
             }
         } }
@@ -90,30 +78,6 @@ internal class XingDunDirectoryPageView(
     }
     override fun onDetachedFromWindow() { observer?.cancel();profiles?.cancel();scope=null;requested.clear();super.onDetachedFromWindow() }
     fun setConnectionNotice(message:CharSequence?,warning:Boolean=false){header.setConnectionNotice(message)}
-    private fun verificationEntries(): View = ui.row().apply {
-        background=ui.box(-1,18,true)
-        fun entry(title: Int, icon: Int, badge: TextView, group: Boolean): View = ui.row().apply {
-            gravity=Gravity.CENTER_VERTICAL;minimumHeight=ui.d(60)
-            setPadding(ui.d(12),ui.d(10),ui.d(12),ui.d(10))
-            addView(ImageView(context).apply {
-                setImageResource(icon)
-            },LayoutParams(ui.d(28),ui.d(28)))
-            addView(ui.text(context.getString(title),14f,TravelUi.INK,true),LayoutParams(0,-2,1f).apply { marginStart=ui.d(8) })
-            badge.apply {
-                gravity=Gravity.CENTER;minWidth=ui.d(20)
-                setPadding(ui.d(4),ui.d(2),ui.d(4),ui.d(2));background=ui.box(0xFFD84B50.toInt(),10)
-            }
-            addView(badge,LayoutParams(-2,-2).apply { marginStart=ui.d(4) })
-            isFocusable=true
-            setOnClickListener {
-                context.startActivity(Intent(context,XingDunVerificationMessagesActivity::class.java)
-                    .putExtra(XingDunVerificationMessagesActivity.EXTRA_GROUP_TAB,group))
-            }
-        }
-        addView(entry(R.string.xingdun_friend_requests_entry,R.drawable.xingdun_ic_contacts_new_friends,friendRequestBadge,false),LayoutParams(0,-2,1f))
-        addView(View(context).apply { setBackgroundColor(TravelUi.BORDER) },LayoutParams(ui.d(1),ui.d(24)))
-        addView(entry(R.string.xingdun_group_invitations_entry,R.drawable.xingdun_ic_contacts_groups,groupInvitationBadge,true),LayoutParams(0,-2,1f))
-    }
     fun refresh(done:()->Unit={}) {
         val token=++revision;val account=key();loading=true;failed=false;requested.clear();signatures.clear();render()
         var remaining=3
@@ -125,13 +89,6 @@ internal class XingDunDirectoryPageView(
     private fun render() {
         val session=XingDunSessionManager.currentUiSession()
         val ready=mineCanUseIMData(session?.timUserId,LoginStore.shared.loginState.loginUserInfo.value?.userID)
-        fun badge(view: TextView, count: Int) {
-            val unread=if(ready)count.coerceAtLeast(0) else 0
-            view.visibility=if(unread>0)VISIBLE else GONE
-            view.text=if(unread>99)"99+" else unread.toString()
-            view.contentDescription=context.getString(R.string.xingdun_verification_unread_count,unread)
-        }
-        badge(friendRequestBadge,friendUnread.value);badge(groupInvitationBadge,groupUnread.value)
         val blocked=ContactStore.shared.state.blackList.value.map { it.userID }.toSet()
         val friends=if(ready)ContactStore.shared.state.friendList.value.filter { it.userID !in blocked }.distinctBy { it.userID }.sortedWith { a,b->collator.compare(a.displayName,b.displayName) }.map {
             Row(it.userID,it.displayName,signatures[it.userID]?:context.getString(R.string.jd_friend_subtitle),it.avatarURL,false)

@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="xingdun_friend_requests_entry">Friend requests</string>
-    <string name="xingdun_group_invitations_entry">Group invites</string>
     <string name="xingdun_group_notifications_entry">Group notices</string>
-    <string name="xingdun_verification_unread_count">%1$d unread verification messages</string>
 </resources>

@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="xingdun_friend_requests_entry">好友申请</string>
-    <string name="xingdun_group_invitations_entry">群邀请</string>
     <string name="xingdun_group_notifications_entry">群通知</string>
-    <string name="xingdun_verification_unread_count">%1$d 条未读验证消息</string>
 </resources>

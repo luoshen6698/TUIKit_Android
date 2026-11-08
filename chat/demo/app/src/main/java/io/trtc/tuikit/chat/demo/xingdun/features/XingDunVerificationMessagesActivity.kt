@@ -254,12 +254,12 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         operationError = null
         render()
         if (tab == Tab.GROUP) {
-            refreshNativeGroups()
             startGroupPolling()
         } else {
             groupPollingJob?.cancel()
             groupPollingJob = null
         }
+        refresh()
     }
 
     private fun refresh() {
