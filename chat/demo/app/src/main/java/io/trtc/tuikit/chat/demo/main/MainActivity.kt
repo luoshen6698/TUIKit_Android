@@ -97,6 +97,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunGroupInvitationUnread
 import kotlin.math.abs
 
 private data class BottomTab(
@@ -191,6 +195,7 @@ class MainActivity : BaseActivity() {
     private val contactStore by lazy { ContactStore.shared }
     private val groupStore by lazy { GroupStore.shared }
     private val verificationUnreadCount = MutableStateFlow(0)
+    private val serverGroupInvitationUnread = MutableStateFlow(XingDunGroupInvitationUnread(null, 0))
     private var mainScope: CoroutineScope? = null
     private val imSDKListener = object : V2TIMSDKListener() {
         override fun onConnecting() {
@@ -371,12 +376,37 @@ class MainActivity : BaseActivity() {
         mainScope?.launch {
             combine(
                 contactStore.state.friendApplicationUnreadCount,
-                groupStore.state.unreadApplicationCount
-            ) { friendApplicationUnreadCount, groupApplicationUnreadCount ->
-                friendApplicationUnreadCount + groupApplicationUnreadCount
+                groupStore.state.unreadApplicationCount,
+                serverGroupInvitationUnread
+            ) { friendApplicationUnreadCount, groupApplicationUnreadCount, serverInvitations ->
+                friendApplicationUnreadCount + groupApplicationUnreadCount +
+                    serverInvitations.forOwner(XingDunSessionManager.currentUiSession()?.scopeKey)
             }.collectLatest { unreadCount ->
                 verificationUnreadCount.value = unreadCount
                 updateTabBadge(R.id.demo_tab_contacts, unreadCount)
+            }
+        }
+        mainScope?.launch {
+            while (isActive) {
+                val owner = XingDunSessionManager.currentUiSession()?.scopeKey
+                if (serverGroupInvitationUnread.value.owner != owner) {
+                    serverGroupInvitationUnread.value = XingDunGroupInvitationUnread(owner, 0)
+                }
+                if (owner != null) {
+                    try {
+                        val count = withContext(Dispatchers.IO) {
+                            val session = checkNotNull(XingDunSessionManager.currentSession())
+                            val data = XingDunSessionManager.apiClient().get<JsonObject>(
+                                session, "team/invitationUnreadCount", emptyMap(), JsonObject::class.java)
+                            XingDunGroupInvitationUnread.parse(owner, data)
+                        }
+                        if (XingDunSessionManager.currentUiSession()?.scopeKey == owner) {
+                            serverGroupInvitationUnread.value = count
+                        }
+                    } catch (error: CancellationException) { throw error }
+                    catch (_: Exception) { /* Keep the same owner's last badge; the inbox exposes load errors. */ }
+                }
+                delay(15_000)
             }
         }
         mainScope?.launch {
@@ -449,7 +479,9 @@ class MainActivity : BaseActivity() {
     private fun getOrCreatePage(tabId: Int): View {
         return tabPageCache.getOrPut(tabId) {
             when (tabId) {
-                R.id.demo_tab_home -> XingDunHomePageView(this, verificationUnreadCount)
+                R.id.demo_tab_home -> XingDunHomePageView(this, verificationUnreadCount) {
+                    serverGroupInvitationUnread.value.forOwner(XingDunSessionManager.currentUiSession()?.scopeKey) > 0
+                }
                 R.id.demo_tab_lushu -> LushuPageView(this) { lushuPublisher.launch(TravelActivity.intent(this, "intent")) }.apply { restoreState(lushuState) }
                 R.id.demo_tab_contacts -> createContactsPage()
                 else -> createConversationsPage()

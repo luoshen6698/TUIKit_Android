@@ -124,7 +124,8 @@ class XingDunBusinessActionHandler(context: Context) : BusinessActionHandler {
                 client.postEmpty(
                     session,
                     "team/invite",
-                    mapOf("team_id" to action.groupID, "member_user_ids" to action.memberUserIDs)
+                    mapOf("team_id" to action.groupID, "member_user_ids" to action.memberUserIDs,
+                        "app_language" to if (Locale.getDefault().language == "zh") "zh-Hans" else "en")
                 )
                 BusinessActionResult()
             }

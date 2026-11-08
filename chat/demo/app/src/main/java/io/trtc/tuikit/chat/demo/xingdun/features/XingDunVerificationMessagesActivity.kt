@@ -89,6 +89,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (isFinishing) return
+        if (intent.getBooleanExtra(EXTRA_GROUP_TAB, false)) selectedTab = Tab.GROUP
         buildPage()
         observeNativeGroups()
         refresh()
@@ -268,12 +269,13 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         groupLoadError = null
         operationError = null
         render()
+        val requestedTab = selectedTab
         lifecycleScope.launch {
             try {
                 val session = XingDunSessionManager.currentSession()
                     ?: error(getString(R.string.xingdun_session_expired))
                 val client = XingDunSessionManager.apiClient()
-                try {
+                if (requestedTab == Tab.FRIEND) try {
                     val received = loadFriendPage(session, Direction.RECEIVED, 1)
                     val sent = loadFriendPage(session, Direction.SENT, 1)
                     receivedFriends = received.list.map { it.copy(direction = Direction.RECEIVED) }
@@ -283,10 +285,10 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                     receivedHasMore = received.hasMore
                     sentHasMore = sent.hasMore
                     mergeFriends()
-                    if (received.unreadCount > 0) {
+                    if (selectedTab == Tab.FRIEND && received.unreadCount > 0) {
                         runCatching { client.postEmpty(session, "friend/readApply", emptyMap<String, String>()) }
                     }
-                    contactStore.clearFriendApplicationUnreadCount(object : CompletionHandler {
+                    if (selectedTab == Tab.FRIEND) contactStore.clearFriendApplicationUnreadCount(object : CompletionHandler {
                         override fun onSuccess() = Unit
                         override fun onFailure(code: Int, desc: String) = Unit
                     })
@@ -294,14 +296,14 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                     if (error is CancellationException) throw error
                     friendLoadError = error.message.orEmpty().ifBlank { getString(R.string.xingdun_verification_load_failed) }
                 }
-                try {
+                if (requestedTab == Tab.GROUP) try {
                     val type = object : TypeToken<List<ServerGroupInvitation>>() {}.type
                     serverGroups = client.get(session, "team/invitations", emptyMap(), type)
                 } catch (error: Exception) {
                     if (error is CancellationException) throw error
                     groupLoadError = error.message.orEmpty().ifBlank { getString(R.string.xingdun_verification_load_failed) }
                 }
-                refreshNativeGroups()
+                if (selectedTab == Tab.GROUP) refreshNativeGroups()
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 val message = error.message.orEmpty().ifBlank { getString(R.string.xingdun_verification_load_failed) }
@@ -311,6 +313,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                 loading = false
                 swipeRefresh.isRefreshing = false
                 render()
+                if (selectedTab != requestedTab) refresh()
             }
         }
     }
@@ -383,7 +386,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     private fun refreshNativeGroups() {
         groupStore.loadApplications(object : CompletionHandler {
             override fun onSuccess() {
-                groupStore.clearApplicationUnreadCount(object : CompletionHandler {
+                if (selectedTab == Tab.GROUP) groupStore.clearApplicationUnreadCount(object : CompletionHandler {
                     override fun onSuccess() = Unit
                     override fun onFailure(code: Int, desc: String) = Unit
                 })
@@ -408,6 +411,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     }
 
     private suspend fun refreshGroupApplicationsQuietly() {
+        if (selectedTab != Tab.GROUP) return
         val session = XingDunSessionManager.currentSession() ?: return
         runCatching {
             val type = object : TypeToken<List<ServerGroupInvitation>>() {}.type
@@ -443,8 +447,12 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         val rows = if (selectedTab == Tab.FRIEND) {
             friends.map { VerificationRow.Friend(it) }
         } else {
-            val native = nativeGroups.map { VerificationRow.NativeGroup(it) }
-            val existingKeys = nativeGroups.map { "${it.groupID}|${it.fromUser}" }.toSet()
+            // A stale SDK application must never hide a newer server-owned confirmation request.
+            val pendingKeys = serverGroups.filter { it.status == STATUS_PENDING }
+                .map { "${it.groupId}|${it.inviterUserId}" }.toSet()
+            val nativeVisible = nativeGroups.filterNot { "${it.groupID}|${it.fromUser}" in pendingKeys }
+            val native = nativeVisible.map { VerificationRow.NativeGroup(it) }
+            val existingKeys = nativeVisible.map { "${it.groupID}|${it.fromUser}" }.toSet()
             val server = serverGroups.filterNot { "${it.groupId}|${it.inviterUserId}" in existingKeys }
                 .map { VerificationRow.ServerGroup(it) }
             native + server
@@ -676,6 +684,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
     private fun Float.dp() = this * resources.displayMetrics.density
 
     companion object {
+        const val EXTRA_GROUP_TAB = "verification_group_tab"
         private const val PAGE_BACKGROUND = 0xFFF5F6FA.toInt()
         private const val BRAND = 0xFF23B39C.toInt()
         private const val TEXT_PRIMARY = 0xFF15191D.toInt()
