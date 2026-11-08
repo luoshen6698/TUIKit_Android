@@ -74,6 +74,35 @@ class XingDunSessionStore(context: Context) {
 
     fun clear() = clearSession()
 
+    internal fun rememberLoginEnabled(): Boolean = securePreferences.getBoolean(KEY_REMEMBER_LOGIN, true)
+
+    internal fun setRememberLoginEnabled(enabled: Boolean) = readRevision.write {
+        securePreferences.edit().putBoolean(KEY_REMEMBER_LOGIN, enabled).apply {
+            if (!enabled) remove(KEY_REMEMBERED_IV).remove(KEY_REMEMBERED_DATA)
+        }.apply()
+    }
+
+    internal fun rememberedLogin(scope: String?): XingDunRememberedLogin? =
+        if (!rememberLoginEnabled()) null else
+            loadEncrypted(KEY_REMEMBERED_IV, KEY_REMEMBERED_DATA, XingDunRememberedLogin::class.java)?.forScope(scope)
+
+    internal fun rememberLogin(value: XingDunRememberedLogin) {
+        if (rememberLoginEnabled() && !value.account.isNullOrBlank()) {
+            saveEncrypted(KEY_REMEMBERED_IV, KEY_REMEMBERED_DATA, value)
+        }
+    }
+
+    internal fun forgetRememberedPassword(scope: String?) {
+        rememberedLogin(scope)?.let {
+            try {
+                rememberLogin(it.withoutPassword())
+            } catch (_: Exception) {
+                // A failed optional re-encryption must not retain the old password or fail a reset.
+                securePreferences.edit().remove(KEY_REMEMBERED_IV).remove(KEY_REMEMBERED_DATA).apply()
+            }
+        }
+    }
+
     fun clearSession() = readRevision.write {
         securePreferences.edit()
             .remove(KEY_SESSION_IV)
@@ -156,6 +185,9 @@ class XingDunSessionStore(context: Context) {
         private const val KEY_ENTERPRISE_IV = "enterprise_iv"
         private const val KEY_ENTERPRISE_DATA = "enterprise_data"
         private const val KEY_DEVICE_ID = "device_id"
+        private const val KEY_REMEMBER_LOGIN = "remember_login_enabled"
+        private const val KEY_REMEMBERED_IV = "remembered_login_iv"
+        private const val KEY_REMEMBERED_DATA = "remembered_login_data"
         private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
         private const val KEY_ALIAS = "xingdun.session.aes.v1"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"

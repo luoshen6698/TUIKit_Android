@@ -42,6 +42,7 @@
 -dontwarn org.openjsse.net.ssl.OpenJSSE
 
 # Gson reads API/session models reflectively, including unannotated JSON field names.
+-keep class io.trtc.tuikit.chat.demo.xingdun.session.XingDunRememberedLogin { *; }
 -keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*
 -keep class io.trtc.tuikit.chat.demo.xingdun.network.** { *; }
 # Favorites are serialized by Gson outside the network model package.

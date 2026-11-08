@@ -3332,8 +3332,8 @@ open class XingDunFeatureActivity : BaseActivity() {
 
     private fun accountPasswordField(hint: Int): EditText = EditText(this).apply {
         setHint(hint)
-        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         setSingleLine(true)
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         textSize = 16f
         setTextColor(Color.BLACK)
         setHintTextColor(0xFFC7C7CC.toInt())
@@ -3747,6 +3747,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                     result.string("deletion_receipt"),
                     result.string("purge_after")
                 )
+                XingDunSessionManager.setRememberLoginEnabled(false)
                 completeSecurityLogout()
             }.onFailure { error ->
                 setBusy(false)
@@ -3756,6 +3757,7 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun completeSecurityLogout() {
+        XingDunSessionManager.forgetRememberedPassword()
         XingDunTenantSessionCoordinator.logout(::clearSessionAndOpenLogin)
     }
 

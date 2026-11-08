@@ -18,6 +18,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.widget.doAfterTextChanged
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import io.trtc.tuikit.atomicx.theme.tokens.ColorTokens
@@ -53,6 +54,11 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
     private lateinit var primaryAction: LinearLayout
     private lateinit var switchMode: Button
     private lateinit var forgotPassword: Button
+    private lateinit var rememberLogin: CheckBox
+    private var applyingRememberedLogin = false
+    private var restoredLoginScope: String? = null
+    private var didRestoreRememberedLogin = false
+    private var autofilledAccount: String? = null
     private var isLoading = false
     private var recoveryRouted = false
     private var codeVisible = true
@@ -84,6 +90,17 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         findViewById<Button>(R.id.xingdun_language).setOnClickListener { showLanguageSelector() }
         setupAgreementLinks()
         privacyConsent.setOnCheckedChangeListener { _, _ -> updatePrimaryActionEnabled() }
+        rememberLogin.setOnCheckedChangeListener { _, checked ->
+            if (!applyingRememberedLogin) XingDunSessionManager.setRememberLoginEnabled(checked)
+        }
+        username.doAfterTextChanged {
+            if (!applyingRememberedLogin && autofilledAccount != null &&
+                it.toString().trim() != autofilledAccount) {
+                autofilledAccount = null
+                password.text.clear()
+                privacyConsent.isChecked = false
+            }
+        }
         forgotPassword.setOnClickListener {
             if (ensureCompany()) passwordReset.launch(Intent(this, XingDunPasswordResetActivity::class.java))
         }
@@ -124,6 +141,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         primaryAction = findViewById(R.id.xingdun_primary_action)
         switchMode = findViewById(R.id.xingdun_switch_mode)
         forgotPassword = findViewById(R.id.xingdun_forgot_password)
+        rememberLogin = findViewById(R.id.xingdun_remember_login)
     }
 
     private fun applySelectedEnterprise(): Boolean {
@@ -146,6 +164,33 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         findViewById<View>(R.id.travel_company_group).visibility=if(codeVisible)View.VISIBLE else View.GONE
         companyCode.setText(if(selected)bootstrap?.companyCode.orEmpty() else "")
         selectedEnterprise.text=if(selected && bootstrap!=null)getString(R.string.ta_current_company,bootstrap.company?.name?.takeIf(String::isNotBlank)?:bootstrap.companyCode)else getString(R.string.ta_code_required)
+        restoreRememberedLogin()
+    }
+
+    private fun restoreRememberedLogin() {
+        val scope = XingDunSessionManager.rememberedScopeFor(resolvedBootstrap?.takeIf { it.configured })
+        if (didRestoreRememberedLogin && restoredLoginScope == scope) return
+        val changed = didRestoreRememberedLogin && restoredLoginScope != scope
+        applyingRememberedLogin = true
+        try {
+            if (changed) {
+                username.text.clear(); password.text.clear(); privacyConsent.isChecked = false
+            }
+            rememberLogin.isChecked = XingDunSessionManager.rememberLoginEnabled()
+            if (changed || (username.text.isBlank() && password.text.isEmpty())) {
+                val remembered = XingDunSessionManager.rememberedLogin(scope)
+                username.setText(remembered?.account.orEmpty())
+                password.setText(remembered?.password.orEmpty())
+                autofilledAccount = remembered?.account
+                privacyConsent.isChecked = remembered?.canReuseConsent(
+                    XingDunSessionManager.rememberedLoginConsentVersion
+                ) == true
+            }
+            restoredLoginScope = scope
+            didRestoreRememberedLogin = true
+        } finally {
+            applyingRememberedLogin = false
+        }
     }
 
     private fun ensureCompany():Boolean {
@@ -404,6 +449,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         switchEnterprise.isEnabled = !loading
         companyCode.isEnabled = !loading
         username.isEnabled = !loading;password.isEnabled = !loading;privacyConsent.isEnabled = !loading
+        rememberLogin.isEnabled = !loading
         status.text = message
     }
 

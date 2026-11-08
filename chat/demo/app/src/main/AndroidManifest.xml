@@ -13,6 +13,8 @@
 
     <application
         android:name="io.trtc.tuikit.chat.demo.Application"
+        android:fullBackupContent="@xml/xingdun_backup_rules"
+        android:dataExtractionRules="@xml/xingdun_data_extraction_rules"
         android:icon="@mipmap/xingdun_launcher"
         android:label="@string/xingdun_app_label"
         android:roundIcon="@mipmap/xingdun_launcher_round"

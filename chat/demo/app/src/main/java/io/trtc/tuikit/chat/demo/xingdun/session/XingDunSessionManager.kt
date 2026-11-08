@@ -113,6 +113,23 @@ object XingDunSessionManager {
 
     internal fun apiClient(): XingDunApiClient = client
 
+    internal val rememberedLoginConsentVersion: String
+        get() = "$USER_AGREEMENT_VERSION|$PRIVACY_VERSION"
+
+    internal fun rememberLoginEnabled(): Boolean = store.rememberLoginEnabled()
+
+    internal fun setRememberLoginEnabled(enabled: Boolean) = store.setRememberLoginEnabled(enabled)
+
+    internal fun currentRememberedLoginScope(): String? = rememberedScopeFor(currentEnterprise())
+
+    internal fun rememberedScopeFor(configuration: XingDunBootstrapConfiguration?): String? = configuration?.let { bootstrap ->
+        rememberedLoginScope(XingDunTenantBoundary.identity(bootstrap)?.key, resolveApiBaseUrl(bootstrap))
+    }
+
+    internal fun rememberedLogin(scope: String? = currentRememberedLoginScope()): XingDunRememberedLogin? = store.rememberedLogin(scope)
+
+    internal fun forgetRememberedPassword() = store.forgetRememberedPassword(currentRememberedLoginScope())
+
     suspend fun resolveEnterprise(
         companyCode: String?,
         domain: String?
@@ -234,7 +251,7 @@ object XingDunSessionManager {
             resolveApiBaseUrl(bootstrap),
             XingDunLoginRequest(username.trim(), password, normalizedCompanyCode(companyCode))
         )
-        return persistAuthentication(ticket, bootstrap, response)
+        return persistAuthentication(ticket, bootstrap, response, username, password)
     }
 
     suspend fun register(
@@ -265,7 +282,7 @@ object XingDunSessionManager {
                 consentEvidenceId = "android:${store.deviceId()}:${UUID.randomUUID()}".take(64)
             )
         )
-        return persistAuthentication(ticket, bootstrap, response)
+        return persistAuthentication(ticket, bootstrap, response, username, password)
     }
 
     suspend fun registerByPhone(
@@ -296,7 +313,7 @@ object XingDunSessionManager {
                 consentEvidenceId = "android:${store.deviceId()}:${UUID.randomUUID()}".take(64)
             )
         )
-        return persistAuthentication(ticket, bootstrap, response)
+        return persistAuthentication(ticket, bootstrap, response, phone, password)
     }
 
     private suspend fun authenticationBootstrap(companyCode: String, ticket: Long): XingDunBootstrapConfiguration {
@@ -316,11 +333,23 @@ object XingDunSessionManager {
         ticket: Long,
         bootstrap: XingDunBootstrapConfiguration,
         response: XingDunAuthResponse,
+        account: String,
+        password: String,
     ): XingDunStoredSession {
         val coroutineContext = currentCoroutineContext()
         return authenticationCommitGate.commit(ticket) {
             coroutineContext.ensureActive()
-            persist(bootstrap, response)
+            persist(bootstrap, response).also { session ->
+                // Same ownership gate as the session: failed/replaced attempts cannot overwrite this cache.
+                // Remembering is optional; an unavailable local cache must not fail a valid login.
+                runCatching {
+                    val scope = rememberedLoginScope(XingDunTenantBoundary.identity(session)?.key, session.apiBaseUrl)
+                    if (scope != null && password.isNotEmpty()) store.rememberLogin(XingDunRememberedLogin(
+                        scope, session.username?.takeIf(String::isNotBlank) ?: account.trim(), password,
+                        rememberedLoginConsentVersion,
+                    ))
+                }
+            }
         }
     }
 
@@ -365,6 +394,8 @@ object XingDunSessionManager {
                 companyCode = normalizedCompanyCode(companyCode)
             )
         )
+        val scope = rememberedLoginScope(XingDunTenantBoundary.identity(bootstrap)?.key, resolveApiBaseUrl(bootstrap))
+        store.forgetRememberedPassword(scope)
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -456,7 +487,19 @@ object XingDunSessionManager {
 
     fun clear() {
         authenticationCommitGate.invalidateAndRun {
-            if (::store.isInitialized) store.clearSession()
+            if (::store.isInitialized) {
+                // Existing installations have no saved password. Preserve their known account only.
+                runCatching {
+                    store.loadBoundSession()?.let { session ->
+                        val scope = rememberedLoginScope(XingDunTenantBoundary.identity(session)?.key, session.apiBaseUrl)
+                        val account = session.username?.takeIf(String::isNotBlank)
+                        if (scope != null && account != null && store.rememberedLogin(scope) == null) {
+                            store.rememberLogin(XingDunRememberedLogin(scope, account, "", ""))
+                        }
+                    }
+                }
+                store.clearSession()
+            }
         }
     }
 
