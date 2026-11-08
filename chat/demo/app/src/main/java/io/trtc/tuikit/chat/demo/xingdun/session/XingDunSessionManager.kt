@@ -88,7 +88,7 @@ object XingDunSessionManager {
     }
 
     internal fun commitIfAuthenticationGeneration(generation: Long, action: () -> Unit) {
-        authenticationCommitGate.commit(generation) {
+        authenticationCommitGate.commitLocalState(generation) {
             check(currentSession() != null) { "Session ended" }
             action()
         }

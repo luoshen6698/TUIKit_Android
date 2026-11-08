@@ -33,6 +33,16 @@ internal class XingDunAuthenticationCommitGate {
         return actionInProgress(action)
     }
 
+    /** Local message state does not modify credentials. Keep identity reads available while
+     * serializing against login/logout, so ownership checks inside the write can succeed. */
+    @Synchronized
+    fun <T> commitLocalState(ticket: Long, action: () -> T): T {
+        if (ticket != generation.get() || activeActions.get() != 0) {
+            throw CancellationException("Authentication attempt was replaced or is being written")
+        }
+        return action()
+    }
+
     @Synchronized
     fun invalidateAndRun(action: () -> Unit) {
         actionInProgress {

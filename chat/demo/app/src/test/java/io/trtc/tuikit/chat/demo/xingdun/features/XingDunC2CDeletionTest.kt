@@ -176,4 +176,24 @@ class XingDunC2CDeletionTest {
         assertEquals(0, mutations)
         assertEquals(0, writes)
     }
+    @Test fun `confirmed deletion persists while cached display identity stays readable`() = runBlocking {
+        val gate = XingDunAuthenticationCommitGate()
+        gate.begin()
+        var deleted = false
+        var mutations = 0
+        val remembered = mutableSetOf<String>()
+        val requests = XingDunC2CDeletionRequests(
+            account = { gate.currentReadGeneration()?.let { "tenant-t008" } },
+            query = { _, _ -> if (deleted) setOf("photo-M1") else emptySet() },
+            remove = { _, _ -> mutations++; deleted = true },
+            remember = { _, _, ids -> remembered += ids },
+            session = gate::currentGeneration,
+            commit = { expected, action -> gate.commitLocalState(expected as Long, action) },
+        )
+        requests.delete("b002", "photo-M1")
+        requests.delete("b002", "photo-M1")
+        assertEquals(setOf("photo-M1"), remembered)
+        assertEquals(1, mutations)
+    }
+
 }

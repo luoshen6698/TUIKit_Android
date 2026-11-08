@@ -67,6 +67,18 @@ class XingDunAuthenticationCommitGateTest {
         assertCancelled { gate.commit(waitingForNetwork) { "old" } }
     }
 
+    @Test fun localMessageCommitKeepsIdentityReadableButAuthenticationWritesDoNot() {
+        val gate = XingDunAuthenticationCommitGate()
+        val ticket = gate.begin()
+        gate.commitLocalState(ticket) { assertEquals(ticket, gate.currentReadGeneration()) }
+        gate.commit(ticket) {
+            assertEquals(null, gate.currentReadGeneration())
+            assertCancelled { gate.commitLocalState(ticket) { fail("Must reject nested authentication write") } }
+        }
+        gate.invalidateAndRun { }
+        assertCancelled { gate.commitLocalState(ticket) { fail("Must reject logged-out owner") } }
+    }
+
     private fun assertCancelled(action: () -> Unit) {
         try {
             action()
