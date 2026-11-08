@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="TravelCompanySheet" parent="ThemeOverlay.MaterialComponents.BottomSheetDialog">
+        <item name="colorPrimary">#4C6EF5</item>
+        <item name="colorControlActivated">#4C6EF5</item>
+        <item name="colorAccent">#4C6EF5</item>
+        <item name="colorError">#EF4444</item>
+    </style>
+    <string name="ta_company_cancel">Cancel</string>
+    <string name="ta_company_confirm">Confirm</string>
+    <string name="ta_company_clear">Clear enterprise code</string>
+    <item name="travel_company_title" type="id" />
+    <item name="travel_company_cancel" type="id" />
+    <item name="travel_company_confirm" type="id" />
+    <item name="travel_company_progress" type="id" />
+    <item name="travel_company_field" type="id" />
+</resources>

@@ -116,8 +116,6 @@ object XingDunSessionManager {
     internal val rememberedLoginConsentVersion: String
         get() = "$USER_AGREEMENT_VERSION|$PRIVACY_VERSION"
 
-    internal fun rememberLoginEnabled(): Boolean = store.rememberLoginEnabled()
-
     internal fun setRememberLoginEnabled(enabled: Boolean) = store.setRememberLoginEnabled(enabled)
 
     internal fun currentRememberedLoginScope(): String? = rememberedScopeFor(currentEnterprise())
@@ -344,10 +342,14 @@ object XingDunSessionManager {
                 // Remembering is optional; an unavailable local cache must not fail a valid login.
                 runCatching {
                     val scope = rememberedLoginScope(XingDunTenantBoundary.identity(session)?.key, session.apiBaseUrl)
-                    if (scope != null && password.isNotEmpty()) store.rememberLogin(XingDunRememberedLogin(
-                        scope, session.username?.takeIf(String::isNotBlank) ?: account.trim(), password,
-                        rememberedLoginConsentVersion,
-                    ))
+                    if (scope != null && password.isNotEmpty()) {
+                        // Successful authentication always remembers credentials, including old opt-outs.
+                        store.setRememberLoginEnabled(true)
+                        store.rememberLogin(XingDunRememberedLogin(
+                            scope, session.username?.takeIf(String::isNotBlank) ?: account.trim(), password,
+                            rememberedLoginConsentVersion,
+                        ))
+                    }
                 }
             }
         }

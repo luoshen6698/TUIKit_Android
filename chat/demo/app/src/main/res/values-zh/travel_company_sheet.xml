@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ta_company_cancel">取消</string>
+    <string name="ta_company_confirm">确认</string>
+    <string name="ta_company_clear">清空企业码</string>
+</resources>

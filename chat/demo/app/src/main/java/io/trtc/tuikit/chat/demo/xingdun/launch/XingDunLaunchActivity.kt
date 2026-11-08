@@ -6,12 +6,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
-import android.view.Gravity
-import android.view.ViewGroup
 import android.widget.Button
-import android.text.InputFilter
-import com.google.android.material.bottomsheet.BottomSheetDialog
-import io.trtc.tuikit.chat.demo.xingdun.features.travel.TravelUi
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantBoundary
 import android.widget.CheckBox
 import android.widget.EditText
@@ -54,7 +49,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
     private lateinit var primaryAction: LinearLayout
     private lateinit var switchMode: Button
     private lateinit var forgotPassword: Button
-    private lateinit var rememberLogin: CheckBox
+    private var companySheet: XingDunCompanyCodeSheet? = null
     private var applyingRememberedLogin = false
     private var restoredLoginScope: String? = null
     private var didRestoreRememberedLogin = false
@@ -90,9 +85,6 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         findViewById<Button>(R.id.xingdun_language).setOnClickListener { showLanguageSelector() }
         setupAgreementLinks()
         privacyConsent.setOnCheckedChangeListener { _, _ -> updatePrimaryActionEnabled() }
-        rememberLogin.setOnCheckedChangeListener { _, checked ->
-            if (!applyingRememberedLogin) XingDunSessionManager.setRememberLoginEnabled(checked)
-        }
         username.doAfterTextChanged {
             if (!applyingRememberedLogin && autofilledAccount != null &&
                 it.toString().trim() != autofilledAccount) {
@@ -141,7 +133,6 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         primaryAction = findViewById(R.id.xingdun_primary_action)
         switchMode = findViewById(R.id.xingdun_switch_mode)
         forgotPassword = findViewById(R.id.xingdun_forgot_password)
-        rememberLogin = findViewById(R.id.xingdun_remember_login)
     }
 
     private fun applySelectedEnterprise(): Boolean {
@@ -176,7 +167,6 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
             if (changed) {
                 username.text.clear(); password.text.clear(); privacyConsent.isChecked = false
             }
-            rememberLogin.isChecked = XingDunSessionManager.rememberLoginEnabled()
             if (changed || (username.text.isBlank() && password.text.isEmpty())) {
                 val remembered = XingDunSessionManager.rememberedLogin(scope)
                 username.setText(remembered?.account.orEmpty())
@@ -378,18 +368,12 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
     private fun switchEnterprise(prefill:String?=null) {
         if(isLoading || !codeVisible)return
         val generation=++companyGeneration
-        val ui=TravelUi(this);val dialog=BottomSheetDialog(this)
-        val panel=ui.column(24).apply{setBackgroundColor(0xFFF9F8F3.toInt())}
-        panel.addView(ui.label(R.string.ta_select_company,18f,TravelAuthLayout.INK,true));panel.addView(ui.space(16))
-        val input=EditText(this).apply { id=R.id.travel_company_input;hint=getString(R.string.ta_code_prompt);textSize=14f;setSingleLine();setText(prefill?:companyCode.text.toString());filters=arrayOf(InputFilter.LengthFilter(20));inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS }
-        panel.addView(input,LinearLayout.LayoutParams(-1,ui.d(56)))
-        val error=ui.text("",12f,0xFFB3261E.toInt());panel.addView(error);panel.addView(ui.space(16))
-        val confirm=ui.button(R.string.demo_about_confirm,color=0xFF2F6055.toInt()){}
-        panel.addView(confirm);dialog.setContentView(android.widget.ScrollView(this).apply{addView(panel)})
-        confirm.setOnClickListener {
-            val code=TravelAuthPolicy.normalizedCode(input.text.toString())
-            if(code==null){error.setText(R.string.ta_code_format);return@setOnClickListener}
-            input.isEnabled=false;confirm.isEnabled=false;dialog.setCancelable(false);setLoading(true,getString(R.string.xingdun_enterprise_connecting))
+        val dialog = XingDunCompanyCodeSheet(this, prefill ?: companyCode.text.toString())
+        companySheet = dialog
+        dialog.onConfirm = confirm@{ value ->
+            val code=TravelAuthPolicy.normalizedCode(value)
+            if(code==null){dialog.showError(if(value.isBlank())R.string.ta_code_prompt else R.string.ta_code_format);return@confirm}
+            dialog.setSaving(true);setLoading(true,getString(R.string.xingdun_enterprise_connecting))
             lifecycleScope.launch {
                 try {
                     val next=XingDunSessionManager.discoverEnterprise(code,null)
@@ -399,11 +383,11 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
                         pendingInvitation?.let { openInvitationRegistration(it) }
                     }
                 }catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){
-                    if(generation==companyGeneration){error.setText(R.string.ta_company_failed);input.isEnabled=true;confirm.isEnabled=true;dialog.setCancelable(true);setLoading(false)}
+                    if(generation==companyGeneration){dialog.setSaving(false);dialog.showError(R.string.ta_company_failed);setLoading(false)}
                 }
             }
         }
-        dialog.show();dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);dialog.behavior.state=com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        dialog.show()
     }
 
     private fun openInvitationRegistration(uri: Uri?): Boolean {
@@ -449,7 +433,6 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         switchEnterprise.isEnabled = !loading
         companyCode.isEnabled = !loading
         username.isEnabled = !loading;password.isEnabled = !loading;privacyConsent.isEnabled = !loading
-        rememberLogin.isEnabled = !loading
         status.text = message
     }
 
@@ -460,7 +443,7 @@ open class XingDunLaunchActivity : BaseLoginActivity() {
         }
     }
 
-    override fun onDestroy(){companyGeneration++;super.onDestroy()}
+    override fun onDestroy(){companyGeneration++;companySheet?.dismiss();companySheet=null;super.onDestroy()}
 
     companion object {
         const val EXTRA_NOTICE_RES_ID = "xingdun_authentication_notice_res_id"
