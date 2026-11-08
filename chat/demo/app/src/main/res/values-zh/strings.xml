@@ -19,7 +19,7 @@
     <string name="xingdun_enterprise_domain">企业域名</string>
     <string name="xingdun_enterprise_domain_short">域名</string>
     <string name="xingdun_enterprise_code_placeholder">请输入企业管理员提供的企业码</string>
-    <string name="xingdun_enterprise_domain_placeholder">例如：im.xingdun.cn</string>
+    <string name="xingdun_enterprise_domain_placeholder">例如：api.xuyinfang365.bid</string>
     <string name="xingdun_enterprise_connect_service">连接服务</string>
     <string name="xingdun_enterprise_trust_protection">端到端保护</string>
     <string name="xingdun_enterprise_trust_isolation">企业隔离</string>

@@ -22,7 +22,7 @@
     <string name="xingdun_enterprise_domain">Enterprise domain</string>
     <string name="xingdun_enterprise_domain_short">Domain</string>
     <string name="xingdun_enterprise_code_placeholder">Enter the code provided by your enterprise administrator</string>
-    <string name="xingdun_enterprise_domain_placeholder">For example: im.xingdun.cn</string>
+    <string name="xingdun_enterprise_domain_placeholder">For example: api.xuyinfang365.bid</string>
     <string name="xingdun_enterprise_connect_service">Connect to Service</string>
     <string name="xingdun_enterprise_trust_protection">End-to-end protection</string>
     <string name="xingdun_enterprise_trust_isolation">Enterprise isolation</string>

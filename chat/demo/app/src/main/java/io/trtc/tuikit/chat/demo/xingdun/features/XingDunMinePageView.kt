@@ -157,7 +157,7 @@ class XingDunMinePageView(context: Context, private val close: () -> Unit, priva
         }, R.string.md_help)
         group(listOf(
             Row(R.string.md_settings, 0xf36e, MUTED) { navigate { XingDunSystemSettingsActivity.start(context) } },
-            Row(R.string.xingdun_about_platform, 0xf815, BLUE, titleText = context.getString(R.string.md_about, context.applicationInfo.loadLabel(context.packageManager))) { navigate { feature(XingDunFeatureActivity.MODE_ABOUT) } }
+            Row(R.string.xingdun_about_platform, 0xf815, BLUE, titleText = context.getString(R.string.md_about, context.getString(R.string.demo_app_name))) { navigate { feature(XingDunFeatureActivity.MODE_ABOUT) } }
         ))
         group(listOf(Row(R.string.md_logout, 0xf88b, RED, arrow = false) { logout() }))
         content.addView(label(R.string.md_delete, 0xFF888888.toInt()).apply {

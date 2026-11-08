@@ -1465,10 +1465,7 @@ open class XingDunFeatureActivity : BaseActivity() {
                     720,
                     720,
                 )
-                val brandName = XingDunSessionManager.currentEnterprise()
-                    ?.let { XingDunAuthUiSupport.displayName(this@XingDunFeatureActivity, it) }
-                    ?: session.companyName.takeIf(String::isNotBlank)
-                    ?: getString(R.string.demo_app_name)
+                val brandName = getString(R.string.demo_app_name)
                 val poster = createInvitePoster(
                     qrBitmap = qrBitmap,
                     inviteCode = invitation.inviteCode,
@@ -4806,11 +4803,9 @@ open class XingDunFeatureActivity : BaseActivity() {
     }
 
     private fun showAbout() {
-        val session = XingDunSessionManager.currentSession()
         val enterprise = XingDunSessionManager.currentEnterprise()
-        val brandName = enterprise?.let { XingDunAuthUiSupport.displayName(this, it) }
-            ?: session?.companyName?.takeIf(String::isNotBlank)
-            ?: getString(R.string.demo_app_name)
+        // Product identity belongs to this installed app, not the tenant/platform configuration.
+        val brandName = getString(R.string.demo_app_name)
         (headerBar.getChildAt(1) as? TextView)?.text = getString(R.string.xingdun_about_title_format, brandName)
         applyNotificationSettingsChrome()
 
@@ -4821,7 +4816,8 @@ open class XingDunFeatureActivity : BaseActivity() {
             setPadding(16.dp(), 22.dp(), 16.dp(), 22.dp())
             addView(XingDunEnterpriseLogoView(context).apply {
                 contentDescription = brandName
-                loadLogo(lifecycleScope, enterprise?.let(XingDunAuthUiSupport::logoUrl))
+                useTravelBrand()
+                loadLogo(lifecycleScope, null)
             }, LinearLayout.LayoutParams(84.dp(), 84.dp()))
             addView(TextView(context).apply {
                 text = brandName
@@ -4865,9 +4861,10 @@ open class XingDunFeatureActivity : BaseActivity() {
             }
         }, notificationSectionLayoutParams())
 
-        enterprise?.platform?.siteCopyright?.trim()?.takeIf(String::isNotEmpty)?.let { copyright ->
+        run {
             content.addView(TextView(this).apply {
-                text = copyright
+                text = getString(R.string.xuyinfang_brand_copyright,
+                    java.util.Calendar.getInstance().get(java.util.Calendar.YEAR), brandName)
                 textSize = 12f
                 gravity = Gravity.CENTER
                 setTextColor(0xFFAEAEB2.toInt())
