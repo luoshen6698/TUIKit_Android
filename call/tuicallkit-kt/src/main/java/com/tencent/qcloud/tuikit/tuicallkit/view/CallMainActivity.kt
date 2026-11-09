@@ -83,6 +83,7 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
     private var grantedMediaType: CallMediaType? = null
     private var preparedMediaIdentity: NativeCallIdentity? = null
     private var displayedCallIdentity: NativeCallIdentity? = null
+    private var renderedCallIdentity: NativeCallIdentity? = null
     private val callStatusObserver = object : CallListener() {
         override fun onCallEnded(callId: String, mediaType: CallMediaType, reason: CallEndReason, userId: String) {
             runOnUiThread {
@@ -171,6 +172,9 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
             finishCallMainActivity()
             return
         }
+        val identity = currentCallIdentity()
+        if (callView != null && renderedCallIdentity == identity) return
+        renderedCallIdentity = identity
         val callId = CallStore.shared.observerState.activeCall.value.callId
         KeyMetrics.countUV(KeyMetrics.EventId.WAKEUP, callId)
         setBackground()
@@ -179,8 +183,6 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
         addInviteButton()
         FloatWindowManager.sharedInstance().dismiss()
         CallManager.instance.viewState.router.set(ViewState.ViewRouter.FullView)
-        CallManager.instance.startForegroundService()
-        handleCallAcceptAction()
     }
 
     private fun finishCallMainActivity() {
@@ -274,6 +276,13 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
         }
     }
 
+    internal fun requestIncomingAnswer() {
+        if (permissionRequestInFlight) return
+        val answer = IncomingNotificationBanner.createActionIntent(this, Constants.ACCEPT_CALL_ACTION) ?: return
+        setIntent(answer)
+        requestCallPermissions()
+    }
+
     override fun onResume() {
         super.onResume()
         requestCallPermissions()
@@ -282,13 +291,20 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
     private fun requestCallPermissions() {
         if (!callLifecycleAttached || isFinishing || isDestroyed) return
         // Expired notification bindings prohibit actions, not terminal-state cleanup.
-        if (CallStore.shared.observerState.selfInfo.value.status == CallParticipantStatus.None) {
+        val self = CallStore.shared.observerState.selfInfo.value
+        if (self.status == CallParticipantStatus.None) {
             finishCallMainActivity()
             return
         }
         if (permissionRequestInFlight || !isCallUiVisible() || isStaleNotificationIntent(intent)) return
         val requestedIdentity = currentCallIdentity()
         bindDisplayedCall(requestedIdentity)
+        if (self.status == CallParticipantStatus.Waiting && !isCaller(self.id) &&
+            intent.action != Constants.ACCEPT_CALL_ACTION) {
+            // Ringing and declining do not need microphone or camera access.
+            initView()
+            return
+        }
         val mediaType = CallStore.shared.observerState.activeCall.value.mediaType
         permissionRequestInFlight = true
         val requestGeneration = ++permissionRequestGeneration
@@ -322,6 +338,11 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
                         grantedMediaType = mediaType
                         prepareMediaIfNeeded(requestedIdentity)
                         initView()
+                        val currentSelf = CallStore.shared.observerState.selfInfo.value
+                        if (currentSelf.status == CallParticipantStatus.Accept || isCaller(currentSelf.id)) {
+                            CallManager.instance.startForegroundService()
+                        }
+                        handleCallAcceptAction()
                     }
                 }
 
@@ -382,6 +403,7 @@ class CallMainActivity : FullScreenActivity(), ITUINotification {
         if (identity.callId.isBlank() || displayedCallIdentity == identity) return
         clearPendingCallFinish()
         displayedCallIdentity = identity
+        IncomingNotificationBanner.onCallUiPresented(identity)
     }
 
     private fun clearPendingCallFinish() {

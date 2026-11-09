@@ -26,6 +26,16 @@ class NativeCallNotificationPolicyTest {
         assertFalse(NativeCallNotificationPolicy.needsLocalRinging(identity, failed, true, true, true, true))
     }
 
+    @Test fun inAppIncomingCallRingsWithNotificationsEnabledUntilItLeavesForegroundOrEnds() {
+        val inApp = NativeCallNotificationPolicy.IncomingPresentation(identity,
+            NativeCallNotificationPolicy.IncomingDelivery.InApp, localAudio = true)
+        assertTrue(NativeCallNotificationPolicy.needsLocalRinging(identity, inApp, true, true, true, false))
+        assertFalse(NativeCallNotificationPolicy.needsLocalRinging(identity, inApp, true, false, true, false))
+        assertFalse(NativeCallNotificationPolicy.needsLocalRinging(identity, inApp, true, true, false, false))
+        assertFalse(NativeCallNotificationPolicy.needsLocalRinging(identity.copy(callId = "next"),
+            inApp, true, true, true, false))
+    }
+
     @Test fun aFailureFromAnOldCallCannotRingTheNextCall() {
         val old = NativeCallNotificationPolicy.IncomingPresentation(
             NativeCallIdentity("old", 123, "self"), NativeCallNotificationPolicy.IncomingDelivery.Failed)

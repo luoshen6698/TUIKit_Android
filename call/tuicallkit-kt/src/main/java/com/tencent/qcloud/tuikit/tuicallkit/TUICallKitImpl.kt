@@ -15,13 +15,10 @@ import com.tencent.qcloud.tuikit.tuicallkit.common.metrics.KeyMetrics
 import com.tencent.qcloud.tuikit.tuicallkit.common.utils.DeviceUtils
 import com.tencent.qcloud.tuikit.tuicallkit.common.utils.PermissionRequest
 import com.tencent.qcloud.tuikit.tuicallkit.manager.CallManager
-import com.tencent.qcloud.tuikit.tuicallkit.manager.feature.NotificationFeature
 import com.tencent.qcloud.tuikit.tuicallkit.state.GlobalState
 import com.tencent.qcloud.tuikit.tuicallkit.view.CallAdapter
 import com.tencent.qcloud.tuikit.tuicallkit.view.CallMainActivity
 import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.IncomingNotificationBanner
-import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.NativeCallIdentity
-import com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner.NativeCallUiLifecyclePolicy
 import com.trtc.tuikit.common.ui.floatwindow.FloatWindowManager
 import io.trtc.tuikit.atomicx.common.permission.PermissionCallback
 import io.trtc.tuikit.atomicx.widget.basicwidget.toast.AtomicToast
@@ -32,7 +29,6 @@ import io.trtc.tuikit.atomicxcore.api.call.CallListener
 import io.trtc.tuikit.atomicxcore.api.call.CallMediaType
 import io.trtc.tuikit.atomicxcore.api.call.CallParams
 import io.trtc.tuikit.atomicxcore.api.call.CallStore
-import io.trtc.tuikit.atomicxcore.api.call.CallParticipantInfo
 import io.trtc.tuikit.atomicxcore.api.call.CallParticipantStatus
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import kotlinx.coroutines.CoroutineScope
@@ -210,9 +206,11 @@ class TUICallKitImpl private constructor(context: Context) : TUICallKit() {
             return
         }
 
-        // An authenticated foreground launch can display the SDK call UI. Background presentation
-        // belongs to the system notification, regardless of an OEM background-launch permission.
-        if (DeviceUtils.isAppRunningForeground(context)) startCallActivity()
+        if (!selfIsCaller()) {
+            IncomingNotificationBanner.refreshPresentation(context)
+        } else if (DeviceUtils.isAppRunningForeground(context)) {
+            startCallActivity()
+        }
     }
 
     private fun registerObserver() {
@@ -230,63 +228,8 @@ class TUICallKitImpl private constructor(context: Context) : TUICallKit() {
             notifyInternalEvent()
             if (selfInfo.status == CallParticipantStatus.None) {
                 CallManager.instance.reset()
-                return@collect
             }
-            if (selfInfo.status != CallParticipantStatus.Waiting || selfIsCaller()) {
-                return@collect
-            }
-            handleNewCall()
         }
-    }
-
-    private fun handleNewCall() {
-        if (IncomingNotificationBanner.areNotificationsSuspended()) return
-        if (NotificationFeature.canShowIncomingCall(context)) {
-            IncomingNotificationBanner(context).showNotification(CallParticipantInfo()) {
-                val self = CallStore.shared.observerState.selfInfo.value
-                if (self.status == CallParticipantStatus.Waiting && !selfIsCaller() &&
-                    DeviceUtils.isAppRunningForeground(context)) startFullScreenView()
-            }
-            return
-        }
-        // A disabled/blocked notification is not permission to pull an Activity from the background.
-        if (DeviceUtils.isAppRunningForeground(context)) startFullScreenView()
-        else Logger.i(TAG, "stage=native_call event=background_notification_unavailable")
-    }
-
-    private fun startFullScreenView() {
-        Logger.i(TAG, "startFullScreenView")
-        val state = CallStore.shared.observerState
-        val call = state.activeCall.value
-        val expected = NativeCallIdentity(call.callId, LoginStore.shared.sdkAppID, state.selfInfo.value.id)
-        val mediaType = call.mediaType
-        fun canPresent(): Boolean {
-            val current = state.activeCall.value
-            val self = state.selfInfo.value
-            return !IncomingNotificationBanner.areNotificationsSuspended() &&
-                NativeCallUiLifecyclePolicy.canPresentIncoming(expected,
-                    NativeCallIdentity(current.callId, LoginStore.shared.sdkAppID, self.id),
-                    mediaType == current.mediaType,
-                    self.status == CallParticipantStatus.Waiting && !selfIsCaller(),
-                    DeviceUtils.isAppRunningForeground(context))
-        }
-        if (!canPresent()) return
-        PermissionRequest.requestPermissions(context, mediaType, object
-            : PermissionCallback() {
-            override fun onGranted() {
-                if (canPresent()) {
-                    Logger.i(TAG, "startFullScreenView requestPermissions onGranted")
-                    startCallActivity()
-                }
-            }
-
-            override fun onDenied() {
-                if (canPresent()) {
-                    CallStore.shared.reject(null)
-                    CallManager.instance.reset()
-                }
-            }
-        })
     }
 
     private fun startCallActivity() {

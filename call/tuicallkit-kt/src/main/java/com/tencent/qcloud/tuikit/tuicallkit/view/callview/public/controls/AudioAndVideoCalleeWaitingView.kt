@@ -6,6 +6,7 @@ import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import androidx.constraintlayout.utils.widget.ImageFilterView
 import com.tencent.qcloud.tuikit.tuicallkit.R
+import com.tencent.qcloud.tuikit.tuicallkit.view.CallMainActivity
 import io.trtc.tuikit.atomicxcore.api.call.CallStore
 
 class AudioAndVideoCalleeWaitingView(context: Context) : RelativeLayout(context) {
@@ -38,7 +39,12 @@ class AudioAndVideoCalleeWaitingView(context: Context) : RelativeLayout(context)
             if (!layoutDialing.isEnabled) {
                 return@setOnClickListener
             }
-            CallStore.shared.accept(null)
+            val activity = context as? CallMainActivity
+            if (activity != null) {
+                activity.requestIncomingAnswer()
+            } else {
+                CallStore.shared.accept(null)
+            }
         }
     }
 }

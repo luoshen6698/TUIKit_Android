@@ -2,7 +2,7 @@ package com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner
 
 /** Keeps incoming CallStyle updates eligible and routes accepted calls through their service. */
 internal object NativeCallNotificationPolicy {
-    enum class IncomingDelivery { Pending, Published, Failed, Expired }
+    enum class IncomingDelivery { InApp, Pending, Published, Failed, Expired }
 
     data class IncomingPresentation(val identity: NativeCallIdentity, val delivery: IncomingDelivery,
                                     val localAudio: Boolean = false)
@@ -28,7 +28,7 @@ internal object NativeCallNotificationPolicy {
     ): Boolean = !isSuspended && isForeground && isWaiting &&
         presentation?.let { it.identity == identity && it.delivery == IncomingDelivery.Expired } != true &&
         (preferLocalAlert || !notificationsAllowed || presentation?.let {
-            it.identity == identity && it.delivery == IncomingDelivery.Failed
+            it.identity == identity && (it.localAudio || it.delivery == IncomingDelivery.Failed)
         } == true)
 
     fun failureReason(message: String?): String = when {

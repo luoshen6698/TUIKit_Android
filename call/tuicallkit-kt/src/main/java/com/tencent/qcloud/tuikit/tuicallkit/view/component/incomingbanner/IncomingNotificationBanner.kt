@@ -1,5 +1,6 @@
 package com.tencent.qcloud.tuikit.tuicallkit.view.component.incomingbanner
 
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -9,6 +10,7 @@ import android.media.AudioManager
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
@@ -47,12 +49,7 @@ import kotlinx.coroutines.launch
 
 /** One system notification and one action binding for the currently restored incoming call. */
 class IncomingNotificationBanner(context: Context) {
-    private val controller = controller(context)
-
-    fun showNotification(participant: CallParticipantInfo, onFailure: (() -> Unit)? = null) {
-        // The cached SDK participant is optional; never wait for a profile/avatar network request.
-        controller.scope.launch { controller.showIncoming(onFailure) }
-    }
+    init { controller(context) }
 
     companion object {
         internal const val NOTIFICATION_ID = 9909
@@ -71,11 +68,26 @@ class IncomingNotificationBanner(context: Context) {
 
         internal fun needsLocalIncomingRinging(context: Context): Boolean {
             val call = currentCall() ?: return false
-            return NativeCallNotificationPolicy.needsLocalRinging(call.identity, incomingPresentation.value,
-                NotificationFeature.canShowIncomingCall(context), DeviceUtils.isAppRunningForeground(context) ||
+            val presentation = incomingPresentation.value
+            return NativeCallNotificationPolicy.needsLocalRinging(call.identity, presentation,
+                NotificationFeature.canShowIncomingCall(context), isUnlockedForeground(context) ||
                     sharedController?.persistentBanner?.isShowing == true,
                 call.phase == NativeCallPhase.Waiting, notificationsSuspended,
                 sharedController?.compatibleIncoming == true)
+        }
+
+        private fun isUnlockedForeground(context: Context): Boolean =
+            DeviceUtils.isAppRunningForeground(context) &&
+                context.getSystemService(PowerManager::class.java)?.isInteractive == true &&
+                context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == false
+
+        internal fun onCallUiPresented(identity: NativeCallIdentity) {
+            sharedController?.markCallUiPresented(identity)
+        }
+
+        internal fun refreshPresentation(context: Context) {
+            val owner = controller(context)
+            owner.scope.launch { owner.refresh() }
         }
 
         private fun controller(context: Context): Controller = sharedController ?: synchronized(this) {
@@ -197,8 +209,7 @@ class IncomingNotificationBanner(context: Context) {
             private var expiryJob: Job? = null
             private val actionJobs = mutableMapOf<NativeCallActionGate.Attempt, Job>()
             private val actionReleases = mutableMapOf<NativeCallActionGate.Attempt, () -> Unit>()
-            private var failureFallback: (() -> Unit)? = null
-            private var fallbackShownFor: NativeCallIdentity? = null
+            private var foregroundLaunchSucceeded: Boolean? = null
             var persistentBanner: IncomingFloatBanner? = null
                 private set
             var presentingPersistentBanner = false
@@ -224,10 +235,8 @@ class IncomingNotificationBanner(context: Context) {
                 }
             }
 
-            fun showIncoming(onFailure: (() -> Unit)?) {
-                refresh()
-                failureFallback = onFailure
-                currentCall()?.let { dispatchForegroundFallback(it) }
+            fun markCallUiPresented(identity: NativeCallIdentity) {
+                if (binding?.identity == identity) foregroundLaunchSucceeded = true
             }
 
             init {
@@ -255,8 +264,7 @@ class IncomingNotificationBanner(context: Context) {
                 lastRendered = null
                 lastRenderedLocalAlert = null
                 expired = false
-                failureFallback = null
-                fallbackShownFor = null
+                foregroundLaunchSucceeded = null
                 incomingPresentationState.value = null
                 CallingBellFeature.stopCalleeRinging()
                 CallingVibratorFeature.stopCalleeVibration()
@@ -300,12 +308,26 @@ class IncomingNotificationBanner(context: Context) {
                     }
                 }
                 gate.update(call.identity, call.phase)
+                val currentBinding = binding ?: return
+                if (call.phase == NativeCallPhase.Waiting && !expired &&
+                    isUnlockedForeground(context) && presentForeground(call, currentBinding)) {
+                    dismissPersistentBanner()
+                    if (lastRendered?.phase == NativeCallPhase.Waiting) {
+                        manager.cancel(NOTIFICATION_ID)
+                        lastRendered = null
+                        lastRenderedLocalAlert = null
+                    }
+                    incomingPresentationState.value = NativeCallNotificationPolicy.IncomingPresentation(
+                        call.identity, NativeCallNotificationPolicy.IncomingDelivery.InApp, localAudio = true)
+                    return
+                }
                 if (!NotificationFeature.canShowIncomingCall(context) ||
                     (expired && call.phase == NativeCallPhase.Waiting)
                 ) {
                     dismissPersistentBanner()
                     manager.cancel(NOTIFICATION_ID)
                     lastRendered = null
+                    if (!expired) incomingPresentationState.value = null
                     return
                 }
                 syncPersistentBanner(call)
@@ -328,13 +350,9 @@ class IncomingNotificationBanner(context: Context) {
                             lastRenderedLocalAlert == localAlert
                     } == true) return
                 if (lastRendered == call && lastRenderedLocalAlert == localAlert) return
-                val currentBinding = binding ?: return
                 if (call.phase == NativeCallPhase.Waiting && incomingPresentation.value?.let {
                         it.identity == call.identity && it.delivery == NativeCallNotificationPolicy.IncomingDelivery.Failed
-                    } == true) {
-                    dispatchForegroundFallback(call)
-                    return
-                }
+                    } == true) return
                 val plan = NativeCallNotificationPolicy.plan(call.phase,
                     NativeCallForegroundService.isProtectingCurrentCall())
                 if (plan.delivery == NativeCallNotificationPolicy.Delivery.Defer) return
@@ -382,9 +400,6 @@ class IncomingNotificationBanner(context: Context) {
                         }
                     }
                     Log.i(TAG, "stage=native_call event=${if (call.phase == NativeCallPhase.Waiting) "incoming_posted" else "ongoing_posted"}")
-                    // OEMs may accept a compatible notification but suppress its heads-up/FSI.
-                    // A foreground caller must still get an in-app answer surface (not a second ringtone).
-                    if (call.phase == NativeCallPhase.Waiting && compatibleIncoming) dispatchForegroundFallback(call)
                 } catch (error: RuntimeException) {
                     val origin = error.stackTrace.firstOrNull()?.let { "${it.className}.${it.methodName}" }.orEmpty()
                     Log.w(TAG, "stage=native_call event=notification_failed phase=${call.phase} stage=$stage " +
@@ -394,24 +409,27 @@ class IncomingNotificationBanner(context: Context) {
                     if (call.phase == NativeCallPhase.Waiting && currentCall()?.identity == call.identity) {
                         incomingPresentationState.value = NativeCallNotificationPolicy.IncomingPresentation(
                             call.identity, NativeCallNotificationPolicy.IncomingDelivery.Failed)
-                        dispatchForegroundFallback(call)
                     }
                 }
             }
 
-            private fun dispatchForegroundFallback(call: Snapshot) {
-                val fallback = failureFallback ?: return
-                val current = currentCall() ?: return
-                if (notificationsSuspended || expired || call.phase != NativeCallPhase.Waiting ||
-                    current.identity != call.identity || current.phase != NativeCallPhase.Waiting ||
-                    !DeviceUtils.isAppRunningForeground(context) || fallbackShownFor == call.identity ||
-                    incomingPresentation.value?.let { it.identity == call.identity &&
-                        (it.delivery == NativeCallNotificationPolicy.IncomingDelivery.Failed ||
-                            compatibleIncoming && it.delivery == NativeCallNotificationPolicy.IncomingDelivery.Published)
-                    } != true) return
-                fallbackShownFor = call.identity
-                Log.i(TAG, "stage=native_call event=foreground_fallback")
-                fallback()
+            private fun presentForeground(call: Snapshot, binding: Binding): Boolean {
+                val current = currentCall() ?: return false
+                if (notificationsSuspended || !NativeCallUiLifecyclePolicy.canPresentIncoming(
+                        call.identity, current.identity, call.isVideo == current.isVideo,
+                        current.phase == NativeCallPhase.Waiting, isUnlockedForeground(context))) return false
+                foregroundLaunchSucceeded?.let { return it }
+                // The identity-bound intent becomes invalid if the caller cancels before it opens.
+                val launched = try {
+                    context.startActivity(actionIntent(binding, OPEN_CALL_ACTION, false))
+                    Log.i(TAG, "stage=native_call event=foreground_incoming_opened media=${if (call.isVideo) "video" else "audio"}")
+                    true
+                } catch (error: RuntimeException) {
+                    Log.w(TAG, "stage=native_call event=foreground_incoming_failed type=${error.javaClass.simpleName}")
+                    false
+                }
+                foregroundLaunchSucceeded = launched
+                return launched
             }
 
             private fun syncPersistentBanner(call: Snapshot) {
@@ -597,7 +615,7 @@ class IncomingNotificationBanner(context: Context) {
 
             private fun usesLocalAudio(call: Snapshot): Boolean = NativeCallNotificationPolicy.usesLocalAudio(
                 call.phase == NativeCallPhase.Waiting, compatibleIncoming,
-                DeviceUtils.isAppRunningForeground(context), persistentBanner?.isShowing == true)
+                isUnlockedForeground(context), persistentBanner?.isShowing == true)
 
             private fun pendingIntent(binding: Binding, action: String, broadcast: Boolean): PendingIntent {
                 val intent = actionIntent(binding, action, broadcast)
