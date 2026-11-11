@@ -101,7 +101,7 @@ android {
         manifestPlaceholders["VIVO_APPID"] = vivoAppId.ifBlank { "0" }
         manifestPlaceholders["VIVO_APPKEY"] = vivoAppKey.ifBlank { "0" }
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "io.trtc.tuikit.chat.demo.review.HuaweiReviewInstrumentation"
     }
 
     signingConfigs {

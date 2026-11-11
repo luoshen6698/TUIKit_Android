@@ -23,6 +23,25 @@ class XingDunRegistrationFailureTest {
     }
 
     @Test
+    fun rejectedNicknameDoesNotClaimTheServiceOrLengthFailed() {
+        for (message in listOf("昵称内容不符合规范，请修改后重试", "private provider details")) {
+            assertEquals(
+                XingDunAuthenticationErrorPresentation(
+                    R.string.xingdun_nickname_rejected,
+                    XingDunRegistrationField.NICKNAME
+                ),
+                XingDunAuthenticationErrorPresenter.registration(XingDunApiException(42204, 200, message))
+            )
+        }
+        assertEquals(
+            R.string.xingdun_nickname_too_long,
+            XingDunAuthenticationErrorPresenter.registration(
+                XingDunApiException(42204, 200, "昵称最多64个字符")
+            ).message
+        )
+    }
+
+    @Test
     fun duplicateAndUnknownErrorsStillRemainSafe() {
         assertEquals(
             XingDunRegistrationField.USERNAME,

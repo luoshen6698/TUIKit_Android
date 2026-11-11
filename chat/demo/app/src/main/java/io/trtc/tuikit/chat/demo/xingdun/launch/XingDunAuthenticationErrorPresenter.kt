@@ -73,6 +73,9 @@ internal object XingDunAuthenticationErrorPresenter {
         if (apiError.businessCode == 50020) {
             return XingDunAuthenticationErrorPresentation(R.string.xingdun_registration_service_unavailable)
         }
+        if (apiError.businessCode == 42204 && !message.contains("64")) {
+            return presentation(R.string.xingdun_nickname_rejected, XingDunRegistrationField.NICKNAME)
+        }
         return when {
             message.contains("用户名") && message.contains("存在") -> presentation(
                 R.string.xingdun_registration_username_exists,
@@ -88,7 +91,10 @@ internal object XingDunAuthenticationErrorPresenter {
             )
             message.contains("手机号") -> presentation(R.string.xingdun_phone_invalid, XingDunRegistrationField.PHONE)
             message.contains("验证码") -> presentation(R.string.xingdun_code_invalid, XingDunRegistrationField.CODE)
-            message.contains("昵称") -> presentation(R.string.xingdun_nickname_too_long, XingDunRegistrationField.NICKNAME)
+            message.contains("昵称") -> presentation(
+                if (message.contains("64")) R.string.xingdun_nickname_too_long else R.string.xingdun_nickname_rejected,
+                XingDunRegistrationField.NICKNAME
+            )
             message.contains("确认密码") || message.contains("两次密码") -> presentation(
                 R.string.xingdun_password_mismatch,
                 XingDunRegistrationField.CONFIRM_PASSWORD
