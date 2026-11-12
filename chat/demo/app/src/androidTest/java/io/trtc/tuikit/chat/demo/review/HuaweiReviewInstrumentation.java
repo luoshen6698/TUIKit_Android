@@ -189,13 +189,20 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
     }
 
     private void awaitHome() {
+        final String[] feedback = {""};
         long deadline = SystemClock.uptimeMillis() + 45000;
         while (SystemClock.uptimeMillis() < deadline) {
             Activity current = resumedActivity;
             if (current != null && current.getClass().getName().equals("io.trtc.tuikit.chat.demo.main.MainActivity")) return;
+            if (current != null) instrumentation.runOnMainSync(() -> {
+                TextView snackbar = current.findViewById(id("snackbar_text"));
+                if (snackbar != null && snackbar.getVisibility() == View.VISIBLE) {
+                    feedback[0] = snackbar.getText().toString();
+                }
+            });
             SystemClock.sleep(200);
         }
-        fail("Authentication did not reach the real home activity");
+        fail("Authentication did not reach the real home activity. Displayed feedback: " + feedback[0]);
     }
 
     public void numericAccountWithOmittedNicknameRegisters() throws Exception {
