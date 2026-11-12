@@ -50,6 +50,13 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
                 public void onActivitySaveInstanceState(Activity activity, Bundle state) {}
                 public void onActivityDestroyed(Activity activity) {}
             });
+            String expectedChannel = arguments.getString("expectedChannel");
+            if (expectedChannel != null) {
+                android.content.pm.ApplicationInfo info = getTargetContext().getPackageManager()
+                        .getApplicationInfo(packageName, android.content.pm.PackageManager.GET_META_DATA);
+                assertTrue("Installed APK channel mismatch", expectedChannel.equals(info.metaData.getString("com.xuyinfang.distribution.channel")));
+            }
+            if ("true".equals(arguments.getString("fresh"))) prepareFirstLaunch();
             if ("reopen".equals(arguments.getString("mode"))) {
                 resumedActivity = null;
                 Intent launch = new Intent().setClassName(packageName, "io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity");
@@ -104,8 +111,38 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
         instrumentation.runOnMainSync(() -> ((EditText) activity.findViewById(id(name))).setText(value));
     }
 
+    private File proofDirectory() {
+        String name = arguments.getString("proofDirectory", "huawei-review");
+        assertTrue("Invalid evidence directory", name.matches("[A-Za-z0-9_-]{1,64}"));
+        return new File(getTargetContext().getExternalFilesDir(null), name);
+    }
+
+    private void prepareFirstLaunch() throws Exception {
+        open("io.trtc.tuikit.chat.demo.xingdun.launch.XingDunStartupActivity");
+        String acceptLabel = getTargetContext().getString(getTargetContext().getResources()
+                .getIdentifier("xingdun_first_privacy_accept", "string", packageName));
+        long deadline = SystemClock.uptimeMillis() + 45000;
+        while (SystemClock.uptimeMillis() < deadline) {
+            Activity current = resumedActivity;
+            if (current != null && (current.getClass().getName().endsWith("XingDunLaunchActivity") ||
+                    current.getClass().getName().endsWith("MainActivity"))) return;
+            AccessibilityNodeInfo root = getUiAutomation().getRootInActiveWindow();
+            if (root != null && packageName.contentEquals(String.valueOf(root.getPackageName()))) {
+                for (AccessibilityNodeInfo button : root.findAccessibilityNodeInfosByViewId("android:id/button1")) {
+                    if (acceptLabel.contentEquals(String.valueOf(button.getText()))) {
+                        capture("first-launch-privacy");
+                        assertTrue("Privacy acceptance did not respond", button.performAction(AccessibilityNodeInfo.ACTION_CLICK));
+                    }
+                }
+            }
+            SystemClock.sleep(250);
+        }
+        capture("first-launch-failed");
+        fail("First launch did not reach the authentication screen");
+    }
+
     private void capture(String name) throws Exception {
-        File directory = new File(instrumentation.getTargetContext().getExternalFilesDir(null), "huawei-review");
+        File directory = proofDirectory();
         assertTrue(directory.exists() || directory.mkdirs());
         Bitmap screenshot = instrumentation.getUiAutomation().takeScreenshot();
         assertNotNull(screenshot);
@@ -264,7 +301,7 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
             awaitHome();
             capture("login-after-registration");
         }
-        File account = new File(instrumentation.getTargetContext().getExternalFilesDir(null), "huawei-review/account-round-" + round + ".txt");
+        File account = new File(proofDirectory(), "account-round-" + round + ".txt");
         try (FileOutputStream output = new FileOutputStream(account)) {
             output.write((username + "\n").getBytes(StandardCharsets.UTF_8));
         }

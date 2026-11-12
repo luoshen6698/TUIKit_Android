@@ -97,6 +97,7 @@ android {
         buildConfigField("String", "XINGDUN_RELEASE_CHANNEL", "\"$clientReleaseChannel\"")
         // Vendor manifests require these placeholders. Unconfigured debug builds use non-routable
         // values; push-enabled release builds are blocked by verifyReleaseConfiguration.
+        manifestPlaceholders["XINGDUN_RELEASE_CHANNEL"] = clientReleaseChannel
         manifestPlaceholders["HONOR_APPID"] = honorAppId.ifBlank { "0" }
         manifestPlaceholders["VIVO_APPID"] = vivoAppId.ifBlank { "0" }
         manifestPlaceholders["VIVO_APPKEY"] = vivoAppKey.ifBlank { "0" }
