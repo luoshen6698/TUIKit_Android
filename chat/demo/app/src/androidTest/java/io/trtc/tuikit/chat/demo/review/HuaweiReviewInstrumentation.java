@@ -175,7 +175,7 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
         return "";
     }
 
-    private void click(Activity activity, String name) {
+    private void awaitEnabled(Activity activity, String name) {
         final boolean[] enabled = {false};
         long deadline = SystemClock.uptimeMillis() + 30000;
         while (!enabled[0] && SystemClock.uptimeMillis() < deadline) {
@@ -183,25 +183,133 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
             if (!enabled[0]) SystemClock.sleep(200);
         }
         assertTrue("Action disabled: " + name, enabled[0]);
+    }
+
+    private void click(Activity activity, String name) {
+        awaitEnabled(activity, name);
         final boolean[] clicked = {false};
         instrumentation.runOnMainSync(() -> clicked[0] = activity.findViewById(id(name)).performClick());
         assertTrue("Action did not handle click: " + name, clicked[0]);
     }
 
+    private void prepareLoginForm(Activity activity) throws Exception {
+        awaitEnabled(activity, "xingdun_primary_action");
+        final boolean[] needsSelection = {false};
+        instrumentation.runOnMainSync(() -> {
+            View group = activity.findViewById(id("travel_company_group"));
+            TextView code = activity.findViewById(id("xingdun_company_code"));
+            needsSelection[0] = group.getVisibility() == View.VISIBLE && code.getText().toString().trim().isEmpty();
+        });
+        if (!needsSelection[0]) return;
+        String company = arguments.getString("companyCode", "");
+        assertTrue("Visible enterprise selection requires an explicit companyCode argument", !company.isEmpty());
+        click(activity, "xingdun_company_code");
+        AccessibilityNodeInfo input = null;
+        long deadline = SystemClock.uptimeMillis() + 30000;
+        while (input == null && SystemClock.uptimeMillis() < deadline) {
+            AccessibilityNodeInfo root = getUiAutomation().getRootInActiveWindow();
+            if (root != null) {
+                java.util.List<AccessibilityNodeInfo> matches = root.findAccessibilityNodeInfosByViewId(packageName + ":id/travel_company_input");
+                if (!matches.isEmpty()) input = matches.get(0);
+            }
+            if (input == null) SystemClock.sleep(200);
+        }
+        assertNotNull(input);
+        Bundle text = new Bundle();
+        text.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, company);
+        assertTrue("Enterprise input did not accept text", input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, text));
+        AccessibilityNodeInfo root = getUiAutomation().getRootInActiveWindow();
+        java.util.List<AccessibilityNodeInfo> confirms = root.findAccessibilityNodeInfosByViewId(packageName + ":id/travel_company_confirm");
+        assertTrue("Enterprise confirmation is missing", !confirms.isEmpty());
+        assertTrue("Enterprise confirmation failed", confirms.get(0).performAction(AccessibilityNodeInfo.ACTION_CLICK));
+        final boolean[] selected = {false};
+        deadline = SystemClock.uptimeMillis() + 30000;
+        while (!selected[0] && SystemClock.uptimeMillis() < deadline) {
+            instrumentation.runOnMainSync(() -> selected[0] = company.equals(((TextView) activity.findViewById(id("xingdun_company_code"))).getText().toString().trim())
+                    && activity.findViewById(id("xingdun_primary_action")).isEnabled());
+            if (!selected[0]) SystemClock.sleep(200);
+        }
+        assertTrue("Enterprise selection did not complete through the UI", selected[0]);
+        capture("enterprise-selected");
+    }
+
+    private Activity logoutFromHome(Activity homeActivity) throws Exception {
+        Intent profile = new Intent().setClassName(packageName, "io.trtc.tuikit.chat.demo.main.MainActivity");
+        profile.putExtra("xingdun.target.tab", "profile");
+        profile.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        instrumentation.runOnMainSync(() -> homeActivity.startActivity(profile));
+        SystemClock.sleep(700);
+        String logoutLabel = getTargetContext().getString(getTargetContext().getResources().getIdentifier("md_logout", "string", packageName));
+        final View[] logout = {null};
+        instrumentation.runOnMainSync(() -> {
+            logout[0] = findDescription(homeActivity.getWindow().getDecorView(), logoutLabel);
+            if (logout[0] != null) {
+                logout[0].requestRectangleOnScreen(new android.graphics.Rect(0, 0, logout[0].getWidth(), logout[0].getHeight()), true);
+                logout[0].performClick();
+            }
+        });
+        assertNotNull(logout[0]);
+        SystemClock.sleep(500);
+        AccessibilityNodeInfo root = getUiAutomation().getRootInActiveWindow();
+        java.util.List<AccessibilityNodeInfo> buttons = root.findAccessibilityNodeInfosByViewId("android:id/button1");
+        assertTrue("Logout confirmation not shown", !buttons.isEmpty());
+        assertTrue("Logout confirmation failed", buttons.get(0).performAction(AccessibilityNodeInfo.ACTION_CLICK));
+        Activity login = null;
+        long loginDeadline = SystemClock.uptimeMillis() + 30000;
+        while (SystemClock.uptimeMillis() < loginDeadline) {
+            Activity current = resumedActivity;
+            if (current != null && current.getClass().getName().endsWith("XingDunLaunchActivity")) { login = current; break; }
+            SystemClock.sleep(200);
+        }
+        assertNotNull(login);
+        return login;
+    }
+
+    private Activity authenticationScreen() throws Exception {
+        if (resumedActivity == null) prepareFirstLaunch();
+        long deadline = SystemClock.uptimeMillis() + 45000;
+        while (SystemClock.uptimeMillis() < deadline) {
+            Activity current = resumedActivity;
+            if (current != null && current.getClass().getName().endsWith("MainActivity")) {
+                return logoutFromHome(current);
+            }
+            if (current != null && current.getClass().getName().endsWith("XingDunLaunchActivity")) {
+                final boolean[] ready = {false};
+                instrumentation.runOnMainSync(() -> {
+                    View action = current.findViewById(id("xingdun_primary_action"));
+                    ready[0] = action != null && action.isEnabled();
+                });
+                if (ready[0]) return current;
+            }
+            SystemClock.sleep(200);
+        }
+        throw new AssertionError("Startup did not settle on a ready login form or home");
+    }
+
     private void awaitHome() {
+        awaitHome(null);
+    }
+
+    private void awaitHome(Activity diagnosticActivity) {
         final String[] feedback = {""};
         long deadline = SystemClock.uptimeMillis() + 45000;
         while (SystemClock.uptimeMillis() < deadline) {
             Activity current = resumedActivity;
             if (current != null && current.getClass().getName().equals("io.trtc.tuikit.chat.demo.main.MainActivity")) return;
-            if (current != null) instrumentation.runOnMainSync(() -> {
-                TextView snackbar = current.findViewById(id("snackbar_text"));
+            Activity form = current != null ? current : diagnosticActivity;
+            if (form != null) instrumentation.runOnMainSync(() -> {
+                TextView status = form.findViewById(id("xingdun_launch_status"));
+                if (status != null && !status.getText().toString().isEmpty()) {
+                    feedback[0] = status.getText().toString();
+                }
+                TextView snackbar = form.findViewById(id("snackbar_text"));
                 if (snackbar != null && snackbar.getVisibility() == View.VISIBLE) {
                     feedback[0] = snackbar.getText().toString();
                 }
             });
             SystemClock.sleep(200);
         }
+        try { capture("authentication-timeout"); } catch (Exception ignored) {}
         fail("Authentication did not reach the real home activity. Displayed feedback: " + feedback[0]);
     }
 
@@ -211,9 +319,18 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
         String password = "Review_" + UUID.randomUUID().toString().substring(0, 8) + "!";
         String registrationClass = "io.trtc.tuikit.chat.demo.xingdun.launch.XingDunRegistrationActivity";
         String featureClass = "io.trtc.tuikit.chat.demo.main.MainActivity";
-        open("io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity");
-        SystemClock.sleep(2500);
-        Activity registration = open(registrationClass);
+        Activity launch = authenticationScreen();
+        prepareLoginForm(launch);
+        click(launch, "xingdun_switch_mode");
+        Activity openedRegistration = null;
+        long registrationDeadline = SystemClock.uptimeMillis() + 30000;
+        while (openedRegistration == null && SystemClock.uptimeMillis() < registrationDeadline) {
+            Activity current = resumedActivity;
+            if (current != null && current.getClass().getName().equals(registrationClass)) openedRegistration = current;
+            else SystemClock.sleep(200);
+        }
+        assertNotNull(openedRegistration);
+        Activity registration = openedRegistration;
         assertTrue("Registration form closed before loading the enterprise", !registration.isFinishing());
         text(registration, "xingdun_registration_username", username);
         text(registration, "xingdun_registration_password", password);
@@ -269,43 +386,14 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
         }
         assertNotNull(opened);
         if ("validation".equals(arguments.getString("mode"))) {
-            Activity homeActivity = opened;
-            Intent profile = new Intent().setClassName(packageName, featureClass);
-            profile.putExtra("xingdun.target.tab", "profile");
-            profile.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            instrumentation.runOnMainSync(() -> homeActivity.startActivity(profile));
-            SystemClock.sleep(700);
-            String logoutLabel = getTargetContext().getString(getTargetContext().getResources().getIdentifier("md_logout", "string", packageName));
-            final View[] logout = {null};
-            instrumentation.runOnMainSync(() -> {
-                logout[0] = findDescription(homeActivity.getWindow().getDecorView(), logoutLabel);
-                if (logout[0] != null) {
-                    logout[0].requestRectangleOnScreen(new android.graphics.Rect(0, 0, logout[0].getWidth(), logout[0].getHeight()), true);
-                    logout[0].performClick();
-                }
-            });
-            assertNotNull(logout[0]);
-            SystemClock.sleep(500);
-            AccessibilityNodeInfo root = getUiAutomation().getRootInActiveWindow();
-            java.util.List<AccessibilityNodeInfo> buttons = root.findAccessibilityNodeInfosByViewId("android:id/button1");
-            assertTrue("Logout confirmation not shown", !buttons.isEmpty());
-            assertTrue("Logout confirmation failed", buttons.get(0).performAction(AccessibilityNodeInfo.ACTION_CLICK));
-            Activity login = null;
-            long loginDeadline = SystemClock.uptimeMillis() + 30000;
-            while (SystemClock.uptimeMillis() < loginDeadline) {
-                Activity current = resumedActivity;
-                if (current != null && current.getClass().getName().endsWith("XingDunLaunchActivity")) { login = current; break; }
-                SystemClock.sleep(200);
-            }
-            assertNotNull(login);
-            SystemClock.sleep(2500);
-            Activity loginForm = login;
+            Activity loginForm = logoutFromHome(opened);
+            prepareLoginForm(loginForm);
             text(loginForm, "xingdun_username", username);
             text(loginForm, "xingdun_password", password);
             instrumentation.runOnMainSync(() -> ((CheckBox) loginForm.findViewById(id("xingdun_privacy_consent"))).setChecked(true));
             resumedActivity = null;
             click(loginForm, "xingdun_primary_action");
-            awaitHome();
+            awaitHome(loginForm);
             capture("login-after-registration");
         }
         File account = new File(proofDirectory(), "account-round-" + round + ".txt");
