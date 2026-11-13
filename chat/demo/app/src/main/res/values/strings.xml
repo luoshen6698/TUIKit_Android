@@ -955,6 +955,7 @@
     <string name="xingdun_save_invite_poster">Save poster</string>
     <string name="xingdun_invite_poster_saving">Saving</string>
     <string name="xingdun_invite_poster_saved">Invitation poster saved to Pictures.</string>
+    <string name="xingdun_invite_poster_saved_to_document">Invitation poster saved to the selected location.</string>
     <string name="xingdun_invite_poster_save_failed">Could not save the invitation poster. Please try again.</string>
     <string name="xingdun_invite_poster_permission_denied">Unable to save. Allow this app to access photos in system settings.</string>
     <string name="xingdun_copy_share_link">Copy share link</string>

@@ -37,7 +37,7 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
         Bundle result = new Bundle();
         try {
             String mode = arguments.getString("mode", "registration");
-            if (!("reopen".equals(mode) || "validation".equals(mode) ||
+            if (!("reopen".equals(mode) || "validation".equals(mode) || "poster".equals(mode) || "posterDocument".equals(mode) ||
                     ("registration".equals(mode) && arguments.containsKey("round")))) {
                 throw new IllegalArgumentException("Specify a review mode or registration round explicitly");
             }
@@ -57,7 +57,12 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
                 assertTrue("Installed APK channel mismatch", expectedChannel.equals(info.metaData.getString("com.xuyinfang.distribution.channel")));
             }
             if ("true".equals(arguments.getString("fresh"))) prepareFirstLaunch();
-            if ("reopen".equals(arguments.getString("mode"))) {
+            if ("poster".equals(mode) || "posterDocument".equals(mode)) {
+                reviewPosterStorage("posterDocument".equals(mode));
+                result.putString("stream", "Poster storage regression passed\n");
+                finish(Activity.RESULT_OK, result);
+                return;
+            } else if ("reopen".equals(arguments.getString("mode"))) {
                 resumedActivity = null;
                 Intent launch = new Intent().setClassName(packageName, "io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLaunchActivity");
                 launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
@@ -71,7 +76,9 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
             result.putString("stream", "Registration regression passed\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable error) {
-            result.putString("stream", error.getClass().getSimpleName() + ": " + error.getMessage() + "\n");
+            StringBuilder detail = new StringBuilder(error.getClass().getSimpleName() + ": " + error.getMessage() + "\n");
+            for (int i = 0; i < Math.min(5, error.getStackTrace().length); i++) detail.append(error.getStackTrace()[i]).append('\n');
+            result.putString("stream", detail.toString());
             finish(Activity.RESULT_CANCELED, result);
         }
     }
@@ -90,6 +97,136 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
 
     private static void fail(String message) {
         throw new AssertionError(message);
+    }
+
+    private View findText(View view, String text) {
+        if (view instanceof TextView && text.contentEquals(((TextView) view).getText())) return view;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View found = findText(group.getChildAt(i), text);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private String string(String name) {
+        int resource = getTargetContext().getResources().getIdentifier(name, "string", packageName);
+        Activity current = resumedActivity;
+        return current == null ? getTargetContext().getString(resource) : current.getString(resource);
+    }
+
+    private void clickText(Activity activity, String label) {
+        instrumentation.runOnMainSync(() -> {
+            View view = findText(activity.getWindow().getDecorView(), label);
+            assertNotNull(view);
+            while (!view.isClickable() && view.getParent() instanceof View) view = (View) view.getParent();
+            view.requestRectangleOnScreen(new android.graphics.Rect(0, 0, view.getWidth(), view.getHeight()), true);
+            assertTrue("Poster control disabled", view.isEnabled());
+            assertTrue("Poster control did not respond", view.performClick());
+        });
+    }
+
+    private void assertStorageNotGranted() {
+        for (String permission : new String[]{"android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"}) {
+            assertTrue("Storage permission unexpectedly granted", getTargetContext().checkSelfPermission(permission)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED);
+        }
+        AccessibilityNodeInfo root = getUiAutomation().getRootInActiveWindow();
+        long deadline = SystemClock.uptimeMillis() + 5000;
+        while (root == null && SystemClock.uptimeMillis() < deadline) {
+            SystemClock.sleep(200);
+            root = getUiAutomation().getRootInActiveWindow();
+        }
+        assertTrue("No foreground UI for permission verification", root != null);
+        String owner = String.valueOf(root.getPackageName());
+        assertTrue("Unexpected runtime permission prompt", !owner.contains("permissioncontroller") && !owner.contains("packageinstaller"));
+    }
+
+    private void reviewPosterStorage(boolean documentFlow) throws Exception {
+        open("io.trtc.tuikit.chat.demo.xingdun.launch.XingDunStartupActivity");
+        awaitHome();
+        SystemClock.sleep(1500);
+        assertStorageNotGranted();
+        Intent intent = new Intent().setClassName(packageName,
+                "io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity");
+        intent.putExtra("mode", "invite").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        Activity activity = startActivitySync(intent);
+        final Bitmap[] poster = {null};
+        long deadline = SystemClock.uptimeMillis() + 45000;
+        while (poster[0] == null && SystemClock.uptimeMillis() < deadline) {
+            instrumentation.runOnMainSync(() -> {
+                View image = findDescription(activity.getWindow().getDecorView(), string("xingdun_invite_poster_description"));
+                if (image instanceof android.widget.ImageView) {
+                    android.graphics.drawable.Drawable drawable = ((android.widget.ImageView) image).getDrawable();
+                    if (drawable instanceof android.graphics.drawable.BitmapDrawable) {
+                        poster[0] = ((android.graphics.drawable.BitmapDrawable) drawable).getBitmap();
+                    }
+                }
+            });
+            if (poster[0] == null) SystemClock.sleep(200);
+        }
+        assertNotNull(poster[0]);
+        assertTrue("Poster image is incomplete", poster[0].getWidth() == 1080 && poster[0].getHeight() == 1440);
+        SystemClock.sleep(1500);
+        assertStorageNotGranted();
+        capture("poster-preview");
+        clickText(activity, string("xingdun_copy_share_link"));
+        assertStorageNotGranted();
+
+        if (!documentFlow) {
+            clickText(activity, string("xingdun_save_invite_poster"));
+        } else {
+            // Exercise the production legacy result callback using the real system picker.
+            // SDK selection is checked by unit tests; this does not pretend the phone is API 28.
+            java.lang.reflect.Field pending = activity.getClass().getDeclaredField(arguments.getString("pendingPosterField"));
+            java.lang.reflect.Field launcherField = activity.getClass().getDeclaredField(arguments.getString("posterDocumentField"));
+            pending.setAccessible(true);
+            launcherField.setAccessible(true);
+            final Throwable[] failure = {null};
+            instrumentation.runOnMainSync(() -> {
+                try {
+                    pending.set(activity, poster[0]);
+                    Object launcher = launcherField.get(activity);
+                    java.lang.reflect.Method launch = null;
+                    for (Class<?> type = launcher.getClass(); type != null && launch == null; type = type.getSuperclass()) {
+                        for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
+                            int count = method.getParameterCount();
+                            if (method.getReturnType() == Void.TYPE && (count == 1 || count == 2)
+                                    && method.getParameterTypes()[0].isAssignableFrom(String.class)) { launch = method; break; }
+                        }
+                    }
+                    assertNotNull(launch);
+                    launch.setAccessible(true);
+                    String name = arguments.getString("documentName", "vivo_poster_review.png");
+                    if (launch.getParameterCount() == 1) launch.invoke(launcher, name);
+                    else launch.invoke(launcher, name, null);
+                } catch (Throwable error) { failure[0] = error; }
+            });
+            if (failure[0] != null) throw new AssertionError("Document picker launch failed: " + failure[0], failure[0]);
+            System.out.println("POSTER_DOCUMENT_PICKER_READY");
+            deadline = SystemClock.uptimeMillis() + 120000;
+            while (pending.get(activity) != null && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(250);
+            assertTrue("System picker did not return", pending.get(activity) == null);
+            if ("cancel".equals(arguments.getString("documentAction"))) {
+                SystemClock.sleep(800);
+                clickText(activity, string("xingdun_copy_share_link"));
+                assertStorageNotGranted();
+                capture("poster-document-cancel");
+                return;
+            }
+        }
+        String saved = string(documentFlow ? "xingdun_invite_poster_saved_to_document" : "xingdun_invite_poster_saved");
+        final boolean[] success = {false};
+        deadline = SystemClock.uptimeMillis() + 30000;
+        while (!success[0] && SystemClock.uptimeMillis() < deadline) {
+            instrumentation.runOnMainSync(() -> success[0] = findText(activity.getWindow().getDecorView(), saved) != null);
+            if (!success[0]) SystemClock.sleep(200);
+        }
+        assertTrue("Poster save did not succeed", success[0]);
+        assertStorageNotGranted();
+        capture(documentFlow ? "poster-document-saved" : "poster-pictures-saved");
     }
     private final String packageName = "com.xuyinfang.app";
 

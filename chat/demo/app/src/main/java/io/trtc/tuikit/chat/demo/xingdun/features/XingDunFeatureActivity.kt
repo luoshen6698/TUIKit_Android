@@ -335,14 +335,13 @@ open class XingDunFeatureActivity : BaseActivity() {
         if (conversationID.isNotEmpty()) forwardFavoriteText(conversationID, text)
     }
 
-    private val invitePosterStoragePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    private val invitePosterDocument = registerForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { destination ->
         val poster = pendingInvitePoster
         pendingInvitePoster = null
-        if (granted && poster != null) {
-            performInvitePosterSave(poster)
+        if (destination != null && poster != null) {
+            performInvitePosterSave(poster, destination)
         } else {
             setInvitePosterSaving(false)
-            showInvitePosterSettingsPrompt()
         }
     }
 
@@ -1744,29 +1743,41 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun saveInvitePoster(poster: Bitmap) {
         if (invitePosterSaving) return
         setInvitePosterSaving(true)
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (XingDunImageDelivery.needsUserSelectedDestination()) {
             pendingInvitePoster = poster
-            invitePosterStoragePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            runCatching {
+                invitePosterDocument.launch("xingdun_invite_${System.currentTimeMillis()}.png")
+            }.onFailure {
+                pendingInvitePoster = null
+                setInvitePosterSaving(false)
+                showInvitePosterFeedback(R.string.xingdun_invite_poster_save_failed)
+            }
             return
         }
         performInvitePosterSave(poster)
     }
 
-    private fun performInvitePosterSave(poster: Bitmap) {
+    private fun performInvitePosterSave(poster: Bitmap, destination: Uri? = null) {
         lifecycleScope.launch {
             setBusy(true)
             runCatching {
-                XingDunImageDelivery.saveToPictures(
-                    this@XingDunFeatureActivity,
-                    poster,
-                    "xingdun_invite_${System.currentTimeMillis()}.png",
-                )
+                if (destination != null) {
+                    XingDunImageDelivery.saveToDocument(this@XingDunFeatureActivity, poster, destination)
+                } else {
+                    XingDunImageDelivery.saveToPictures(
+                        this@XingDunFeatureActivity,
+                        poster,
+                        "xingdun_invite_${System.currentTimeMillis()}.png",
+                    )
+                }
             }.onSuccess {
                 setInvitePosterSaving(false)
                 setBusy(false)
-                showInvitePosterFeedback(R.string.xingdun_invite_poster_saved)
+                showInvitePosterFeedback(if (destination == null) {
+                    R.string.xingdun_invite_poster_saved
+                } else {
+                    R.string.xingdun_invite_poster_saved_to_document
+                })
             }.onFailure {
                 setInvitePosterSaving(false)
                 setBusy(false)
@@ -1789,16 +1800,6 @@ open class XingDunFeatureActivity : BaseActivity() {
     private fun showInvitePosterFeedback(message: Int) {
         status.setText(message)
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-    }
-
-    private fun showInvitePosterSettingsPrompt() {
-        AlertDialog.Builder(this)
-            .setMessage(R.string.xingdun_invite_poster_permission_denied)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.xingdun_open_settings) { _, _ ->
-                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
-            }
-            .show()
     }
 
     private fun showFeedbackForm() {

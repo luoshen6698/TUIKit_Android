@@ -18,6 +18,15 @@ import java.io.FileOutputStream
 /** Shared image save/share primitives for XingDun QR-code pages. */
 internal object XingDunImageDelivery {
 
+    fun needsUserSelectedDestination(sdkInt: Int = Build.VERSION.SDK_INT): Boolean =
+        sdkInt < Build.VERSION_CODES.Q
+
+    suspend fun saveToDocument(context: Context, bitmap: Bitmap, destination: Uri) = withContext(Dispatchers.IO) {
+        context.contentResolver.openOutputStream(destination, "w")?.use { output ->
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+        } ?: error("Unable to write image")
+    }
+
     suspend fun saveToPictures(context: Context, bitmap: Bitmap, fileName: String) = withContext(Dispatchers.IO) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
