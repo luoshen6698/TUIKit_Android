@@ -86,6 +86,14 @@ class XingDunStartupActivity : AppCompatActivity() {
         val splashScreen = installSplashScreen()
         setTheme(R.style.TravelAuthTheme)
         super.onCreate(savedInstanceState)
+        // A vendor push URI is an envelope, not an enterprise invitation. Preserve its extras
+        // for the account-scoped notification reader after consent/authentication.
+        val entry = intent
+        if (entry?.component?.className == "com.tencent.qcloud.tim.push.TIMPushOpenActivity" ||
+            (entry?.data?.scheme == "pushscheme" && entry.data?.host == "com.tencent.qcloud.uniapp" &&
+                entry.data?.path == "/detail")) {
+            intent = Intent(entry).apply { data = null }
+        }
         XingDunRouter.markStartupPending()
         setContentView(R.layout.xingdun_activity_startup_loading)
         startupStatusView = findViewById(R.id.xingdun_startup_status)

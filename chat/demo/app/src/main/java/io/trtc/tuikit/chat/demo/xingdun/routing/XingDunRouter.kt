@@ -8,6 +8,7 @@ import com.tencent.qcloud.tuicore.TUILogin
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import io.trtc.tuikit.chat.demo.chat.ChatActivity
 import io.trtc.tuikit.chat.demo.main.MainActivity
+import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunStartupActivity
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryState
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
@@ -34,8 +35,18 @@ object XingDunRouter {
         navigationReadyScope = currentScope()?.key
     }
 
+    @Synchronized
     fun routeNotification(extension: String?) {
-        if (stageNotification(extension)) consumePendingRoute()
+        if (!stageNotification(extension)) return
+        if (navigationReadyScope != currentScope()?.key) {
+            // The vendor click activity can finish without opening our launcher on a cold start.
+            // Keep the account-scoped destination and run the normal authenticated startup first.
+            appContext.startActivity(Intent(appContext, XingDunStartupActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            })
+        } else {
+            consumePendingRoute()
+        }
     }
 
     /** Launcher intents stage only; authentication/Main owns the subsequent safe consumption. */

@@ -76,6 +76,21 @@
             </intent-filter>
         </activity>
 
+        <!-- Keep existing vendor/cached PendingIntent components, but enter the consent and
+             authenticated startup before any SDK click processor can require an IM session. -->
+        <activity android:name="com.tencent.qcloud.tim.push.TIMPushOpenActivity" tools:node="remove" />
+        <activity-alias
+            android:name="com.tencent.qcloud.tim.push.TIMPushOpenActivity"
+            android:targetActivity="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunStartupActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="pushscheme" android:host="com.tencent.qcloud.uniapp" android:path="/detail" />
+            </intent-filter>
+        </activity-alias>
+
         <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.legal.XingDunLegalActivity"
             android:exported="false"
