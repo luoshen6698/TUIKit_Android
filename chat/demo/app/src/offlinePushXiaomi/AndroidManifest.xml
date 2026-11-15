@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <provider android:name="com.tencent.timpush.xiaomi.TIMPushXiaoMiService" tools:node="remove" />
+        <provider android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunXiaomiPushInitializer"
+            android:authorities="${applicationId}.xiaomiPush.Init"
+            android:exported="false" android:initOrder="8001" />
+        <receiver android:name="com.tencent.timpush.xiaomi.TIMPushXiaoMiMsgReceiver" tools:node="remove" />
+        <receiver android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunXiaomiPushMessageReceiver" android:exported="true">
+            <intent-filter><action android:name="com.xiaomi.mipush.RECEIVE_MESSAGE" /></intent-filter>
+            <intent-filter><action android:name="com.xiaomi.mipush.MESSAGE_ARRIVED" /></intent-filter>
+            <intent-filter><action android:name="com.xiaomi.mipush.ERROR" /></intent-filter>
+        </receiver>
+    </application>
+</manifest>

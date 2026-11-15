@@ -1,3 +1,7 @@
+import java.security.KeyStore
+import java.security.MessageDigest
+import groovy.json.JsonSlurper
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -17,10 +21,26 @@ val offlinePushEnabled = (findProperty("XINGDUN_OFFLINE_PUSH_ENABLED") as String
     it.toBoolean()
 }
 
+val clientReleaseChannel = (findProperty("XINGDUN_RELEASE_CHANNEL") as String? ?: System.getenv("XINGDUN_RELEASE_CHANNEL")) ?: "universal"
+// Each store channel includes its vendor bridge and the existing Huawei fallback.
+val dedicatedXiaomiPushEnabled = offlinePushEnabled && clientReleaseChannel == "xiaomi"
+val dedicatedOPPOPushEnabled = offlinePushEnabled && clientReleaseChannel == "oppo"
+val dedicatedVivoPushEnabled = offlinePushEnabled && clientReleaseChannel == "vivo"
+val dedicatedHonorPushEnabled = offlinePushEnabled && clientReleaseChannel == "honor"
+val otherVendorPushEnabled = offlinePushEnabled && clientReleaseChannel !in setOf("huawei", "xiaomi", "vivo", "oppo", "honor")
+
+val releaseApplicationId = "com.xuyinfang.app"
+val pushConfigFile = file("src/main/assets/timpush-configs.json")
+val pushConfiguration = if (offlinePushEnabled && pushConfigFile.isFile) {
+    JsonSlurper().parse(pushConfigFile) as? Map<*, *>
+} else null
+val packagePushConfiguration = pushConfiguration?.get(releaseApplicationId) as? Map<*, *>
+val pushPlaceholders = packagePushConfiguration?.get("manifestPlaceholders") as? Map<*, *>
+
 if (offlinePushEnabled && file("agconnect-services.json").isFile) {
     apply(plugin = "com.huawei.agconnect")
 }
-if (offlinePushEnabled && file("mcs-services.json").isFile) {
+if ((dedicatedHonorPushEnabled || otherVendorPushEnabled) && file("mcs-services.json").isFile) {
     apply(plugin = "com.hihonor.mcs.asplugin")
 }
 
@@ -31,11 +51,11 @@ val appVersionName = (findProperty("VERSION_NAME") as String?
 val apiBaseUrl = (findProperty("XINGDUN_API_BASE_URL") as String?
     ?: System.getenv("XINGDUN_API_BASE_URL")) ?: "https://api.xuyinfang365.bid/prod/im/v1"
 val honorAppId = (findProperty("HONOR_APPID") as String?
-    ?: System.getenv("HONOR_APPID")).orEmpty()
+    ?: System.getenv("HONOR_APPID") ?: pushPlaceholders?.get("HONOR_APPID")?.toString()).orEmpty()
 val vivoAppId = (findProperty("VIVO_APPID") as String?
-    ?: System.getenv("VIVO_APPID")).orEmpty()
+    ?: System.getenv("VIVO_APPID") ?: pushPlaceholders?.get("VIVO_APPID")?.toString()).orEmpty()
 val vivoAppKey = (findProperty("VIVO_APPKEY") as String?
-    ?: System.getenv("VIVO_APPKEY")).orEmpty()
+    ?: System.getenv("VIVO_APPKEY") ?: pushPlaceholders?.get("VIVO_APPKEY")?.toString()).orEmpty()
 val releaseStorePath = System.getenv("XINGDUN_RELEASE_STORE_FILE").orEmpty()
 val releaseStorePassword = System.getenv("XINGDUN_RELEASE_STORE_PASSWORD").orEmpty()
 val releaseKeyAlias = System.getenv("XINGDUN_RELEASE_KEY_ALIAS").orEmpty()
@@ -56,12 +76,18 @@ val debugUseReleaseSigning = (findProperty("XINGDUN_DEBUG_USE_RELEASE_SIGNING") 
 val offlinePushManifest = layout.buildDirectory.file("generated/offlinePush/AndroidManifest.xml")
 val generateOfflinePushManifest by tasks.registering {
     val mainManifest = file("src/main/AndroidManifest.xml")
-    val pushManifest = file("src/offlinePush/AndroidManifest.xml")
-    inputs.files(mainManifest, pushManifest)
+    val pushManifests = listOf(file("src/offlinePush/AndroidManifest.xml")) +
+        (if (otherVendorPushEnabled) listOf(file("src/offlinePushOther/AndroidManifest.xml")) else emptyList()) +
+        (if (dedicatedHonorPushEnabled) listOf(file("src/offlinePushHonor/AndroidManifest.xml")) else emptyList()) +
+        (if (dedicatedXiaomiPushEnabled) listOf(file("src/offlinePushXiaomi/AndroidManifest.xml")) else emptyList()) +
+        (if (dedicatedOPPOPushEnabled) listOf(file("src/offlinePushOPPO/AndroidManifest.xml")) else emptyList()) +
+        (if (dedicatedVivoPushEnabled) listOf(file("src/offlinePushVivo/AndroidManifest.xml")) else emptyList())
+    inputs.files(mainManifest, pushManifests)
     outputs.file(offlinePushManifest)
     doLast {
-        val pushDeclarations = pushManifest.readText()
-            .substringAfter("<application>").substringBefore("</application>")
+        val pushDeclarations = pushManifests.joinToString("\n") {
+            it.readText().substringAfter("<application>").substringBefore("</application>")
+        }
         val output = offlinePushManifest.get().asFile
         output.parentFile.mkdirs()
         output.writeText(mainManifest.readText().replace("</application>", "$pushDeclarations\n    </application>"))
@@ -69,7 +95,6 @@ val generateOfflinePushManifest by tasks.registering {
 }
 
 val clientAppCode = (findProperty("XINGDUN_APP_CODE") as String? ?: System.getenv("XINGDUN_APP_CODE")) ?: "xuyinfang"
-val clientReleaseChannel = (findProperty("XINGDUN_RELEASE_CHANNEL") as String? ?: System.getenv("XINGDUN_RELEASE_CHANNEL")) ?: "universal"
 require(Regex("^[a-z][a-z0-9_-]{0,31}$").matches(clientAppCode)) { "Invalid XINGDUN_APP_CODE" }
 require(Regex("^[a-z][a-z0-9_-]{0,31}$").matches(clientReleaseChannel)) { "Invalid XINGDUN_RELEASE_CHANNEL" }
 
@@ -79,13 +104,30 @@ android {
     )
     if (offlinePushEnabled) {
         sourceSets.getByName("main").manifest.srcFile(offlinePushManifest.get().asFile)
+        if (otherVendorPushEnabled) {
+            sourceSets.getByName("main").java.srcDir("src/offlinePushOther/java")
+        }
+        if (dedicatedXiaomiPushEnabled) {
+            sourceSets.getByName("main").java.srcDir("src/offlinePushXiaomi/java")
+        }
+        if (dedicatedOPPOPushEnabled) {
+            sourceSets.getByName("main").java.srcDir("src/offlinePushOPPO/java")
+        }
+        if (dedicatedVivoPushEnabled) {
+            sourceSets.getByName("main").java.srcDir("src/offlinePushVivo/java")
+        }
+        if (dedicatedHonorPushEnabled) {
+            sourceSets.getByName("main").java.srcDir("src/offlinePushHonor/java")
+        }
+    } else {
+        androidResources.ignoreAssetsPatterns.add("!timpush-configs.json")
     }
     namespace = "io.trtc.tuikit.chat.app"
     compileSdk = 36
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "com.xingdunim.app"
+        applicationId = releaseApplicationId
         minSdk = 23
         targetSdk = 36
         versionCode = appVersionCode
@@ -155,24 +197,85 @@ val verifyReleaseConfiguration by tasks.registering {
             "Release signing requires XINGDUN_RELEASE_STORE_FILE, XINGDUN_RELEASE_STORE_PASSWORD, " +
                 "XINGDUN_RELEASE_KEY_ALIAS and XINGDUN_RELEASE_KEY_PASSWORD."
         }
+        // The package was filed with this existing certificate. Reject accidental key changes.
+        val releaseKeyStore = KeyStore.getInstance("PKCS12")
+        file(releaseStorePath).inputStream().use {
+            releaseKeyStore.load(it, releaseStorePassword.toCharArray())
+        }
+        check(releaseKeyStore.isKeyEntry(releaseKeyAlias)) {
+            "The filed Xuyinfang private-key alias is missing."
+        }
+        val releaseCertificate = releaseKeyStore.getCertificate(releaseKeyAlias).encoded
+        val releaseCertificateSha256 = MessageDigest.getInstance("SHA-256")
+            .digest(releaseCertificate).joinToString("") { "%02x".format(it) }
+        check(releaseCertificateSha256 ==
+            "a91fe88accabec6d404da6f93e8f1494f52b12c617c142d91d6cee6f25dc82ff") {
+            "Release certificate does not match the filed Xuyinfang certificate."
+        }
         if (!offlinePushEnabled) {
             logger.lifecycle("Offline push disabled: TIMPush and vendor SDKs are excluded from this build.")
             return@doLast
         }
-        val requiredFiles = listOf(
-            file("src/main/assets/timpush-configs.json"),
-            file("agconnect-services.json"),
-            file("mcs-services.json")
-        )
+        val requiredFiles = listOf(pushConfigFile, file("agconnect-services.json")) +
+            if (dedicatedHonorPushEnabled || otherVendorPushEnabled) listOf(file("mcs-services.json")) else emptyList()
         val missingFiles = requiredFiles.filterNot { it.isFile }.map { it.relativeTo(projectDir).path }
         check(missingFiles.isEmpty()) {
             "Missing release vendor configuration: ${missingFiles.joinToString()}"
         }
-        check(honorAppId.isNotBlank()) {
-            "Release Honor push requires HONOR_APPID."
+        check(packagePushConfiguration != null) {
+            "Push configuration must contain the current package $releaseApplicationId; do not reuse another app's credentials."
         }
-        check(vivoAppId.isNotBlank() && vivoAppKey.isNotBlank()) {
-            "Release vivo push requires VIVO_APPID and VIVO_APPKEY."
+        val huaweiConfig = JsonSlurper().parse(file("agconnect-services.json")) as Map<*, *>
+        val huaweiClient = huaweiConfig["client"] as? Map<*, *>
+        val huaweiApps = huaweiConfig["appInfos"] as? List<*>
+        check(huaweiClient?.get("package_name") == releaseApplicationId ||
+            huaweiApps?.any { (it as? Map<*, *>)?.get("package_name") == releaseApplicationId } == true) {
+            "Huawei configuration does not contain the current package $releaseApplicationId."
+        }
+        val vendors = when {
+            otherVendorPushEnabled -> listOf("huawei", "honor", "xiaomi", "oppo", "vivo")
+            dedicatedXiaomiPushEnabled -> listOf("huawei", "xiaomi")
+            dedicatedOPPOPushEnabled -> listOf("huawei", "oppo")
+            dedicatedVivoPushEnabled -> listOf("huawei", "vivo")
+            dedicatedHonorPushEnabled -> listOf("huawei", "honor")
+            else -> listOf("huawei")
+        }
+        for (vendor in vendors) {
+            check(packagePushConfiguration["${vendor}PushBussinessId"]?.toString()?.toLongOrNull()?.let { it > 0 } == true) {
+                "Missing Tencent push certificate for $vendor and $releaseApplicationId."
+            }
+        }
+        if (dedicatedVivoPushEnabled || otherVendorPushEnabled) {
+            check(vivoAppId.isNotBlank() && vivoAppKey.isNotBlank() &&
+                vivoAppId != "0" && vivoAppKey != "0") {
+                "Release vivo push requires VIVO_APPID and VIVO_APPKEY."
+            }
+            check(vivoAppId == pushPlaceholders?.get("VIVO_APPID")?.toString() &&
+                vivoAppKey == pushPlaceholders?.get("VIVO_APPKEY")?.toString()) {
+                "Vivo manifest parameters must match the current package's Tencent push configuration."
+            }
+        }
+        if (dedicatedHonorPushEnabled || otherVendorPushEnabled) {
+            val honorConfig = JsonSlurper().parse(file("mcs-services.json")) as Map<*, *>
+            check(honorConfig["package_name"] == releaseApplicationId) {
+                "Honor configuration does not match the current package $releaseApplicationId."
+            }
+            check(honorAppId.isNotBlank() && honorAppId != "0") {
+                "Release Honor push requires HONOR_APPID."
+            }
+            check(honorAppId == honorConfig["app_id"]?.toString()) {
+                "Honor manifest AppID must match the downloaded Honor application configuration."
+            }
+        }
+        if (!otherVendorPushEnabled) {
+            val huaweiAppId = huaweiClient?.get("app_id")?.toString()
+            check(huaweiClient?.get("package_name") == releaseApplicationId && huaweiAppId == "119729931") {
+                "Huawei release requires the Xuyinfang Huawei AppGallery Connect application."
+            }
+            check(pushConfiguration?.keys?.all { it == "version" || it == releaseApplicationId } == true) {
+                "Huawei release must not bundle push configuration for another application."
+            }
+            return@doLast
         }
     }
 }
@@ -198,9 +301,17 @@ dependencies {
     if (offlinePushEnabled) {
         implementation("com.tencent.timpush:timpush:9.0.7652")
         implementation("com.tencent.timpush:huawei:9.0.7652")
+    }
+    if (dedicatedHonorPushEnabled || otherVendorPushEnabled) {
         implementation("com.tencent.timpush:honor:9.0.7652")
+    }
+    if (dedicatedXiaomiPushEnabled || otherVendorPushEnabled) {
         implementation("com.tencent.timpush:xiaomi:9.0.7652")
+    }
+    if (dedicatedOPPOPushEnabled || otherVendorPushEnabled) {
         implementation("com.tencent.timpush:oppo:9.0.7652")
+    }
+    if (dedicatedVivoPushEnabled || otherVendorPushEnabled) {
         implementation("com.tencent.timpush:vivo:9.0.7652")
     }
     implementation("com.tencent:mmkv:2.4.0")

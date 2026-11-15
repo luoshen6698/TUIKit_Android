@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <provider android:name="com.tencent.timpush.oppo.TIMPushOPPOService" tools:node="remove" />
+        <provider android:name="io.trtc.tuikit.chat.demo.xingdun.push.XingDunOPPOPushInitializer"
+            android:authorities="${applicationId}.oppoPush.Init"
+            android:exported="false" android:initOrder="8001" />
+    </application>
+</manifest>

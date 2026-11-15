@@ -46,7 +46,8 @@ internal object MessageOfflinePushInfoFactory {
         )
         return mapOf(
             "ext" to ext,
-            "AndroidOPPOChannelID" to "tuikit",
+            "AndroidOPPOCategory" to "IM",
+            "AndroidOPPONotifyLevel" to 2,
             "AndroidHuaWeiCategory" to "IM",
             "AndroidVIVOCategory" to "IM",
             "AndroidHonorImportance" to "NORMAL",
