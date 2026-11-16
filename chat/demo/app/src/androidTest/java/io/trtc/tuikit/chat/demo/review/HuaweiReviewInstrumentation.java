@@ -37,7 +37,7 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
         Bundle result = new Bundle();
         try {
             String mode = arguments.getString("mode", "registration");
-            if (!("reopen".equals(mode) || "validation".equals(mode) || "poster".equals(mode) || "posterDocument".equals(mode) ||
+            if (!("reopen".equals(mode) || "validation".equals(mode) || "legal".equals(mode) || "poster".equals(mode) || "posterDocument".equals(mode) ||
                     ("registration".equals(mode) && arguments.containsKey("round")))) {
                 throw new IllegalArgumentException("Specify a review mode or registration round explicitly");
             }
@@ -55,6 +55,12 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
                 android.content.pm.ApplicationInfo info = getTargetContext().getPackageManager()
                         .getApplicationInfo(packageName, android.content.pm.PackageManager.GET_META_DATA);
                 assertTrue("Installed APK channel mismatch", expectedChannel.equals(info.metaData.getString("com.xuyinfang.distribution.channel")));
+            }
+            if ("legal".equals(mode)) {
+                reviewFirstLaunchLegal();
+                result.putString("stream", "First-launch legal documents regression passed\n");
+                finish(Activity.RESULT_OK, result);
+                return;
             }
             if ("true".equals(arguments.getString("fresh"))) prepareFirstLaunch();
             if ("poster".equals(mode) || "posterDocument".equals(mode)) {
@@ -126,6 +132,86 @@ public class HuaweiReviewInstrumentation extends Instrumentation {
             assertTrue("Poster control disabled", view.isEnabled());
             assertTrue("Poster control did not respond", view.performClick());
         });
+    }
+
+    private android.webkit.WebView findWebView(View view) {
+        if (view instanceof android.webkit.WebView) return (android.webkit.WebView) view;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                android.webkit.WebView found = findWebView(group.getChildAt(i));
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private void reviewFirstLaunchLegal() throws Exception {
+        // onStart runs on the instrumentation thread; let Application.onCreate finish
+        // before changing the receipt used by its consent guard.
+        instrumentation.waitForIdleSync();
+        File receipt = new File(getTargetContext().getNoBackupFilesDir(), "xingdun-privacy-consent");
+        byte[] previous = receipt.exists() ? java.nio.file.Files.readAllBytes(receipt.toPath()) : null;
+        try {
+            assertTrue("Cannot temporarily reset consent for first-launch test", !receipt.exists() || receipt.delete());
+            open("io.trtc.tuikit.chat.demo.xingdun.launch.XingDunStartupActivity");
+            for (String key : new String[]{"xingdun_user_agreement_link", "xingdun_privacy_policy_link"}) {
+                String label = string(key);
+                boolean clicked = false;
+                long deadline = SystemClock.uptimeMillis() + 15000;
+                while (!clicked && SystemClock.uptimeMillis() < deadline) {
+                    AccessibilityNodeInfo root = getUiAutomation().getRootInActiveWindow();
+                    if (root != null) for (AccessibilityNodeInfo node : root.findAccessibilityNodeInfosByText(label)) {
+                        if (label.contentEquals(node.getText()) && node.isClickable()) {
+                            clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                            break;
+                        }
+                    }
+                    if (!clicked) SystemClock.sleep(200);
+                }
+                assertTrue("First privacy dialog link not found: " + key, clicked);
+                android.webkit.WebView[] reader = {null};
+                deadline = SystemClock.uptimeMillis() + 15000;
+                while (reader[0] == null && SystemClock.uptimeMillis() < deadline) {
+                    instrumentation.runOnMainSync(() -> {
+                        Activity current = resumedActivity;
+                        if (current != null) reader[0] = findWebView(current.getWindow().getDecorView());
+                    });
+                    if (reader[0] == null) SystemClock.sleep(200);
+                }
+                assertNotNull(reader[0]);
+                Activity legal = resumedActivity;
+                if ("true".equals(arguments.getString("blockLegalNetwork"))) {
+                    instrumentation.runOnMainSync(() -> {
+                        reader[0].getSettings().setBlockNetworkLoads(true);
+                        reader[0].reload();
+                    });
+                    SystemClock.sleep(1200);
+                }
+                String expected = key.contains("agreement") ? "叙音坊用户协议" : "叙音坊隐私政策";
+                boolean loaded = false;
+                deadline = SystemClock.uptimeMillis() + 18000;
+                while (!loaded && SystemClock.uptimeMillis() < deadline) {
+                    boolean[] rendered = {false};
+                    instrumentation.runOnMainSync(() -> rendered[0] = reader[0].getVisibility() == View.VISIBLE
+                            && expected.equals(reader[0].getTitle()) && reader[0].getProgress() == 100
+                            && reader[0].getContentHeight() > 500
+                            && !findText(legal.getWindow().getDecorView(), string("xingdun_legal_load_failed")).isShown());
+                    loaded = rendered[0];
+                    if (!loaded) SystemClock.sleep(250);
+                }
+                capture(key + ("true".equals(arguments.getString("blockLegalNetwork")) ? "-offline" : "-online"));
+                assertTrue("Legal document did not render: " + key, loaded);
+                assertTrue("Viewing a document must not accept consent", !receipt.exists());
+                clickText(legal, string("xingdun_back"));
+                SystemClock.sleep(500);
+            }
+            assertTrue("Returning to privacy dialog must not accept consent", !receipt.exists());
+            capture("first-privacy-after-reading");
+        } finally {
+            if (previous == null) receipt.delete();
+            else java.nio.file.Files.write(receipt.toPath(), previous);
+        }
     }
 
     private void assertStorageNotGranted() {

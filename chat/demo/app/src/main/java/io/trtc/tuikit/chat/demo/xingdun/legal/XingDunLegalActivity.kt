@@ -23,7 +23,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import io.trtc.tuikit.chat.app.R
 
-/** Android reads the public Chinese website, including before sign-in. */
+/** Read the versioned copy of the public Android documents even before network access. */
 class XingDunLegalActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var source: TextView
@@ -68,7 +68,7 @@ class XingDunLegalActivity : AppCompatActivity() {
             })
             addView(Button(this@XingDunLegalActivity).apply {
                 setText(R.string.xingdun_retry)
-                setOnClickListener { loadRemote() }
+                setOnClickListener { loadDocument() }
             })
         }
         root.addView(errorPanel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -88,13 +88,21 @@ class XingDunLegalActivity : AppCompatActivity() {
         }
         setContentView(root)
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                if (!request.isForMainFrame || request.method != "GET") return null
+                val document = XingDunLegalDocuments.documentType(request.url.toString()) ?: return null
+                // Both files are shipped with this release and match the published legal text.
+                // Keep the HTTPS origin and relative links without requiring DNS/TLS before consent.
+                return WebResourceResponse("text/html", "UTF-8", assets.open(XingDunLegalDocuments.assetPath(document)))
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
                 val nextPrivacy = XingDunLegalDocuments.documentType(uri.toString())
                 if (nextPrivacy != null) {
                     if (nextPrivacy != privacy) {
                         privacy = nextPrivacy
-                        loadRemote()
+                        loadDocument()
                         return true
                     }
                     return false
@@ -127,10 +135,10 @@ class XingDunLegalActivity : AppCompatActivity() {
                 }
             }
         }
-        loadRemote()
+        loadDocument()
     }
 
-    private fun loadRemote() {
+    private fun loadDocument() {
         webView.stopLoading()
         failed = false
         source.text = "www.xuyinfang365.bid · Android · 简体中文"

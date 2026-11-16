@@ -10,6 +10,7 @@ object XingDunLegalDocuments {
 
     fun fileName(privacy: Boolean) = if (privacy) PRIVACY_FILE else AGREEMENT_FILE
     fun url(privacy: Boolean) = BASE_URL + fileName(privacy)
+    fun assetPath(privacy: Boolean) = "legal/" + fileName(privacy)
 
     fun documentType(value: String): Boolean? = when (value.substringBefore('#')) {
         url(true) -> true
