@@ -1,0 +1,36 @@
+<resources>
+    <string name="plan_new">New itinerary</string>
+    <string name="plan_edit">Edit itinerary</string>
+    <string name="plan_hint">Plan each day, meeting points and responsibilities. Saved plans are private until you choose to share a snapshot.</string>
+    <string name="plan_start">Start date</string>
+    <string name="plan_end">End date</string>
+    <string name="plan_dates_error">Choose valid dates in order, up to 60 days.</string>
+    <string name="plan_budget_hint">Budget is optional. Enter an amount or range, such as 800-1500.</string>
+    <string name="plan_budget_error">Enter a valid amount or budget range.</string>
+    <string name="plan_days">Daily itinerary</string>
+    <string name="plan_day">Day %1$d</string>
+    <string name="plan_day_title">Theme / destination</string>
+    <string name="plan_day_notes">Times, transport, meeting point and responsibilities</string>
+    <string name="plan_day_hint">For example: 09:00 meet at the station; Lin handles tickets and Zhou confirms accommodation.</string>
+    <string name="plan_day_empty">No activities planned yet</string>
+    <string name="plan_shorter">Shortening the trip removes days outside the new date range. Continue?</string>
+    <string name="plan_status">Trip status</string>
+    <string name="plan_planning">Planning</string>
+    <string name="plan_completed">Completed</string>
+    <string name="plan_cancelled">Cancelled</string>
+    <string name="plan_private">Private itinerary · Only you can view it</string>
+    <string name="plan_share">Share with companions</string>
+    <string name="plan_share_hint">Send a full text snapshot of this itinerary. Resend after changes. This does not publish your plan or grant edit access.</string>
+    <string name="plan_share_confirm">Send this itinerary to the selected recipient?</string>
+    <string name="plan_send">Send itinerary</string>
+    <string name="plan_sent">Itinerary sent. Continue discussing meeting points and responsibilities.</string>
+    <string name="plan_send_failed">Unable to send. Your itinerary is saved; return and try again.</string>
+    <string name="plan_share_long">This itinerary exceeds the message length limit. Share shorter daily arrangements.</string>
+    <string name="plan_snapshot">[Xuyinfang · Shared itinerary]</string>
+    <string name="plan_from_route">Plan a trip from this route</string>
+    <string name="plan_refresh">Refresh itineraries</string>
+    <string name="plan_stale">Reload the latest itinerary</string>
+    <string name="plan_save_error">Your entries are preserved. Retry saving; for a version conflict, save a copy or reload the latest itinerary.</string>
+    <string name="plan_save_copy">Save as a new itinerary</string>
+    <string name="plan_reload_warning">Reloading discards unsaved changes. Continue?</string>
+</resources>

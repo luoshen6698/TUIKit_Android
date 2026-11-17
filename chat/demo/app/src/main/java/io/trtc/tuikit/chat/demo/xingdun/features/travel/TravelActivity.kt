@@ -1,5 +1,14 @@
 package io.trtc.tuikit.chat.demo.xingdun.features.travel
 
+import android.app.DatePickerDialog
+import androidx.activity.result.contract.ActivityResultContracts
+import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.chat.ChatActivity
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunContactForwardPickerActivity
+import io.trtc.tuikit.atomicxcore.api.CompletionHandler
+import io.trtc.tuikit.atomicxcore.api.message.MessageInputStore
+import io.trtc.tuikit.atomicxcore.api.message.SendMessagePayload
+import io.trtc.tuikit.atomicxcore.api.message.SendMessageOption
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -46,6 +55,18 @@ class TravelActivity : BaseActivity() {
     private val store = TravelStore.repository
     private val mode get() = intent.getStringExtra("page").orEmpty()
     private val itemId get() = intent.getStringExtra("id").orEmpty()
+    private var pendingShare: String? = null
+    private var shareScope: String? = null
+    private fun accountScope() = io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager.currentUiSession()?.scopeKey
+    private val sharePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val text=pendingShare
+        if(result.resultCode==RESULT_OK && text!=null && shareScope==accountScope()) {
+            val conversation=result.data?.getStringExtra(XingDunContactForwardPickerActivity.EXTRA_RESULT_CONVERSATION_ID).orEmpty()
+            if(conversation.startsWith("c2c_") || conversation.startsWith("group_"))
+                AlertDialog.Builder(this).setTitle(R.string.plan_share_confirm).setMessage(result.data?.getStringExtra(XingDunContactForwardPickerActivity.EXTRA_RESULT_DISPLAY_NAME).orEmpty()+"\n\n"+text)
+                    .setNegativeButton(R.string.tx_cancel,null).setPositiveButton(R.string.plan_send){_,_->sendPlan(conversation,text)}.show()
+        }
+    }
     private var busy = false
     private var renderedRevision: String? = null
     private var draft: JsonObject? = null
@@ -65,6 +86,7 @@ class TravelActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); if(isFinishing)return
         ui=TravelUi(this)
+        pendingShare=savedInstanceState?.getString("share");shareScope=savedInstanceState?.getString("share_scope")
         draft=savedInstanceState?.getString("draft")?.let { runCatching { JsonParser.parseString(it).asJsonObject }.getOrNull() }
         dirty=savedInstanceState?.getBoolean("dirty") ?: false;templateId=savedInstanceState?.getString("template");matchIndex=savedInstanceState?.getInt("match") ?: 0
         message=savedInstanceState?.getString("message").orEmpty();replyRoot=savedInstanceState?.getString("reply_root").orEmpty();replyTarget=savedInstanceState?.getString("reply_target").orEmpty();replyAuthor=savedInstanceState?.getString("reply_author").orEmpty()
@@ -78,7 +100,7 @@ class TravelActivity : BaseActivity() {
     }
     override fun appearanceLightStatusBarsOverride(): Boolean = mode != "route"
     override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState);outState.putString("draft",draft?.toString());outState.putBoolean("dirty",dirty);outState.putString("template",templateId);outState.putInt("match",matchIndex)
+        super.onSaveInstanceState(outState);outState.putString("share",pendingShare);outState.putString("share_scope",shareScope);outState.putString("draft",draft?.toString());outState.putBoolean("dirty",dirty);outState.putString("template",templateId);outState.putInt("match",matchIndex)
         outState.putString("message",message);outState.putString("reply_root",replyRoot);outState.putString("reply_target",replyTarget);outState.putString("reply_author",replyAuthor)
     }
     private fun leave() {
@@ -132,31 +154,72 @@ class TravelActivity : BaseActivity() {
         }
     }
     private fun editor(c:TravelCatalog) {
-        if(draft==null){val source=c.intent?:c.templates.firstOrNull();draft=source?.deepCopy()?:travelBody("destination" to "","dates" to "","description" to "","styles" to stringArray(emptyList()));if(c.intent==null)templateId=c.templates.firstOrNull()?.opt("id")}
-        val d=draft!!;editorFields.clear()
-        setHeader(ui.s(if(c.intent==null)T.new_intent else T.edit_intent),ui.s(if(c.intent==null)T.new_intent_sub else T.edit_intent_sub))
+        if(draft==null) draft=if(itemId.isNotEmpty()) c.route(itemId)?.let(TravelPlans::editable) else TravelPlans.newPlan(intent.getStringExtra("route_source")?.let { runCatching{JsonParser.parseString(it).asJsonObject}.getOrNull() },c.styles + c.intent?.strings("styles").orEmpty())
+        val d=draft?:run{status(ui.s(T.unavailable));footer(null);return}
+        editorFields.clear();setHeader(getString(if(d.opt("id").isBlank())R.string.plan_new else R.string.plan_edit))
         val content=ui.column()
-        val hero=FrameLayout(this);fun hero(){hero.removeAllViews();hero.addView(ui.photoHero(c.home.str("editor_image"),120,d.str("destination"),d.str("dates"),ui.s(if(c.intent==null)T.preview_unpublished else T.preview),20f,inset=16),FrameLayout.LayoutParams(-1,ui.d(120)))};hero();content.addView(hero)
-        if(c.templates.isNotEmpty()) {
-            content.addView(ui.space(16));content.addView(ui.card().apply {
-                addView(ui.label(T.quick_fill,15f,INK,true));addView(ui.space(6));addView(ui.label(T.template_hint,13f,SECONDARY));addView(ui.space(12))
-                addView(ui.chips(c.templates.map{it.str("title")},c.templates.filter{it.str("id")==templateId}.map{it.str("title")}.toSet(),true){title->
-                    val t=c.templates.first{it.str("title")==title}
-                    fun use(){draft=t.deepCopy();templateId=t.str("id");dirty=false;editor(c)}
-                    if(dirty || c.intent!=null)AlertDialog.Builder(this@TravelActivity).setTitle(ui.s(T.use_template)).setMessage(ui.s(T.replace_template)).setNegativeButton(ui.s(T.keep_current),null).setPositiveButton(ui.s(T.use)){_,_->use()}.show()else use()
-                })
+        content.addView(ui.text(getString(R.string.plan_hint),13f,SECONDARY))
+        fun input(key:String,label:Int,max:Int=80):EditText = field(content,label,d.opt(key),max){d.addProperty(key,it);dirty=true}.also { editorFields[key]=it;it.contentDescription=getString(label) }
+        input("title",T.route_title);input("city",T.where,40)
+        fun dayPicker(label:Int,key:String) {
+            content.addView(ui.space(12));content.addView(ui.button(label,true){
+                val parts=d.str(key).split('-').map(String::toInt)
+                DatePickerDialog(this,{_,year,month,day->
+                    val next=d.deepCopy().apply { addProperty(key,String.format(java.util.Locale.ROOT,"%04d-%02d-%02d",year,month+1,day)); if(key=="start_date" && str("start_date")>str("end_date")) addProperty("end_date",TravelPlans.date(str("start_date"),(TravelPlans.duration(d.str("start_date"),d.str("end_date"))-1).coerceAtLeast(0))) }
+                    val length=TravelPlans.duration(next.str("start_date"),next.str("end_date"))
+                    if(length==0){toast(R.string.plan_dates_error);return@DatePickerDialog}
+                    fun applyDate(){next.add("days",TravelPlans.days(d,length));draft=next;dirty=true;editor(c)}
+                    if(length<d.rows("days").size && d.rows("days").drop(length).any { it.opt("title").isNotBlank()||it.opt("notes").isNotBlank() })
+                        AlertDialog.Builder(this).setMessage(R.string.plan_shorter).setNegativeButton(R.string.tx_cancel,null).setPositiveButton(R.string.tx_use){_,_->applyDate()}.show()
+                    else applyDate()
+                },parts[0],parts[1]-1,parts[2]).show()
+            }.apply { text="${getString(label)} · ${d.str(key)}";contentDescription=getString(label) })
+        }
+        dayPicker(R.string.plan_start,"start_date");dayPicker(R.string.plan_end,"end_date")
+        input("budget",T.budget,20).apply{inputType=android.text.InputType.TYPE_CLASS_TEXT;hint="800-1500"}
+        content.addView(ui.text(getString(R.string.plan_budget_hint),12f,MUTED))
+        input("description",T.route_description,200)
+        content.addView(ui.space(14));content.addView(ui.label(R.string.plan_status,13f,SECONDARY))
+        val statuses=listOf("计划中","已完成","已取消")
+        val statusLabels=listOf(R.string.plan_planning,R.string.plan_completed,R.string.plan_cancelled).map(::getString)
+        content.addView(ui.chips(statusLabels,setOf(statusLabels[statuses.indexOf(d.opt("status")).coerceAtLeast(0)]),true){label->d.addProperty("status",statuses[statusLabels.indexOf(label)]);dirty=true;editor(c)})
+        content.addView(ui.space(20));content.addView(ui.label(R.string.plan_days,18f,INK,true))
+        val duration=TravelPlans.duration(d.str("start_date"),d.str("end_date"))
+        if(duration>0 && d.rows("days").size!=duration) d.add("days",TravelPlans.days(d,duration))
+        d.rows("days").forEachIndexed { i,day ->
+            content.addView(ui.space(14));content.addView(ui.card().apply {
+                addView(ui.text("${getString(R.string.plan_day,i+1)} · ${TravelPlans.date(d.str("start_date"),i)}",15f,ACCENT,true))
+                field(this,R.string.plan_day_title,day.opt("title"),80){day.addProperty("title",it);dirty=true}.contentDescription="${getString(R.string.plan_day,i+1)} ${getString(R.string.plan_day_title)}"
+                field(this,R.string.plan_day_notes,day.opt("notes"),1000){day.addProperty("notes",it);dirty=true}.apply {isSingleLine=false;minLines=3;maxLines=8;gravity=Gravity.TOP;inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE;hint=getString(R.string.plan_day_hint);contentDescription="${getString(R.string.plan_day,i+1)} ${getString(R.string.plan_day_notes)}"}
             })
         }
-        content.addView(ui.space(12));content.addView(ui.card().apply{
-            addView(ui.label(T.destination,12f,MUTED,true))
-            listOf(Triple("destination",T.where,40),Triple("dates",T.dates,40),Triple("description",T.description,120)).forEach{(key,label,max)->editorFields[key]=field(this,label,d.str(key),max){d.addProperty(key,it);dirty=true;hero()}}
-        });content.addView(ui.space(12))
-        val styleCard=ui.card();styleCard.addView(ui.label(T.styles,12f,MUTED,true));styleCard.addView(ui.space(14));val choices=FrameLayout(this);styleCard.addView(choices)
-        fun styles(){choices.removeAllViews();val selected=d.strings("styles").toMutableSet();choices.addView(ui.chips((c.styles+selected).distinct(),selected,true){tag->if(!busy){if(!selected.add(tag))selected.remove(tag);d.add("styles",stringArray(selected));dirty=true;styles()}})};styles();content.addView(styleCard)
-        scroll(content);footer(ui.button(T.save_intent){
-            var valid=true
-            editorFields.forEach{(key,view)->val value=view.text.toString().trim();if(value.isEmpty()){view.error=ui.s(T.required,ui.s(when(key){"destination"->T.where;"dates"->T.dates;else->T.description}));valid=false};d.addProperty(key,value)}
-            if(valid)action(travelBody("action" to "save_intent","intent" to travelBody("destination" to d.str("destination"),"dates" to d.str("dates"),"description" to d.str("description"),"styles" to d["styles"]))){dirty=false;setResult(RESULT_OK);toast(T.saved);finish()}
+        if(d.opt("id").isNotBlank()) {
+            content.addView(ui.space(16));content.addView(ui.button(R.string.plan_save_copy,true){draft=d.deepCopy().apply{addProperty("id","");addProperty("version",0)};dirty=true;editor(c)})
+            content.addView(ui.space(10));content.addView(ui.button(R.string.plan_stale,true){AlertDialog.Builder(this).setMessage(R.string.plan_reload_warning).setNegativeButton(R.string.tx_cancel,null).setPositiveButton(R.string.tx_retry){_,_->
+                if(busy)return@setPositiveButton
+                busy=true;lifecycleScope.launch {try {store.load(true);val current=store.current?:return@launch;val latest=current.route(d.str("id"));if(latest==null)toast(T.unavailable)else{draft=TravelPlans.editable(latest);dirty=false;editor(current)}}catch(e:Exception){toast(ui.error(e))}finally{busy=false}}
+            }.show()})
+        }
+        scroll(content);footer(ui.button(T.save){
+            val missing=listOf("title","city").firstOrNull{d.opt(it).isBlank()}
+            if(missing!=null){editorFields[missing]?.error=ui.s(T.required,getString(if(missing=="title")T.route_title else T.where));return@button}
+            if(!TravelPlans.validBudget(d.opt("budget"))){editorFields["budget"]?.error=getString(R.string.plan_budget_error);return@button}
+            if(duration==0){toast(R.string.plan_dates_error);return@button}
+            action(travelBody("action" to "save_plan","plan" to d.deepCopy())){dirty=false;setResult(RESULT_OK);toast(T.saved);finish()}
+        })
+    }
+    private fun sharePlan(r:JsonObject) {
+        val text=TravelPlans.summary(r.deepCopy().apply{addProperty("status",ui.planStatus(r.str("status")))},getString(R.string.plan_snapshot)){getString(R.string.plan_day,it)}
+        if(text.toByteArray(Charsets.UTF_8).size>7000){toast(R.string.plan_share_long);return}
+        AlertDialog.Builder(this).setTitle(R.string.plan_share).setMessage(R.string.plan_share_hint)
+            .setNegativeButton(R.string.tx_cancel,null).setPositiveButton(R.string.plan_share){_,_->pendingShare=text;shareScope=accountScope();sharePicker.launch(XingDunContactForwardPickerActivity.intent(this,""))}.show()
+    }
+    private fun sendPlan(conversation:String,text:String) {
+        if(busy || shareScope!=accountScope())return
+        busy=true;enable(root,false)
+        MessageInputStore.create(conversation).sendMessage(SendMessagePayload.TextSendMessagePayload(text),SendMessageOption(),object:CompletionHandler {
+            override fun onSuccess()=runOnUiThread {busy=false;enable(root,true);pendingShare=null;toast(R.string.plan_sent);ChatActivity.start(this@TravelActivity,conversation)}
+            override fun onFailure(code:Int,desc:String)=runOnUiThread {busy=false;enable(root,true);toast(R.string.plan_send_failed)}
         })
     }
     private fun route(c:TravelCatalog) {
@@ -171,11 +234,17 @@ class TravelActivity : BaseActivity() {
                 fun stat(icon:Int,label:Int,value:String){addView(ui.card(8).apply{gravity=Gravity.CENTER;addView(ui.icon(icon,18,SECONDARY));addView(ui.space(6));addView(ui.label(label,12f,MUTED));addView(ui.space(3));addView(ui.text(value,12f,INK,true).apply{gravity=Gravity.CENTER})},LinearLayout.LayoutParams(0,-2,1f).apply{marginEnd=ui.d(6)})}
                 stat(TravelIcons.calendar_today_outlined,if(r.guide())T.duration else T.travel_dates,r.str("dates"));stat(TravelIcons.account_balance_wallet_outlined,if(r.guide())T.budget_ref else T.route_budget,r.str("budget"));stat(TravelIcons.verified_user_outlined,if(r.guide() || r.flag("mine"))T.type else T.seats,if(r.guide())ui.s(T.platform_route)else if(r.flag("mine"))ui.s(T.plan)else if(r.count("remaining")==0)ui.s(T.full)else ui.s(T.remaining,r.count("remaining")))
             });addView(ui.space(24));addView(ui.text(r.str("description"),15f,INK).apply{setLineSpacing(ui.d(5).toFloat(),1.2f)});addView(ui.space(14));addView(ui.text(if(r.flag("mine"))ui.s(T.my_route_note)else r.str("note"),14f,SECONDARY));addView(ui.space(20))
+            if(r.flag("mine")) {
+                addView(ui.label(R.string.plan_private,12f,MUTED));addView(ui.space(16))
+                addView(ui.label(R.string.plan_days,18f,INK,true));addView(ui.space(10))
+                r.rows("days").forEach { day ->addView(ui.card().apply {addView(ui.text(getString(R.string.plan_day,day.count("day")),14f,ACCENT,true));addView(ui.space(6));addView(ui.text(day.opt("title").ifBlank{getString(R.string.plan_day_empty)},16f,INK,true));if(day.opt("notes").isNotBlank()){addView(ui.space(8));addView(ui.text(day.opt("notes"),14f,SECONDARY))}});addView(ui.space(10)) }
+                addView(ui.button(R.string.plan_share){sharePlan(r)});addView(ui.space(20))
+            } else if(r.guide()) {addView(ui.button(R.string.plan_from_route,true){startActivity(intent(this@TravelActivity,"intent").putExtra("route_source",r.toString()))});addView(ui.space(16))}
             addView(ui.card().apply{addView(ui.row().apply{addView(ui.image(r.str("avatar"),24),LinearLayout.LayoutParams(ui.d(48),ui.d(48)));addView(ui.column().apply{addView(ui.text(r.creator("owner"),17f,INK,true));addView(ui.space(6));addView(ui.text(if(r.flag("mine"))ui.s(T.organizer_self)else r.str("owner_bio"),14f,SECONDARY))},LinearLayout.LayoutParams(0,-2,1f).apply{marginStart=ui.d(12)})});if(r.flag("profile"))setOnClickListener{toast(T.profile_soon)}})
         });scroll(content,0)
         if(r.flag("mine"))footer(ui.row().apply{
-            addView(ui.button(T.delete,true,0xFFB85E55.toInt()){AlertDialog.Builder(this@TravelActivity).setTitle(ui.s(T.delete_route)).setMessage(ui.s(T.delete_warning)).setNegativeButton(ui.s(T.cancel),null).setPositiveButton(ui.s(T.delete)){_,_->action(travelBody("action" to "delete_intent")){finish()}}.show()},LinearLayout.LayoutParams(ui.d(88),ui.d(48)))
-            addView(ui.button(T.edit_route){editRoute(r)},LinearLayout.LayoutParams(0,ui.d(48),1f).apply{marginStart=ui.d(10)})
+            addView(ui.button(T.delete,true,0xFFB85E55.toInt()){AlertDialog.Builder(this@TravelActivity).setTitle(ui.s(T.delete_route)).setMessage(ui.s(T.delete_warning)).setNegativeButton(ui.s(T.cancel),null).setPositiveButton(ui.s(T.delete)){_,_->action(travelBody("action" to "delete_plan","id" to r.str("id"),"version" to (r.get("version")?.asInt ?: 1))){finish()}}.show()},LinearLayout.LayoutParams(ui.d(88),ui.d(48)))
+            addView(ui.button(T.edit_route){open(this@TravelActivity,"intent",r.str("id"))},LinearLayout.LayoutParams(0,ui.d(48),1f).apply{marginStart=ui.d(10)})
         })else{
             val joined=c.selected("joins",r.str("id"));val ended=r.str("status")=="已结束"
             footer(ui.button(if(ended)T.ended else if(joined)if(r.guide())T.collected else T.joined else if(r.guide())T.collect else T.join){if(!joined&&!ended)action(travelBody("action" to "join","id" to r.str("id"))){toast(T.saved);render()}})
@@ -185,17 +254,6 @@ class TravelActivity : BaseActivity() {
         val dialog=BottomSheetDialog(this);val content=ui.column(20).apply{background=ui.box(BG,24);addView(ui.label(title,18f,INK,true));addView(ui.space(8))}
         dialog.setContentView(NestedScrollView(this).apply{addView(content)})
         dialog.setOnDismissListener{if(activeSheet===dialog)activeSheet=null};activeSheet=dialog;return dialog to content
-    }
-    private fun editRoute(r:JsonObject) {
-        val(dialog,content)=sheet(T.edit_route);content.addView(ui.label(T.edit_intent_sub,12f,MUTED))
-        val title=field(content,T.route_title,r.str("title"));val destination=field(content,T.city_province,"${r.str("city")} · ${r.str("province")}")
-        val dates=field(content,T.dates,r.str("dates"));val budget=field(content,T.budget,r.str("budget").removePrefix("¥"));val description=field(content,T.route_description,r.str("description"),200)
-        content.addView(ui.space(20));content.addView(ui.button(T.save){
-            val all=listOf(title,destination,dates,budget,description);val invalid=all.firstOrNull{it.text.toString().trim().isEmpty()}
-            if(invalid!=null){invalid.error=ui.s(T.required,"");return@button}
-            val parts=destination.text.toString().split('·',limit=2)
-            action(travelBody("action" to "save_route","route" to r.deepCopy().apply{addProperty("title",title.text.toString().trim());addProperty("city",parts[0].trim());addProperty("province",parts.getOrNull(1)?.trim().orEmpty());addProperty("dates",dates.text.toString().trim());addProperty("budget","¥"+budget.text.toString().trim().removePrefix("¥"));addProperty("description",description.text.toString().trim())})){dialog.dismiss();toast(T.saved);render()}
-        });dialog.show();dialog.behavior.peekHeight=(resources.displayMetrics.heightPixels*.75).toInt()
     }
     private fun matches(c:TravelCatalog) {
         val rows=c.matches;setHeader(ui.s(T.swipe_routes),ui.s(T.swipe_sub,rows.size))

@@ -1,0 +1,36 @@
+<resources>
+    <string name="plan_new">新建行程</string>
+    <string name="plan_edit">编辑行程</string>
+    <string name="plan_hint">按天整理路线、集合安排与分工；保存后仅自己可见，可另行分享给同行伙伴。</string>
+    <string name="plan_start">出发日期</string>
+    <string name="plan_end">结束日期</string>
+    <string name="plan_dates_error">请选择有效日期，结束日不早于出发日，最多60天。</string>
+    <string name="plan_budget_hint">预算可留空，填写金额或区间，例如 800-1500。</string>
+    <string name="plan_budget_error">请输入合理的金额或预算区间。</string>
+    <string name="plan_days">每日行程</string>
+    <string name="plan_day">第%1$d天</string>
+    <string name="plan_day_title">当天主题 / 目的地</string>
+    <string name="plan_day_notes">时间、交通、集合点与同行分工</string>
+    <string name="plan_day_hint">例如：09:00 车站集合；小林负责车票，小周确认住宿。</string>
+    <string name="plan_day_empty">这一天尚未安排</string>
+    <string name="plan_shorter">缩短日期将移除超出天数的安排，是否继续？</string>
+    <string name="plan_status">行程状态</string>
+    <string name="plan_planning">计划中</string>
+    <string name="plan_completed">已完成</string>
+    <string name="plan_cancelled">已取消</string>
+    <string name="plan_private">私人行程 · 仅自己可见</string>
+    <string name="plan_share">分享给同行</string>
+    <string name="plan_share_hint">将发送当前行程的完整文字副本。后续修改需重新发送；不会公开路书或授予他人编辑权限。</string>
+    <string name="plan_share_confirm">发送行程给所选对象？</string>
+    <string name="plan_send">发送行程</string>
+    <string name="plan_sent">行程已发送，可继续讨论集合与分工。</string>
+    <string name="plan_send_failed">发送失败，行程仍保留，请返回重试。</string>
+    <string name="plan_share_long">行程文字较长，超过单条消息上限，请分天整理后分享。</string>
+    <string name="plan_snapshot">【叙音坊 · 同行行程】</string>
+    <string name="plan_from_route">用此路线规划行程</string>
+    <string name="plan_refresh">刷新行程</string>
+    <string name="plan_stale">重新载入最新行程</string>
+    <string name="plan_save_error">保存未成功，当前填写内容仍保留。请重试；如提示版本冲突，请另存副本或重新载入。</string>
+    <string name="plan_save_copy">另存新行程</string>
+    <string name="plan_reload_warning">重新载入将放弃当前未保存内容，是否继续？</string>
+</resources>

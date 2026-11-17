@@ -39,6 +39,7 @@ internal class TravelCatalog private constructor(val raw: JsonObject) {
     val state = raw.obj("user_state")
     val intent = raw.get("intent")?.takeIf { it.isJsonObject }?.asJsonObject
     val ownRoute = raw.get("own_route")?.takeIf { it.isJsonObject }?.asJsonObject
+    val plans = if (raw.has("plans")) raw.rows("plans").sortedBy { it.str("start_date") } else listOfNotNull(ownRoute)
     val articles = raw.rows("articles")
     val routes = raw.rows("routes").sortedBy { it.str("start_date") }
     val cities = raw.rows("cities")
@@ -49,7 +50,7 @@ internal class TravelCatalog private constructor(val raw: JsonObject) {
     val reportReasons = raw.strings("report_reasons")
     fun selected(key: String, id: String) = state.obj(key).flag(id)
     fun article(id: String) = articles.find { it.str("id") == id }
-    fun route(id: String) = ownRoute?.takeIf { it.str("id") == id } ?: routes.find { it.str("id") == id }
+    fun route(id: String) = plans.find { it.str("id") == id } ?: ownRoute?.takeIf { it.str("id") == id } ?: routes.find { it.str("id") == id }
     fun articleComments(id: String): List<JsonObject> {
         val article = article(id) ?: return emptyList()
         val extra = state.obj("comments").rows(id)
@@ -85,7 +86,7 @@ internal class TravelCatalog private constructor(val raw: JsonObject) {
                 listOf("mine", "profile").forEach { require(row[it]?.isJsonPrimitive == true && row[it].asJsonPrimitive.isBoolean) }
                 row.creator("owner")
             }
-            result.routes.forEach(::route); result.ownRoute?.let(::route)
+            result.routes.forEach(::route); result.ownRoute?.let(::route); result.plans.forEach(::route)
             result.articles.forEach { row ->
                 listOf("destination", "title", "description", "time", "city").forEach { row.str(it) }
                 row.creator("author"); row.media("image"); row.media("avatar"); row.count("likes"); row.count("comments"); row.strings("paragraphs"); row.strings("tags")

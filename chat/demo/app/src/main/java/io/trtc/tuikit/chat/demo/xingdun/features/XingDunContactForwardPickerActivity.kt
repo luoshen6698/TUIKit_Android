@@ -373,7 +373,7 @@ class XingDunContactForwardPickerActivity : BaseActivity() {
             finish()
             return
         }
-        setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_RESULT_CONVERSATION_ID, target.conversationID))
+        setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_RESULT_CONVERSATION_ID, target.conversationID).putExtra(EXTRA_RESULT_DISPLAY_NAME, target.title))
         finish()
     }
 

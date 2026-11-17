@@ -32,10 +32,10 @@ import kotlinx.coroutines.*
 internal object LushuRoutes {
     fun inCity(catalog: TravelCatalog, cityId: String) = catalog.routes.filter { it.opt("city_id") == cityId }
     fun visible(catalog: TravelCatalog, mine: Boolean, status: String?): List<JsonObject> =
-        (if (mine) listOfNotNull(catalog.ownRoute) else catalog.routes).filter { status == null || it.str("status") == status }
+        (if (mine) catalog.plans else catalog.routes).filter { status == null || it.str("status") == status }
     fun filters(catalog: TravelCatalog, mine: Boolean): List<String> {
         val present = visible(catalog, mine, null).map { it.str("status") }.toSet()
-        return catalog.statuses.filter { it != "全部" && it in present }
+        return (catalog.statuses + listOf("计划中", "已完成", "已取消")).distinct().filter { it != "全部" && it in present }
     }
 }
 
@@ -129,6 +129,7 @@ class LushuPageView(context: Context, private val publish: () -> Unit) : LinearL
         header.addView(ui.column().apply {
             addView(ui.label(T.lushu, 18f, INK, true)); addView(ui.space(3)); addView(ui.label(T.lushu_subtitle, 11f, MUTED).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
         }, LayoutParams(0, -2, 1f))
+        header.addView(ui.icon(TravelIcons.refresh,22,ACCENT,context.getString(R.string.plan_refresh)).apply { setPadding(ui.d(10),0,ui.d(10),0);setOnClickListener{load(true)} },LayoutParams(ui.d(44),-1))
         val session = XingDunSessionManager.currentUiSession(); val profile = LoginStore.shared.loginState.loginUserInfo.value
         val name = profile?.nickname?.takeIf { it.isNotBlank() } ?: session?.nickname?.takeIf { it.isNotBlank() } ?: session?.username.orEmpty()
         header.addView(FrameLayout(context).apply {
@@ -176,12 +177,12 @@ class LushuPageView(context: Context, private val publish: () -> Unit) : LinearL
         r.count("remaining") == 0 -> ui.s(T.full)
         else -> ui.s(T.remaining, r.count("remaining"))
     }
-    private fun badge(r: JsonObject) = if (r.guide() || r.str("status") == "招募") availability(r) else r.str("status")
+    private fun badge(r: JsonObject) = if (r.guide() || r.str("status") == "招募") availability(r) else ui.planStatus(r.str("status"))
     private fun openRoute(r: JsonObject) = TravelActivity.open(context, "route", r.str("id"))
     private fun buildTimeline(catalog: TravelCatalog): View = ui.column().apply {
         val chips = ui.row().apply { setPadding(ui.d(16), ui.d(9), ui.d(16), ui.d(8)) }
         (listOf<String?>(null) + LushuRoutes.filters(catalog, mine)).forEach { value ->
-            chips.addView(ui.text(value ?: ui.s(T.all), 12f, if (value == filter) WHITE else SECONDARY, true).apply {
+            chips.addView(ui.text(value?.let(ui::planStatus) ?: ui.s(T.all), 12f, if (value == filter) WHITE else SECONDARY, true).apply {
                 minHeight = ui.d(31); gravity = Gravity.CENTER; setPadding(ui.d(15), ui.d(7), ui.d(15), ui.d(7)); background = ui.box(if (value == filter) ACCENT else WHITE, 24, value != filter)
                 isSelected = value == filter; isFocusable = true; setOnClickListener { filter = value; savedScroll = null; render() }
             }, LayoutParams(-2, -2).apply { marginEnd = ui.d(8) })

@@ -14,6 +14,12 @@ import com.google.gson.JsonObject
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunApiException
 
 internal class TravelUi(val context: Context) {
+    fun planStatus(value: String): String = when(value) {
+        "计划中" -> context.getString(io.trtc.tuikit.chat.app.R.string.plan_planning)
+        "已完成" -> context.getString(io.trtc.tuikit.chat.app.R.string.plan_completed)
+        "已取消" -> context.getString(io.trtc.tuikit.chat.app.R.string.plan_cancelled)
+        else -> value
+    }
     fun d(v: Int) = (v * context.resources.displayMetrics.density + .5f).toInt()
     fun s(id: Int, vararg args: Any) = context.getString(id, *args)
     fun box(color: Int = WHITE, radius: Int = 16, border: Boolean = false) = GradientDrawable().apply {
