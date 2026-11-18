@@ -16,8 +16,8 @@ class XingDunGroupNicknamePolicyTest {
     @Test
     fun `empty nickname clears card and 32-byte limit is enforced`() {
         assertTrue(XingDunGroupNicknamePolicy.canSave("   "))
-        assertTrue(XingDunGroupNicknamePolicy.canSave("星盾星盾星盾星盾星盾12"))
-        assertFalse(XingDunGroupNicknamePolicy.canSave("星盾星盾星盾星盾星盾123"))
+        assertTrue(XingDunGroupNicknamePolicy.canSave("叙音坊叙音坊叙音坊12345"))
+        assertFalse(XingDunGroupNicknamePolicy.canSave("叙音坊叙音坊叙音坊123456"))
         assertEquals("项目负责人", XingDunGroupNicknamePolicy.normalized("  项目负责人  "))
     }
 }

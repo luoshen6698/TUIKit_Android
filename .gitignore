@@ -8,3 +8,6 @@ chat/demo/app/mcs-services.json
 chat/demo/app/src/main/assets/timpush-configs.json
 *.jks
 *.keystore
+*.p12
+*.pfx
+*.key

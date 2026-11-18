@@ -1,6 +1,7 @@
 <resources>
-    <string name="demo_app_name">星盾 IM</string>
+    <string name="demo_app_name">叙音坊</string>
     <string name="demo_tab_messages">途中</string>
+    <string name="demo_tab_lushu">路书</string>
     <string name="demo_tab_contacts">名册</string>
     <string name="demo_tab_me">我的</string>
     <string name="demo_settings_show_calls">显示通话记录</string>
@@ -8,7 +9,7 @@
     <string name="demo_login">登录</string>
     <string name="demo_input_user_id_tips">请输入用户 ID</string>
     <string name="demo_logout">退出登录</string>
-    <string name="demo_login_hero_title">星盾 IM</string>
+    <string name="demo_login_hero_title">叙音坊</string>
     <string name="demo_login_hero_subtitle">安全的企业即时通信</string>
     <string name="xingdun_company_code">企业码</string>
     <string name="xingdun_company_code_required">请先输入企业码。</string>
@@ -367,12 +368,12 @@
     <string name="xingdun_open_customer_service">打开客服会话</string>
     <string name="xingdun_customer_service_unavailable">当前用户暂未分配可用客服。</string>
     <string name="xingdun_add_friend_title">添加朋友</string>
-    <string name="xingdun_friend_search_hint">登录名、星盾账号、IM 账号或手机号</string>
+    <string name="xingdun_friend_search_hint">登录名、叙音坊账号、IM 账号或手机号</string>
     <string name="xingdun_search_user">搜索用户</string>
     <string name="xingdun_friend_search_invalid">请输入有效的登录名、账号或手机号。</string>
     <string name="xingdun_friend_search_failed">搜索失败，请检查网络后重试。</string>
     <string name="xingdun_user_profile">用户资料</string>
-    <string name="xingdun_friend_account_value">星盾账号：%1$s</string>
+    <string name="xingdun_friend_account_value">叙音坊账号：%1$s</string>
     <string name="xingdun_add_friend">添加好友</string>
     <string name="xingdun_friend_application_message">请输入申请理由</string>
     <string name="xingdun_send_application">发送申请</string>
@@ -380,7 +381,7 @@
     <string name="xingdun_friend_added">已添加为好友。</string>
     <string name="xingdun_friend_application_sent">好友申请已发送。</string>
     <string name="xingdun_friend_not_found">该用户不存在</string>
-    <string name="xingdun_friend_not_found_detail">请核对登录名、星盾账号、IM 账号或手机号。</string>
+    <string name="xingdun_friend_not_found_detail">请核对登录名、叙音坊账号、IM 账号或手机号。</string>
     <string name="xingdun_friend_relationship_none">暂无好友关系</string>
     <string name="xingdun_friend_relationship_self">这是您自己的账号</string>
     <string name="xingdun_friend_relationship_friend">已是好友</string>
@@ -486,7 +487,7 @@
     <string name="xingdun_personal_qr">我的二维码</string>
     <string name="xingdun_personal_qr_description">%1$s\n账号：%2$s</string>
     <string name="xingdun_personal_qr_account_format">账号：%1$s</string>
-    <string name="xingdun_personal_qr_validity">此二维码用于识别您的星盾账号，请仅分享给可信联系人。</string>
+    <string name="xingdun_personal_qr_validity">此二维码用于识别您的叙音坊账号，请仅分享给可信联系人。</string>
     <string name="xingdun_personal_qr_scan_hint">扫一扫上面的二维码，加我为好友</string>
     <string name="xingdun_personal_qr_validity_format">有效期 7 天（%1$s），到期后重新进入将更新</string>
     <string name="xingdun_personal_qr_share_text">%1$s个人二维码\n昵称：%2$s\n账号：%3$s</string>
@@ -533,7 +534,7 @@
     <string name="xingdun_customer_service_no_groups">暂无可管理群聊</string>
     <string name="xingdun_customer_service_group_summary">%1$d 名成员 · %2$s</string>
     <string name="xingdun_customer_service_group_unavailable">该群未分配给当前客服账号。</string>
-    <string name="xingdun_customer_service_preview_agent">星盾客服团队</string>
+    <string name="xingdun_customer_service_preview_agent">叙音坊客服团队</string>
     <string name="xingdun_customer_service_preview_user">企业用户 %1$d</string>
     <string name="xingdun_customer_service_preview_group_primary">交付支持群</string>
     <string name="xingdun_customer_service_preview_group_secondary">售后协调群</string>
@@ -571,7 +572,7 @@
     <string name="xingdun_group_qr_saved">群二维码已保存到相册。</string>
     <string name="xingdun_group_qr_save_failed">无法保存群二维码，请稍后重试。</string>
     <string name="xingdun_group_qr_share_failed">无法分享群二维码，请稍后重试。</string>
-    <string name="xingdun_group_qr_permission_denied">请先在系统设置中允许星盾 IM 访问照片，再保存群二维码。</string>
+    <string name="xingdun_group_qr_permission_denied">请先在系统设置中允许叙音坊 访问照片，再保存群二维码。</string>
     <string name="xingdun_group_qr_share_text">%1$s群聊：%2$s\n群号：%3$s</string>
     <string name="xingdun_save_announcement">保存公告</string>
     <string name="xingdun_announcement_too_long">群公告不能超过 100 个字符。</string>
@@ -647,7 +648,7 @@
     <string name="xingdun_chat_more_mention">提醒</string>
     <string name="xingdun_contact_detail_recommend_failed">联系人名片发送失败，请稍后重试。</string>
     <string name="xingdun_contact_detail_load_failed">资料加载失败</string>
-    <string name="xingdun_qr_scan_description">扫描星盾账号、群聊或企业邀请二维码。</string>
+    <string name="xingdun_qr_scan_description">扫描叙音坊账号、群聊或企业邀请二维码。</string>
     <string name="xingdun_scan_with_camera">使用相机扫描</string>
     <string name="xingdun_scan_from_gallery">从相册选择</string>
     <string name="xingdun_qr_scan_prompt">将二维码放入框内</string>
@@ -663,7 +664,7 @@
     <string name="xingdun_delete_conversation_failed">删除会话失败，请稍后重试。</string>
     <string name="xingdun_add_friend_menu">添加朋友</string>
     <string name="xingdun_qr_manual_payload">粘贴二维码内容进行手动验证</string>
-    <string name="xingdun_qr_unrecognized">无法识别此二维码，请使用星盾生成的二维码或邀请链接。</string>
+    <string name="xingdun_qr_unrecognized">无法识别此二维码，请使用叙音坊生成的二维码或邀请链接。</string>
     <string name="xingdun_qr_user_not_found">未找到二维码中的账号。</string>
     <string name="xingdun_qr_group_not_found">未找到二维码中的群聊。</string>
     <string name="xingdun_invitation_recognized">已识别企业邀请</string>
@@ -734,11 +735,11 @@
     <string name="xingdun_deactivation_submit_hint">提交成功后将立即退出当前账号，并清除当前设备上的登录凭证和账号缓存。</string>
     <string name="xingdun_confirm_current_account_deactivation">确认注销当前账号？</string>
     <string name="xingdun_deactivation_rules_title">账号注销规则</string>
-    <string name="xingdun_deactivation_rules_full_title">星盾IM账号注销规则</string>
+    <string name="xingdun_deactivation_rules_full_title">叙音坊账号注销规则</string>
     <string name="xingdun_deactivation_rules_version">版本 2026.08.13 · 生效日期 2026年8月13日</string>
     <string name="xingdun_deactivation_rules_summary">本规则说明账号注销的申请条件、即时影响、受控回收、不可恢复清除和数据保留边界。退出登录、撤回隐私同意和账号注销是不同操作。</string>
     <string name="xingdun_deactivation_rules_section_1_title">一、适用范围</string>
-    <string name="xingdun_deactivation_rules_section_1_body">本规则适用于您主动从星盾IM Android客户端申请注销当前业务账号。企业管理员因离职、违规或安全原因停用成员账号的，另按企业规则和平台治理流程处理。</string>
+    <string name="xingdun_deactivation_rules_section_1_body">本规则适用于您主动从叙音坊 Android客户端申请注销当前业务账号。企业管理员因离职、违规或安全原因停用成员账号的，另按企业规则和平台治理流程处理。</string>
     <string name="xingdun_deactivation_rules_section_2_title">二、申请入口与身份核验</string>
     <string name="xingdun_deactivation_rules_section_2_body">入口为“我的 - 设置 - 账号与安全 - 注销账号”。为防止冒用，需验证当前密码、阅读影响、勾选确认并完成破坏性操作二次确认。设备账号应先绑定可验证的用户名和密码。</string>
     <string name="xingdun_deactivation_rules_section_3_title">三、申请前检查</string>
@@ -748,7 +749,7 @@
     <string name="xingdun_deactivation_rules_section_5_title">五、受控回收与恢复</string>
     <string name="xingdun_deactivation_rules_section_5_body">为防止误操作并处理企业关系、安全事件和争议，注销后账号资料及设备快照进入权限受限的服务端回收区。您不能自行恢复；确需恢复时，应通过企业管理员核验身份和组织关系。\n\n如需在回收阶段直接完成不可恢复清除，可通过“我的 - 帮助与反馈”或企业管理员提出。审核通过后，管理端执行永久清除业务身份和回收快照。</string>
     <string name="xingdun_deactivation_rules_section_6_title">六、腾讯云账号标识边界</string>
-    <string name="xingdun_deactivation_rules_section_6_body">腾讯云商业SDKAppID当前可能不支持物理删除已导入的腾讯UserID。此时星盾IM会踢下线、停止签发UserSig并解除业务身份关联；完成永久清除后，腾讯侧仅可能保留无法独立对应您业务资料且不能用于登录星盾IM的技术标识。</string>
+    <string name="xingdun_deactivation_rules_section_6_body">腾讯云商业SDKAppID当前可能不支持物理删除已导入的腾讯UserID。此时叙音坊会踢下线、停止签发UserSig并解除业务身份关联；完成永久清除后，腾讯侧仅可能保留无法独立对应您业务资料且不能用于登录叙音坊的技术标识。</string>
     <string name="xingdun_deactivation_rules_section_7_title">七、不会立即删除的信息</string>
     <string name="xingdun_deactivation_rules_section_7_body">• 其他用户已经接收、转发、收藏或依法保存的消息及文件。\n• 企业依法管理的审批、审计、组织变更和业务记录。\n• 红包订单、领取和退款等依法或为争议处理需要保留的交易记录。\n• 举报、内容安全、登录、安全事件和操作审计等法定或合理期限内的记录。</string>
     <string name="xingdun_deactivation_rules_section_8_title">八、删除与匿名化</string>
@@ -933,9 +934,9 @@
     <string name="xingdun_customer_service_dashboard">客服管理</string>
     <string name="xingdun_invited_count">已邀请成员：%1$d</string>
     <string name="xingdun_invite_qr">邀请二维码</string>
-    <string name="xingdun_invite_share_text">%1$s 邀请你加入星盾\n邀请码：%2$s\n%3$s</string>
-    <string name="xingdun_invite_poster_description">星盾邀请海报</string>
-    <string name="xingdun_platform_brand_name">XingDun IM Platform</string>
+    <string name="xingdun_invite_share_text">%1$s 邀请你加入叙音坊\n邀请码：%2$s\n%3$s</string>
+    <string name="xingdun_invite_poster_description">叙音坊邀请海报</string>
+    <string name="xingdun_platform_brand_name">叙音坊平台</string>
     <string name="xingdun_invite_poster_tagline">安全连接团队，高效协同工作</string>
     <string name="xingdun_invite_poster_invitation">%1$s 邀请你加入企业沟通</string>
     <string name="xingdun_invite_poster_code">邀请码  %1$s</string>
@@ -960,7 +961,7 @@
     <string name="xingdun_help_center_title">帮助中心</string>
     <string name="xingdun_system_settings">系统设置</string>
     <string name="xingdun_logout_confirm_title">退出当前账号？</string>
-    <string name="xingdun_about_platform">关于 XingDun IM Platform</string>
+    <string name="xingdun_about_platform">关于 叙音坊平台</string>
     <string name="xingdun_message_favorites">消息收藏</string>
     <string name="xingdun_redpacket_account">红包与余额</string>
     <string name="xingdun_help_center">帮助与反馈</string>
@@ -982,7 +983,7 @@
     <string name="xingdun_help_storage_question">清理缓存会删除聊天记录吗？</string>
     <string name="xingdun_help_storage_answer">不会。存储空间管理只删除本机媒体缓存，再次查看时可能重新下载；腾讯IM聊天记录和服务端收藏记录不会被删除。</string>
     <string name="xingdun_help_colleague_question">搜索不到同事怎么办？</string>
-    <string name="xingdun_help_colleague_answer">请使用对方的星盾账号、手机号或腾讯 UserID 搜索，并确认双方属于同一企业且账号状态正常。</string>
+    <string name="xingdun_help_colleague_answer">请使用对方的叙音坊账号、手机号或腾讯 UserID 搜索，并确认双方属于同一企业且账号状态正常。</string>
     <string name="xingdun_help_group_question">为什么不能修改群资料？</string>
     <string name="xingdun_help_group_answer">群名称、公告、管理员及成员管理由群主或管理员操作。普通成员只能查看群资料或按群设置申请加入。</string>
     <string name="xingdun_help_feedback_title">帮助与反馈</string>
@@ -1026,7 +1027,7 @@
     <string name="xingdun_permission_files_usage">系统按你选择的单个文件授权，不会扫描完整文件库。</string>
     <string name="xingdun_permission_files_scoped">由 Android 系统选择器逐项授权</string>
     <string name="xingdun_open_system_settings">打开系统设置</string>
-    <string name="xingdun_about_description">星盾是企业即时通讯与协作客户端。实际能力以企业配置和账号权限为准。</string>
+    <string name="xingdun_about_description">叙音坊是企业即时通讯与协作客户端。实际能力以企业配置和账号权限为准。</string>
     <string name="xingdun_check_updates">检查更新</string>
     <string name="xingdun_about_title_format">关于 %1$s</string>
     <string name="xingdun_about_version">版本 %1$s</string>
@@ -1051,7 +1052,7 @@
     <string name="xingdun_favorite_added">消息已收藏</string>
     <string name="xingdun_favorite_removed">已取消收藏</string>
     <string name="xingdun_favorite_update_failed">收藏操作失败，请稍后重试。</string>
-    <string name="xingdun_favorite_preview_sender_primary">星盾用户</string>
+    <string name="xingdun_favorite_preview_sender_primary">叙音坊用户</string>
     <string name="xingdun_favorite_preview_sender_secondary">测试账号 B</string>
     <string name="xingdun_favorite_preview_conversation_project">项目协作群</string>
     <string name="xingdun_favorite_preview_conversation_team">研发中心</string>
@@ -1109,8 +1110,8 @@
     <string name="xingdun_redpacket_expired">已过期</string>
     <string name="xingdun_redpacket_cancelled">已取消</string>
     <string name="xingdun_redpacket_status_loading">状态加载中</string>
-    <string name="xingdun_custom_id">星盾号</string>
-    <string name="xingdun_edit_custom_id">修改星盾号</string>
+    <string name="xingdun_custom_id">叙音坊号</string>
+    <string name="xingdun_edit_custom_id">修改叙音坊号</string>
     <string name="xingdun_custom_id_invalid">请输入 3–32 位字母、数字或下划线。</string>
     <string name="xingdun_not_set">未设置</string>
     <string name="xingdun_avatar_invalid">请选择小于 5 MB 的有效图片。</string>
@@ -1162,7 +1163,7 @@
     <string name="xingdun_group_management_processing">正在处理</string>
     <string name="xingdun_group_management_updated">群管理设置已更新。</string>
     <string name="xingdun_group_management_action_failed">群管理操作失败，请稍后重试。</string>
-    <string name="xingdun_group_management_handler_unavailable">星盾群管理服务暂不可用。</string>
+    <string name="xingdun_group_management_handler_unavailable">叙音坊群管理服务暂不可用。</string>
     <string name="xingdun_group_administrator_management">管理员管理</string>
     <string name="xingdun_group_permission_settings">权限设置</string>
     <string name="xingdun_group_mute_all">全员禁言</string>
@@ -1429,5 +1430,5 @@
     <string name="xingdun_group_management_recall_confirm_message">撤回后所有群成员都无法再查看该消息，本次操作会记录审计。</string>
     <string name="xingdun_group_management_recall_success">消息已撤回。</string>
     <string name="xingdun_group_management_recall_failed">撤回失败，请刷新群权限后重试。</string>
-    <string name="demo_tab_lushu">路书</string>
+    <string name="xuyinfang_legal_source">叙音坊 · Android · 简体中文</string>
 </resources>

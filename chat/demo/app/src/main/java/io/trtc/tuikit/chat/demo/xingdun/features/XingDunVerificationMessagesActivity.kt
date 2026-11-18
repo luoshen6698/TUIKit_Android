@@ -282,6 +282,8 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
         if (requestedTab == Tab.FRIEND) refreshNativeFriends()
         lifecycleScope.launch {
             try {
+                val owner = XingDunSessionManager.currentUiSession()?.scopeKey
+                    ?: error(getString(R.string.xingdun_session_expired))
                 val session = XingDunSessionManager.currentSession()
                     ?: error(getString(R.string.xingdun_session_expired))
                 val client = XingDunSessionManager.apiClient()
@@ -296,7 +298,7 @@ class XingDunVerificationMessagesActivity : BaseActivity() {
                     sentHasMore = sent.hasMore
                     mergeFriends()
                     if (selectedTab == Tab.FRIEND && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && received.unreadCount > 0) {
-                        runCatching { client.postEmpty(session, "friend/readApply", emptyMap<String, String>()) }
+                        XingDunFriendRequestUnread.repository.markRead(owner)
                     }
                 } catch (error: Exception) {
                     if (error is CancellationException) throw error

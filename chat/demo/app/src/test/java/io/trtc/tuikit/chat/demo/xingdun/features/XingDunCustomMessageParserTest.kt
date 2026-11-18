@@ -62,7 +62,7 @@ class XingDunCustomMessageParserTest {
     fun resolvesBackendGroupInvitationNoticeForSystemPresentation() {
         val message = requireNotNull(
             XingDunCustomMessageParser.parse(
-                """{"type":"config_refresh","scope":"group","event":"members_invited","actor_user_id":"xd_owner","actor_name":"c001","member_user_ids_json":["xd_b001","xd_cs"],"member_names_json":["b001","星盾客服"]}"""
+                """{"type":"config_refresh","scope":"group","event":"members_invited","actor_user_id":"xd_owner","actor_name":"c001","member_user_ids_json":["xd_b001","xd_cs"],"member_names_json":["b001","叙音坊客服"]}"""
             )
         )
 
@@ -70,7 +70,7 @@ class XingDunCustomMessageParserTest {
 
         assertEquals(XingDunGroupConfigurationNotice.Kind.MEMBERS_INVITED, notice.kind)
         assertEquals("c001", notice.actorName)
-        assertEquals(listOf("b001", "星盾客服"), notice.memberNames)
+        assertEquals(listOf("b001", "叙音坊客服"), notice.memberNames)
     }
 
     @Test

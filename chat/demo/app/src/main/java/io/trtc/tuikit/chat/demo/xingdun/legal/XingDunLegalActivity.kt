@@ -47,7 +47,7 @@ class XingDunLegalActivity : AppCompatActivity() {
             setOnClickListener { finish() }
         })
         source = TextView(this).apply {
-            text = "星盾xd · Android · 简体中文"
+            setText(R.string.xuyinfang_legal_source)
             textSize = 14f
             setTextColor(Color.DKGRAY)
         }
@@ -141,7 +141,7 @@ class XingDunLegalActivity : AppCompatActivity() {
     private fun loadDocument() {
         webView.stopLoading()
         failed = false
-        source.text = "www.xuyinfang365.bid · Android · 简体中文"
+        source.setText(R.string.xuyinfang_legal_source)
         errorPanel.visibility = View.GONE
         webView.visibility = View.VISIBLE
         progress.visibility = View.VISIBLE

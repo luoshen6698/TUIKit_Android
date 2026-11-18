@@ -36,7 +36,7 @@ class XingDunAuthenticationContractTest {
         assertTrue(json.contains("\"company_code\":\"xc2026\""))
         assertTrue(json.contains("\"consent_source\":\"android_registration\""))
         assertTrue(json.contains("\"user_agreement_version\":\"2026.10.01\""))
-        assertTrue(json.contains("\"privacy_policy_version\":\"2026.10.04\""))
+        assertTrue(json.contains("\"privacy_policy_version\":\"2026.11.16\""))
         assertFalse(json.contains("\"ios_registration\""))
     }
 
@@ -52,7 +52,7 @@ class XingDunAuthenticationContractTest {
         )
         val fields = gson.fromJson(gson.toJson(request), Map::class.java)
         assertEquals("2026.10.01", fields["user_agreement_version"])
-        assertEquals("2026.10.04", fields["privacy_policy_version"])
+        assertEquals("2026.11.16", fields["privacy_policy_version"])
         assertEquals("android_registration", fields["consent_source"])
         assertEquals("", fields["nickname"])
         assertFalse(fields.containsKey("invite_code"))

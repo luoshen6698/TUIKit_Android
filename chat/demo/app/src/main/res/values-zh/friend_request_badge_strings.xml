@@ -1,0 +1,5 @@
+<resources>
+    <string name="friend_badge_entry">好友申请 · %1$s</string>
+    <string name="friend_badge_requests">%1$d条未读好友申请</string>
+    <string name="friend_badge_total">%1$d条未读消息与好友申请</string>
+</resources>

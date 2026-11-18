@@ -82,6 +82,9 @@ import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.AvatarBadgeView
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunDirectoryPageView
 import io.trtc.tuikit.chat.demo.xingdun.features.JourneyPageHeader
+import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFriendRequestUnread
+import io.trtc.tuikit.chat.demo.xingdun.features.FriendRequestBadgePolicy
+import io.trtc.tuikit.chat.demo.xingdun.features.mineCanUseIMData
 import io.trtc.tuikit.chat.demo.xingdun.features.JourneyFilters
 import io.trtc.tuikit.chat.uikit.components.conversationlist.ui.JourneyConversationCategory
 import io.trtc.tuikit.chat.uikit.pages.ConversationsPageView
@@ -194,6 +197,8 @@ class MainActivity : BaseActivity() {
     private val readAllCoordinator by lazy { createReadAllCoordinator(conversationListStore) }
     private val contactStore by lazy { ContactStore.shared }
     private val groupStore by lazy { GroupStore.shared }
+    private var friendRequestUnreadCount = 0
+    private var latestMessageBadgeUnreadCount = 0
     private val verificationUnreadCount = MutableStateFlow(0)
     private val serverGroupInvitationUnread = MutableStateFlow(XingDunGroupInvitationUnread(null, 0))
     private var mainScope: CoroutineScope? = null
@@ -369,24 +374,32 @@ class MainActivity : BaseActivity() {
             }
         }
         mainScope?.launch {
-            conversationListStore.state.totalUnreadCount.collectLatest { unreadCount ->
-                updateTabBadge(R.id.demo_tab_messages, unreadCount.toInt())
+            val nativeFriendUnread=combine(contactStore.state.friendApplicationUnreadCount,LoginStore.shared.loginState.loginUserInfo) { count,profile ->
+                if(mineCanUseIMData(XingDunSessionManager.currentUiSession()?.timUserId,profile?.userID))count else 0
             }
-        }
-        mainScope?.launch {
             combine(
-                contactStore.state.friendApplicationUnreadCount,
+                conversationListStore.state.totalUnreadCount,
+                nativeFriendUnread,
                 groupStore.state.unreadApplicationCount,
-                serverGroupInvitationUnread
-            ) { friendApplicationUnreadCount, groupApplicationUnreadCount, serverInvitations ->
-                friendApplicationUnreadCount + groupApplicationUnreadCount +
-                    serverInvitations.forOwner(XingDunSessionManager.currentUiSession()?.scopeKey)
-            }.collectLatest { unreadCount ->
-                verificationUnreadCount.value = unreadCount
+                serverGroupInvitationUnread,
+                XingDunFriendRequestUnread.repository.state,
+            ) { chats,nativeFriends,groups,serverGroups,serverFriends ->
+                val owner=XingDunSessionManager.currentUiSession()?.scopeKey
+                val friends=FriendRequestBadgePolicy.friends(nativeFriends,serverFriends,owner)
+                Triple(FriendRequestBadgePolicy.total(chats.toLong(),friends),friends,
+                    FriendRequestBadgePolicy.total(groups.toLong()+serverGroups.forOwner(owner),friends))
+            }.collectLatest { counts ->
+                friendRequestUnreadCount=counts.second
+                verificationUnreadCount.value=counts.third
+                updateTabBadge(R.id.demo_tab_messages,counts.first)
+                updateFriendRequestEntry()
             }
         }
         mainScope?.launch {
             while (isActive) {
+                try { XingDunFriendRequestUnread.repository.refresh() }
+                catch(error:CancellationException) { throw error }
+                catch(_:Exception) { /* Keep unread until the same account is successfully refreshed. */ }
                 val owner = XingDunSessionManager.currentUiSession()?.scopeKey
                 if (serverGroupInvitationUnread.value.owner != owner) {
                     serverGroupInvitationUnread.value = XingDunGroupInvitationUnread(owner, 0)
@@ -697,6 +710,7 @@ class MainActivity : BaseActivity() {
             .scaleY(1f)
             .alpha(1f)
             .setDuration(180L)
+            .withEndAction { updateMessageTabBadge(latestMessageBadgeUnreadCount) }
             .start()
     }
 
@@ -771,6 +785,7 @@ class MainActivity : BaseActivity() {
     }
 
     private fun updateMessageTabBadge(unreadCount: Int) {
+        latestMessageBadgeUnreadCount=unreadCount
         if (unreadCount <= 0) {
             if (!isDraggingMessageBadge) {
                 messageUnreadBadge.visibility = View.INVISIBLE
@@ -781,6 +796,7 @@ class MainActivity : BaseActivity() {
             return
         }
         val text = if (unreadCount > 99) "99+" else unreadCount.toString()
+        messageUnreadBadge.contentDescription=getString(R.string.friend_badge_total,unreadCount)
         messageUnreadBadge.setType(AvatarBadgeView.BadgeType.Text)
         messageUnreadBadge.setText(text)
         messageUnreadBadge.updateColors()
@@ -954,6 +970,7 @@ class MainActivity : BaseActivity() {
         )
         val header = JourneyPageHeader(this,R.string.demo_page_conversations_title,R.string.jd_journey_subtitle)
         journeyHeader = header
+        updateFriendRequestEntry()
         val filters = JourneyFilters(this,listOf(getString(R.string.jd_all),getString(R.string.jd_pinned),getString(R.string.jd_teams)),journeyCategory.ordinal,38) { index ->
             journeyCategory=JourneyConversationCategory.values()[index];page.setJourneyCategory(journeyCategory)
         }
@@ -983,6 +1000,10 @@ class MainActivity : BaseActivity() {
                 }
             }
         }
+    }
+
+    private fun updateFriendRequestEntry() {
+        journeyHeader?.setFriendRequests(friendRequestUnreadCount) { XingDunVerificationMessagesActivity.start(this) }
     }
 
     private fun updateIMConnectionNotice(notice: IMConnectionNotice?) = runOnUiThread {

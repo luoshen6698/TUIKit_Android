@@ -13,6 +13,10 @@ import io.trtc.tuikit.chat.demo.xingdun.features.travel.TravelUi
 internal class JourneyPageHeader(context: Context, title: Int, subtitle: Int) : LinearLayout(context) {
     private val ui = TravelUi(context)
     private val status = ui.text("",11f,TravelUi.MUTED)
+    private val friendRequests = ui.text("",12f,0xFFC44A45.toInt(),true).apply {
+        visibility=View.GONE;gravity=Gravity.CENTER;maxLines=1;ellipsize=TextUtils.TruncateAt.END
+        background=ui.box(0xFFFFEAE8.toInt(),12);setPadding(ui.d(9),0,ui.d(9),0);isFocusable=true
+    }
     init {
         orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
         setBackgroundColor(TravelUi.BG); setPadding(ui.d(16),ui.d(12),ui.d(16),ui.d(7)); minimumHeight=ui.d(58)
@@ -20,7 +24,14 @@ internal class JourneyPageHeader(context: Context, title: Int, subtitle: Int) : 
             addView(ui.row().apply { addView(ui.label(title,18f,TravelUi.INK,true)); addView(status,LayoutParams(-2,-2).apply { marginStart=ui.d(6) }) })
             addView(ui.label(subtitle,11f,TravelUi.MUTED).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END })
         },LayoutParams(0,-2,1f))
+        addView(friendRequests,LayoutParams(-2,ui.d(36)).apply { marginEnd=ui.d(10) })
         addView(XingDunMineAvatarView(context),LayoutParams(ui.d(36),ui.d(36)))
+    }
+    fun setFriendRequests(count:Int,open:()->Unit) {
+        friendRequests.visibility=if(count>0)View.VISIBLE else View.GONE
+        friendRequests.text=context.getString(R.string.friend_badge_entry,if(count>99)"99+" else count.toString())
+        friendRequests.contentDescription=context.getString(R.string.friend_badge_requests,count)
+        friendRequests.setOnClickListener { open() }
     }
     fun setConnectionNotice(value: CharSequence?) { status.text=value; status.visibility=if(value.isNullOrBlank()) View.GONE else View.VISIBLE }
 }

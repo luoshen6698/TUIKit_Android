@@ -1,0 +1,5 @@
+<resources>
+    <string name="friend_badge_entry">Requests · %1$s</string>
+    <string name="friend_badge_requests">%1$d unread friend requests</string>
+    <string name="friend_badge_total">%1$d unread messages and friend requests</string>
+</resources>

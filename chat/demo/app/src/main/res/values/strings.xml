@@ -1,9 +1,10 @@
 <resources>
-    <string name="xingdun_app_label" translatable="false">星盾xd</string>
-    <string name="demo_app_name">XingDun IM</string>
+    <string name="xingdun_app_label" translatable="false">叙音坊</string>
+    <string name="demo_app_name">Xuyinfang</string>
     <string name="xingdun_close_symbol" translatable="false">×</string>
     <string name="xingdun_success_symbol" translatable="false">✓</string>
     <string name="demo_tab_messages">On the way</string>
+    <string name="demo_tab_lushu">Routebook</string>
     <string name="demo_tab_contacts">Directory</string>
     <string name="demo_tab_me">Me</string>
     <string name="demo_settings_show_calls">Show Recent Calls</string>
@@ -11,7 +12,7 @@
     <string name="demo_login">Login</string>
     <string name="demo_input_user_id_tips">Please enter user ID</string>
     <string name="demo_logout">Logout</string>
-    <string name="demo_login_hero_title">XingDun IM</string>
+    <string name="demo_login_hero_title">Xuyinfang</string>
     <string name="demo_login_hero_subtitle">Secure enterprise communication</string>
     <string name="xingdun_company_code">Enterprise code</string>
     <string name="xingdun_company_code_required">Enter the enterprise code first.</string>
@@ -374,12 +375,12 @@
     <string name="xingdun_open_customer_service">Open customer-service chat</string>
     <string name="xingdun_customer_service_unavailable">No customer-service account is available for this user.</string>
     <string name="xingdun_add_friend_title">Add friend</string>
-    <string name="xingdun_friend_search_hint">Login name, XingDun account, IM account, or phone</string>
+    <string name="xingdun_friend_search_hint">Login name, Xuyinfang account, IM account, or phone</string>
     <string name="xingdun_search_user">Search user</string>
     <string name="xingdun_friend_search_invalid">Enter a valid login name, account, or phone number.</string>
     <string name="xingdun_friend_search_failed">Search failed. Check your connection and try again.</string>
     <string name="xingdun_user_profile">User profile</string>
-    <string name="xingdun_friend_account_value">XingDun account: %1$s</string>
+    <string name="xingdun_friend_account_value">Xuyinfang account: %1$s</string>
     <string name="xingdun_add_friend">Add friend</string>
     <string name="xingdun_friend_application_message">Enter an application message</string>
     <string name="xingdun_send_application">Send application</string>
@@ -387,7 +388,7 @@
     <string name="xingdun_friend_added">Friend added.</string>
     <string name="xingdun_friend_application_sent">Friend request sent.</string>
     <string name="xingdun_friend_not_found">This user does not exist</string>
-    <string name="xingdun_friend_not_found_detail">Check the login name, XingDun account, IM account, or phone number.</string>
+    <string name="xingdun_friend_not_found_detail">Check the login name, Xuyinfang account, IM account, or phone number.</string>
     <string name="xingdun_friend_relationship_none">Not connected</string>
     <string name="xingdun_friend_relationship_self">This is your account</string>
     <string name="xingdun_friend_relationship_friend">Already friends</string>
@@ -493,7 +494,7 @@
     <string name="xingdun_personal_qr">My QR code</string>
     <string name="xingdun_personal_qr_description">%1$s\nAccount: %2$s</string>
     <string name="xingdun_personal_qr_account_format">Account: %1$s</string>
-    <string name="xingdun_personal_qr_validity">This QR code identifies your XingDun account. Share it only with people you trust.</string>
+    <string name="xingdun_personal_qr_validity">This QR code identifies your Xuyinfang account. Share it only with people you trust.</string>
     <string name="xingdun_personal_qr_scan_hint">Scan the QR code above to add me as a friend</string>
     <string name="xingdun_personal_qr_validity_format">Valid for 7 days (until %1$s). Reopen this page after it expires to refresh.</string>
     <string name="xingdun_personal_qr_share_text">%1$s personal QR code\nNickname: %2$s\nAccount: %3$s</string>
@@ -540,7 +541,7 @@
     <string name="xingdun_customer_service_no_groups">No manageable groups</string>
     <string name="xingdun_customer_service_group_summary">%1$d members · %2$s</string>
     <string name="xingdun_customer_service_group_unavailable">This group is not assigned to the current customer-service account.</string>
-    <string name="xingdun_customer_service_preview_agent">XingDun Service Team</string>
+    <string name="xingdun_customer_service_preview_agent">Xuyinfang Service Team</string>
     <string name="xingdun_customer_service_preview_user">Enterprise user %1$d</string>
     <string name="xingdun_customer_service_preview_group_primary">Delivery support group</string>
     <string name="xingdun_customer_service_preview_group_secondary">After-sales coordination group</string>
@@ -578,7 +579,7 @@
     <string name="xingdun_group_qr_saved">Group QR code saved to Photos.</string>
     <string name="xingdun_group_qr_save_failed">Could not save the group QR code. Try again later.</string>
     <string name="xingdun_group_qr_share_failed">Could not share the group QR code. Try again later.</string>
-    <string name="xingdun_group_qr_permission_denied">Allow XingDun IM to access Photos in system settings before saving the group QR code.</string>
+    <string name="xingdun_group_qr_permission_denied">Allow Xuyinfang to access Photos in system settings before saving the group QR code.</string>
     <string name="xingdun_group_qr_share_text">%1$s group chat: %2$s\nGroup number: %3$s</string>
     <string name="xingdun_save_announcement">Save announcement</string>
     <string name="xingdun_announcement_too_long">The announcement must be 100 characters or fewer.</string>
@@ -654,7 +655,7 @@
     <string name="xingdun_chat_more_mention">Mention</string>
     <string name="xingdun_contact_detail_recommend_failed">Could not send the contact card. Try again later.</string>
     <string name="xingdun_contact_detail_load_failed">Could Not Load Details</string>
-    <string name="xingdun_qr_scan_description">Scan a XingDun account, group, or invitation QR code.</string>
+    <string name="xingdun_qr_scan_description">Scan a Xuyinfang account, group, or invitation QR code.</string>
     <string name="xingdun_scan_with_camera">Scan with camera</string>
     <string name="xingdun_scan_from_gallery">Choose from gallery</string>
     <string name="xingdun_qr_scan_prompt">Place the QR code inside the frame</string>
@@ -670,7 +671,7 @@
     <string name="xingdun_delete_conversation_failed">Couldn\'t delete the conversation. Try again.</string>
     <string name="xingdun_add_friend_menu">Add Friend</string>
     <string name="xingdun_qr_manual_payload">Paste QR content for manual verification</string>
-    <string name="xingdun_qr_unrecognized">This QR code is not a supported XingDun code.</string>
+    <string name="xingdun_qr_unrecognized">This QR code is not a supported Xuyinfang code.</string>
     <string name="xingdun_qr_user_not_found">The account in this QR code was not found.</string>
     <string name="xingdun_qr_group_not_found">The group in this QR code was not found.</string>
     <string name="xingdun_invitation_recognized">Enterprise invitation recognized</string>
@@ -741,11 +742,11 @@
     <string name="xingdun_deactivation_submit_hint">After a successful request, you are signed out immediately and this device clears its sign-in credentials and account cache.</string>
     <string name="xingdun_confirm_current_account_deactivation">Deactivate the current account?</string>
     <string name="xingdun_deactivation_rules_title">Account Deactivation Rules</string>
-    <string name="xingdun_deactivation_rules_full_title">XingDun IM Account Deactivation Rules</string>
+    <string name="xingdun_deactivation_rules_full_title">Xuyinfang Account Deactivation Rules</string>
     <string name="xingdun_deactivation_rules_version">Version 2026.08.13 · Effective August 13, 2026</string>
     <string name="xingdun_deactivation_rules_summary">These rules explain eligibility, immediate effects, controlled recovery, irreversible deletion, and data-retention boundaries. Signing out, withdrawing privacy consent, and deactivating an account are different actions.</string>
     <string name="xingdun_deactivation_rules_section_1_title">1. Scope</string>
-    <string name="xingdun_deactivation_rules_section_1_body">These rules apply when you request deactivation of the current business account from the XingDun IM Android client. When an enterprise administrator disables a member account because of departure, misconduct, or security concerns, enterprise rules and platform governance procedures apply instead.</string>
+    <string name="xingdun_deactivation_rules_section_1_body">These rules apply when you request deactivation of the current business account from the Xuyinfang Android client. When an enterprise administrator disables a member account because of departure, misconduct, or security concerns, enterprise rules and platform governance procedures apply instead.</string>
     <string name="xingdun_deactivation_rules_section_2_title">2. Entry point and identity verification</string>
     <string name="xingdun_deactivation_rules_section_2_body">Go to My - Settings - Account &amp; Security - Deactivate Account. To prevent impersonation, you must verify the current password, read the effects, acknowledge them, and complete a second destructive-action confirmation. Device accounts must first bind a verifiable username and password.</string>
     <string name="xingdun_deactivation_rules_section_3_title">3. Checks before requesting deactivation</string>
@@ -755,7 +756,7 @@
     <string name="xingdun_deactivation_rules_section_5_title">5. Controlled recovery and restoration</string>
     <string name="xingdun_deactivation_rules_section_5_body">To prevent mistakes and address enterprise relationships, security incidents, and disputes, deactivated account data and device snapshots enter a restricted server recovery area. You cannot restore the account yourself; recovery requires an enterprise administrator to verify your identity and organization relationship.\n\nYou may ask Help &amp; Feedback or an enterprise administrator for irreversible deletion during the recovery stage. After approval, administrators permanently remove the business identity and recovery snapshot.</string>
     <string name="xingdun_deactivation_rules_section_6_title">6. Tencent Cloud account identifier boundary</string>
-    <string name="xingdun_deactivation_rules_section_6_body">Tencent Cloud commercial SDKAppIDs may not currently support physical deletion of imported Tencent UserIDs. XingDun IM signs the user out, stops issuing UserSigs, and removes the business-identity association. After permanent deletion, Tencent may retain only a technical identifier that cannot independently identify your business data or sign in to XingDun IM.</string>
+    <string name="xingdun_deactivation_rules_section_6_body">Tencent Cloud commercial SDKAppIDs may not currently support physical deletion of imported Tencent UserIDs. Xuyinfang signs the user out, stops issuing UserSigs, and removes the business-identity association. After permanent deletion, Tencent may retain only a technical identifier that cannot independently identify your business data or sign in to Xuyinfang.</string>
     <string name="xingdun_deactivation_rules_section_7_title">7. Information not deleted immediately</string>
     <string name="xingdun_deactivation_rules_section_7_body">• Messages and files already received, forwarded, favorited, or lawfully retained by other users.\n• Approvals, audits, organization changes, and business records lawfully managed by the enterprise.\n• Red-packet orders, claims, refunds, and other transaction records retained by law or for dispute handling.\n• Reports, content safety, sign-in, security incident, and operational audit records retained for legally required or reasonable periods.</string>
     <string name="xingdun_deactivation_rules_section_8_title">8. Deletion and anonymization</string>
@@ -942,9 +943,9 @@
     <string name="xingdun_customer_service_dashboard">Customer-service dashboard</string>
     <string name="xingdun_invited_count">Invited members: %1$d</string>
     <string name="xingdun_invite_qr">Invitation QR code</string>
-    <string name="xingdun_invite_share_text">%1$s invited you to join XingDun.\nInvitation code: %2$s\n%3$s</string>
-    <string name="xingdun_invite_poster_description">XingDun invitation poster</string>
-    <string name="xingdun_platform_brand_name">XingDun IM Platform</string>
+    <string name="xingdun_invite_share_text">%1$s invited you to join Xuyinfang.\nInvitation code: %2$s\n%3$s</string>
+    <string name="xingdun_invite_poster_description">Xuyinfang invitation poster</string>
+    <string name="xingdun_platform_brand_name">Xuyinfang Platform</string>
     <string name="xingdun_invite_poster_tagline">Connect your team securely and collaborate efficiently</string>
     <string name="xingdun_invite_poster_invitation">%1$s invited you to join the team</string>
     <string name="xingdun_invite_poster_code">Invitation code  %1$s</string>
@@ -969,7 +970,7 @@
     <string name="xingdun_help_center_title">Help Center</string>
     <string name="xingdun_system_settings">System Settings</string>
     <string name="xingdun_logout_confirm_title">Sign out of this account?</string>
-    <string name="xingdun_about_platform">About XingDun IM Platform</string>
+    <string name="xingdun_about_platform">About Xuyinfang Platform</string>
     <string name="xingdun_message_favorites">Message favorites</string>
     <string name="xingdun_redpacket_account">Red packets &amp; balance</string>
     <string name="xingdun_help_center">Help &amp; feedback</string>
@@ -991,7 +992,7 @@
     <string name="xingdun_help_storage_question">Does clearing cache delete chat history?</string>
     <string name="xingdun_help_storage_answer">No. Storage management removes only local media cache. Media may be downloaded again; Tencent IM messages and server favorites are preserved.</string>
     <string name="xingdun_help_colleague_question">Why can’t I find a colleague?</string>
-    <string name="xingdun_help_colleague_answer">Search by XingDun account, phone number or Tencent UserID and confirm both users belong to the same enterprise and both accounts are active.</string>
+    <string name="xingdun_help_colleague_answer">Search by Xuyinfang account, phone number or Tencent UserID and confirm both users belong to the same enterprise and both accounts are active.</string>
     <string name="xingdun_help_group_question">Why can’t I edit group information?</string>
     <string name="xingdun_help_group_answer">Group details, announcements, administrators and members are managed by the owner or administrators. Members can view group information or request to join according to group settings.</string>
     <string name="xingdun_help_feedback_title">Help &amp; Feedback</string>
@@ -1035,7 +1036,7 @@
     <string name="xingdun_permission_files_usage">Android grants access only to each selected file; the complete file library is not scanned.</string>
     <string name="xingdun_permission_files_scoped">Granted per item by the Android system picker</string>
     <string name="xingdun_open_system_settings">Open system settings</string>
-    <string name="xingdun_about_description">XingDun is an enterprise messaging and collaboration client. Available features depend on enterprise configuration and account permissions.</string>
+    <string name="xingdun_about_description">Xuyinfang is an enterprise messaging and collaboration client. Available features depend on enterprise configuration and account permissions.</string>
     <string name="xingdun_check_updates">Check for updates</string>
     <string name="xingdun_about_title_format">About %1$s</string>
     <string name="xingdun_about_version">Version %1$s</string>
@@ -1060,7 +1061,7 @@
     <string name="xingdun_favorite_added">Message added to favorites</string>
     <string name="xingdun_favorite_removed">Favorite removed</string>
     <string name="xingdun_favorite_update_failed">Couldn’t update this favorite. Try again later.</string>
-    <string name="xingdun_favorite_preview_sender_primary">XingDun User</string>
+    <string name="xingdun_favorite_preview_sender_primary">Xuyinfang User</string>
     <string name="xingdun_favorite_preview_sender_secondary">Test Account B</string>
     <string name="xingdun_favorite_preview_conversation_project">Project Team</string>
     <string name="xingdun_favorite_preview_conversation_team">Engineering</string>
@@ -1119,8 +1120,8 @@
     <string name="xingdun_redpacket_expired">Expired</string>
     <string name="xingdun_redpacket_cancelled">Cancelled</string>
     <string name="xingdun_redpacket_status_loading">Loading status</string>
-    <string name="xingdun_custom_id">XingDun ID</string>
-    <string name="xingdun_edit_custom_id">Edit XingDun ID</string>
+    <string name="xingdun_custom_id">Xuyinfang ID</string>
+    <string name="xingdun_edit_custom_id">Edit Xuyinfang ID</string>
     <string name="xingdun_custom_id_invalid">Use 3–32 letters, numbers, or underscores.</string>
     <string name="xingdun_not_set">Not set</string>
     <string name="xingdun_avatar_invalid">Choose a valid image smaller than 5 MB.</string>
@@ -1172,7 +1173,7 @@
     <string name="xingdun_group_management_processing">Processing</string>
     <string name="xingdun_group_management_updated">Group management settings updated.</string>
     <string name="xingdun_group_management_action_failed">Unable to complete the group action. Try again later.</string>
-    <string name="xingdun_group_management_handler_unavailable">XingDun group management is temporarily unavailable.</string>
+    <string name="xingdun_group_management_handler_unavailable">Xuyinfang group management is temporarily unavailable.</string>
     <string name="xingdun_group_administrator_management">Administrator Management</string>
     <string name="xingdun_group_permission_settings">Permissions</string>
     <string name="xingdun_group_mute_all">Mute All Members</string>
@@ -1445,5 +1446,5 @@
     <string name="xingdun_group_management_recall_confirm_message">The message will be recalled for all group members. This action is recorded for audit.</string>
     <string name="xingdun_group_management_recall_success">Message recalled.</string>
     <string name="xingdun_group_management_recall_failed">Could not recall the message. Refresh group permissions and try again.</string>
-    <string name="demo_tab_lushu">Routebook</string>
+    <string name="xuyinfang_legal_source">Xuyinfang · Android · Simplified Chinese</string>
 </resources>
