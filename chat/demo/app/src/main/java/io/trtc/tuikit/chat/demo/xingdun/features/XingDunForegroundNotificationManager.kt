@@ -15,6 +15,7 @@ import com.tencent.imsdk.v2.V2TIMValueCallback
 import io.trtc.tuikit.chat.app.R
 import io.trtc.tuikit.chat.demo.xingdun.call.XingDunCallHistoryNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunLocalNotificationRoutes
+import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 
 internal data class XingDunForegroundNotificationDecision(
     val showNotification: Boolean,
@@ -30,8 +31,10 @@ internal object XingDunForegroundNotificationPolicy {
         isSupportedMessage: Boolean,
         soundEnabled: Boolean,
         vibrationEnabled: Boolean,
+        preferVendorBackgroundNotification: Boolean = false,
     ): XingDunForegroundNotificationDecision {
-        val shouldPresent = !(appInForeground && isActiveConversation) && !isMuted && isSupportedMessage
+        val shouldPresent = (appInForeground || !preferVendorBackgroundNotification) &&
+            !(appInForeground && isActiveConversation) && !isMuted && isSupportedMessage
         return XingDunForegroundNotificationDecision(
             showNotification = shouldPresent,
             playSound = shouldPresent && soundEnabled,
@@ -179,6 +182,7 @@ internal object XingDunForegroundNotificationManager {
             isSupportedMessage = supported,
             soundEnabled = soundEnabled(appContext),
             vibrationEnabled = vibrationEnabled(appContext),
+            preferVendorBackgroundNotification = XingDunPushManager.preferVendorBackgroundNotification(),
         )
         if (decision.showNotification) notifications.show(message, conversationID, title, account,
             decision.playSound, decision.playVibration)

@@ -10,6 +10,8 @@ object XingDunPushManager {
 
     fun onSessionCleared() = Unit
 
+    fun preferVendorBackgroundNotification() = false
+
     fun unregisterDevice(onComplete: () -> Unit) {
         onComplete()
     }

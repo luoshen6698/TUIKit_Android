@@ -40,4 +40,24 @@ class XingDunForegroundNotificationPolicyTest {
         assertEquals(XingDunForegroundNotificationDecision(true, true, true),
             XingDunForegroundNotificationPolicy.decide(false, true, false, true, true, true))
     }
+
+    @Test
+    fun registeredVendorOwnsBackgroundAlertsWithoutDuplicatingTheSdkNotification() {
+        assertEquals(XingDunForegroundNotificationDecision(false, false, false),
+            XingDunForegroundNotificationPolicy.decide(false, false, false, true, true, true,
+                preferVendorBackgroundNotification = true))
+        assertEquals(XingDunForegroundNotificationDecision(false, false, false),
+            XingDunForegroundNotificationPolicy.decide(false, true, false, true, true, true,
+                preferVendorBackgroundNotification = true))
+    }
+
+    @Test
+    fun vendorRegistrationKeepsForegroundAlertsAndUnregisteredBackgroundFallback() {
+        assertEquals(XingDunForegroundNotificationDecision(true, true, true),
+            XingDunForegroundNotificationPolicy.decide(true, false, false, true, true, true,
+                preferVendorBackgroundNotification = true))
+        assertEquals(XingDunForegroundNotificationDecision(true, true, true),
+            XingDunForegroundNotificationPolicy.decide(false, false, false, true, true, true,
+                preferVendorBackgroundNotification = false))
+    }
 }

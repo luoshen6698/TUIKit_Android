@@ -166,6 +166,15 @@ object XingDunPushManager {
         leavingSession = false
     }
 
+    /** OPPO renders its own background notification; avoid a second SDK-delivered alert. */
+    fun preferVendorBackgroundNotification(): Boolean {
+        if (BuildConfig.XINGDUN_RELEASE_CHANNEL != "oppo" ||
+            !Build.MANUFACTURER.equals("OPPO", ignoreCase = true)) return false
+        val session = XingDunSessionManager.currentSession() ?: return false
+        val attempt = registrationGate.registeredAttempt(identity(session)) ?: return false
+        return isActive(attempt)
+    }
+
     private fun identity(session: XingDunStoredSession): String =
         "${session.apiBaseUrl}:${session.sdkAppId}:${session.timUserId}"
 
