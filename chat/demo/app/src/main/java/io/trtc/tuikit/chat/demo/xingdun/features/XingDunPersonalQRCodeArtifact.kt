@@ -11,6 +11,7 @@ import android.graphics.RectF
 import com.journeyapps.barcodescanner.BarcodeEncoder
 import com.google.zxing.BarcodeFormat
 import io.trtc.tuikit.chat.app.R
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunAvatarUrl
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -46,7 +47,8 @@ class XingDunPersonalQRCodeArtifactStore(private val context: Context) {
             displayName,
             accountID,
         )
-        val cacheKey = stableHash(listOf(tenantKey, userID, displayName, accountID, avatarURL.orEmpty(), locale.toLanguageTag()).joinToString("|"))
+        val resolvedAvatarURL = avatarURL?.takeIf(String::isNotBlank)?.let(XingDunAvatarUrl::resolve)
+        val cacheKey = stableHash(listOf(tenantKey, userID, displayName, accountID, resolvedAvatarURL.orEmpty(), locale.toLanguageTag()).joinToString("|"))
         val cacheDirectory = File(context.cacheDir, CACHE_DIRECTORY).apply { mkdirs() }
         val imageFile = File(cacheDirectory, "$cacheKey.png")
         val preferences = context.getSharedPreferences(CACHE_PREFERENCES, Context.MODE_PRIVATE)
@@ -61,7 +63,7 @@ class XingDunPersonalQRCodeArtifactStore(private val context: Context) {
 
         val expiresAt = now + VALIDITY_MILLIS
         val qrCode = BarcodeEncoder().encodeBitmap(payload, BarcodeFormat.QR_CODE, 720, 720)
-        val avatar = avatarURL?.takeIf(String::isNotBlank)?.let(::downloadBitmap)
+        val avatar = resolvedAvatarURL?.let(::downloadBitmap)
         val card = renderCard(qrCode, avatar, displayName, accountID, expiresAt, locale)
         runCatching {
             FileOutputStream(imageFile).use { output -> check(card.compress(Bitmap.CompressFormat.PNG, 100, output)) }

@@ -6,6 +6,8 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.model.GlideUrl
 import com.tencent.mmkv.MMKV
 import io.trtc.tuikit.chat.demo.xingdun.legal.XingDunPrivacyConsentStore
 import io.trtc.tuikit.chat.demo.xingdun.legal.XingDunDeferredSdkInitializers
@@ -23,6 +25,7 @@ import io.trtc.tuikit.chat.demo.xingdun.features.XingDunConversationPreviewResol
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunForegroundNotificationManager
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunFeatureActivity
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunLocalMessageMarkRepository
+import io.trtc.tuikit.chat.demo.xingdun.network.XingDunAvatarGlideLoader
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunBusinessActionHandler
 import io.trtc.tuikit.chat.demo.xingdun.push.XingDunPushManager
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
@@ -37,6 +40,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import io.trtc.tuikit.chat.uikit.components.messagelist.config.MessageLocalMarkConfig
+
+import java.io.InputStream
 
 class Application : Application() {
 
@@ -68,6 +73,7 @@ class Application : Application() {
     fun initializeAfterPrivacyConsent() {
         check(XingDunPrivacyConsentStore(noBackupFilesDir).hasConsent())
         if (servicesInitialized) return
+        Glide.get(this).registry.replace(GlideUrl::class.java, InputStream::class.java, XingDunAvatarGlideLoader.Factory)
         MMKV.initialize(this)
         XingDunDeferredSdkInitializers.initialize(this)
         com.tencent.qcloud.tuikit.tuicallkit.manager.bridge.Initializer().init(this)

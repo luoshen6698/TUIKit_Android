@@ -6,6 +6,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
+import android.os.SystemClock
 import android.text.TextUtils
 import android.util.AttributeSet
 import android.util.TypedValue
@@ -72,7 +73,8 @@ class Avatar @JvmOverloads constructor(
         private const val ICON_SCALE_FACTOR = 0.5f
         private const val INVALID_IMAGE_URL_CACHE_MAX_SIZE = 100
 
-        private val invalidImageUrlCache = LinkedHashSet<String>()
+        private const val IMAGE_FAILURE_COOLDOWN_MILLIS = 30_000L
+        private val invalidImageUrlCache = LinkedHashMap<String, Long>()
     }
 
     sealed class AvatarContent {
@@ -364,7 +366,7 @@ class Avatar @JvmOverloads constructor(
 
         showImageView()
         Glide.with(context.applicationContext)
-            .load(url)
+            .load(if (url is String) urlKey else url)
             .centerCrop()
             .listener(object : RequestListener<Drawable> {
                 override fun onLoadFailed(
@@ -445,24 +447,21 @@ class Avatar @JvmOverloads constructor(
         textView.visibility = GONE
     }
 
-    private fun isInvalidImageUrlCached(urlKey: String): Boolean {
+    private fun isInvalidImageUrlCached(urlKey: String): Boolean =
         synchronized(invalidImageUrlCache) {
-            return invalidImageUrlCache.contains(urlKey)
+            val retryAt = invalidImageUrlCache[urlKey] ?: return@synchronized false
+            if (SystemClock.elapsedRealtime() < retryAt) return@synchronized true
+            invalidImageUrlCache.remove(urlKey)
+            false
         }
-    }
 
     private fun cacheInvalidImageUrl(urlKey: String) {
         synchronized(invalidImageUrlCache) {
-            if (invalidImageUrlCache.contains(urlKey)) {
-                return
-            }
+            invalidImageUrlCache.remove(urlKey)
             if (invalidImageUrlCache.size >= INVALID_IMAGE_URL_CACHE_MAX_SIZE) {
-                val oldestUrlKey = invalidImageUrlCache.firstOrNull()
-                if (oldestUrlKey != null) {
-                    invalidImageUrlCache.remove(oldestUrlKey)
-                }
+                invalidImageUrlCache.keys.firstOrNull()?.let(invalidImageUrlCache::remove)
             }
-            invalidImageUrlCache.add(urlKey)
+            invalidImageUrlCache[urlKey] = SystemClock.elapsedRealtime() + IMAGE_FAILURE_COOLDOWN_MILLIS
         }
     }
 
