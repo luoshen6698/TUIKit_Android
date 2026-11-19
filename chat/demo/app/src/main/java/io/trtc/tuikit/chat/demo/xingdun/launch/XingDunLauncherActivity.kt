@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.ActivityManager
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import io.trtc.tuikit.chat.demo.main.MainActivity
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunNotificationIntentReader
 
@@ -14,6 +15,8 @@ class XingDunLauncherActivity : Activity() {
         if (XingDunNotificationIntentReader.hasPayloadExtras(intent)) {
             // Existing local PendingIntents and vendor "open application" actions can still target this component.
             startActivity(Intent(this, XingDunStartupActivity::class.java).apply {
+                // Android compares action but not extras when it decides to just resume a task.
+                action = "$packageName.FORWARDED_NOTIFICATION.${SystemClock.elapsedRealtimeNanos()}"
                 putExtras(intent)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             })
