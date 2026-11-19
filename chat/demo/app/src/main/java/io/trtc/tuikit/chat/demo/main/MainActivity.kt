@@ -33,6 +33,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
+import androidx.lifecycle.Lifecycle
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.viewpager2.widget.ViewPager2
@@ -151,7 +152,7 @@ class MainActivity : BaseActivity() {
 
         private var launcherTarget: WeakReference<MainActivity>? = null
 
-        internal fun resumeFromLauncher(launcher: Context): Intent? {
+        internal fun reuseMainIntent(context: Context, tab: String): Intent? {
             val main = launcherTarget?.get() ?: return null
             val currentScope = XingDunSessionManager.currentUiSession()?.scopeKey ?: return null
             if (main.isFinishing || main.isDestroyed ||
@@ -160,9 +161,9 @@ class MainActivity : BaseActivity() {
             ) {
                 return null
             }
-            return Intent(launcher, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                putExtra(EXTRA_TARGET_TAB, TAB_HOME)
+            return Intent(context, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra(EXTRA_TARGET_TAB, tab)
             }
         }
     }
@@ -256,7 +257,7 @@ class MainActivity : BaseActivity() {
         }
 
         setContentView(R.layout.demo_activity_main)
-        currentTabId = savedInstanceState?.getInt("main_tab", defaultTabId) ?: defaultTabId
+        currentTabId = requestedTabId(intent) ?: savedInstanceState?.getInt("main_tab", defaultTabId) ?: defaultTabId
         if (!BuildConfig.XINGDUN_HOME_ENABLED && currentTabId == R.id.demo_tab_home) {
             currentTabId = defaultTabId
         }
@@ -332,7 +333,6 @@ class MainActivity : BaseActivity() {
         setupViewPager()
         setupBottomNav()
         applyColors(themeStore.themeState.value.currentTheme.tokens.color)
-        refreshUnreadCounts()
         selectRequestedTab(intent)
         XingDunNotificationIntentReader.readAndStage(intent, "main_create")
         if (savedInstanceState?.getBoolean("mine_drawer_open") == true) drawerHost.post { openMineDrawer() }
@@ -375,7 +375,7 @@ class MainActivity : BaseActivity() {
         mainScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         XingDunConversationPreviewCleaner.cleanupExistingConversationPreviews(this)
         refreshUnreadCounts()
-        contactsPage?.refresh()
+        if (currentTabId == R.id.demo_tab_contacts) contactsPage?.refresh()
 
         mainScope?.launch {
             themeStore.themeState.collectLatest { state ->
@@ -546,7 +546,11 @@ class MainActivity : BaseActivity() {
             return
         }
         selectedTabIndex = index
+        val previousTabId = currentTabId
         currentTabId = bottomTabs[index].tabId
+        if (previousTabId != currentTabId && currentTabId == R.id.demo_tab_contacts &&
+            lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        ) contactsPage?.refresh()
         (tabPageCache[R.id.demo_tab_home] as? XingDunHomePageView)?.setActive(currentTabId == R.id.demo_tab_home)
         (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.setActive(currentTabId == R.id.demo_tab_lushu)
         if (updatePager && viewPager.currentItem != index) {
@@ -1150,16 +1154,18 @@ class MainActivity : BaseActivity() {
             openMineDrawer(); intent.removeExtra(EXTRA_TARGET_TAB); return
         }
         if (::drawerHost.isInitialized) closeMineDrawer()
-        val requestedTabId = when (intent?.getStringExtra(EXTRA_TARGET_TAB)) {
-            TAB_HOME -> defaultTabId
-            TAB_MESSAGES -> R.id.demo_tab_messages
-            TAB_LUSHU -> R.id.demo_tab_lushu
-            TAB_CONTACTS -> R.id.demo_tab_contacts
-            else -> return
-        }
+        val requestedTabId = requestedTabId(intent) ?: return
         val index = bottomTabs.indexOfFirst { it.tabId == requestedTabId }
         if (index >= 0) selectTab(index, updatePager = true)
         intent?.removeExtra(EXTRA_TARGET_TAB)
+    }
+
+    private fun requestedTabId(intent: Intent?): Int? = when (intent?.getStringExtra(EXTRA_TARGET_TAB)) {
+        TAB_HOME -> defaultTabId
+        TAB_MESSAGES -> R.id.demo_tab_messages
+        TAB_LUSHU -> R.id.demo_tab_lushu
+        TAB_CONTACTS -> R.id.demo_tab_contacts
+        else -> null
     }
 
     fun selectTabByName(tab: String) {

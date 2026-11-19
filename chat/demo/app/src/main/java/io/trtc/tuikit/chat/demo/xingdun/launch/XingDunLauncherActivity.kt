@@ -21,7 +21,7 @@ class XingDunLauncherActivity : Activity() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             })
         } else if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
-            val main = MainActivity.resumeFromLauncher(this)
+            val main = MainActivity.reuseMainIntent(this, MainActivity.TAB_HOME)
             val previousTask = if (main == null) existingAppTask() else null
             if (previousTask != null) {
                 previousTask.moveToFront()

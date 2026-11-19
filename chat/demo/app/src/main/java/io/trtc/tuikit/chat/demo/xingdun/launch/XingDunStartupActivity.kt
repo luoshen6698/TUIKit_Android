@@ -102,11 +102,12 @@ class XingDunStartupActivity : AppCompatActivity() {
         ) {
             val conversation = XingDunRouter.takeConversationIntent(this, requireExistingNavigation = true)
             if (conversation != null) {
-                if (isTaskRoot) {
-                    routeToHome(conversation)
-                } else {
-                    startActivity(conversation)
+                val main = MainActivity.reuseMainIntent(this, MainActivity.TAB_MESSAGES)
+                if (main != null) {
+                    startActivities(arrayOf(main, conversation))
                     finish()
+                } else {
+                    routeToHome(conversation)
                 }
                 return
             }
@@ -579,6 +580,7 @@ class XingDunStartupActivity : AppCompatActivity() {
         } else {
             startActivities(arrayOf(target, conversation))
             XingDunRouter.markMainReady()
+            finish()
         }
     }
 
