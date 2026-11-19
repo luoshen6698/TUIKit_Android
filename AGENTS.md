@@ -5,6 +5,19 @@
 - 任务通过必要验证后，仅提交本次范围内的改动，直接推送到 `origin/main`，并核对本地与远端完整提交 SHA 一致。
 - 切换、提交或推送前必须保留并排除用户已有的未提交改动；旧功能分支仅在确认其有效提交已包含于 `main` 后再按用户指示处理，不得自行删除。
 
+## 叙音坊渠道出包
+
+- 固定出包来源为 `/Users/mac/Documents/project/TUIKit_Android-xuyingfang` 的 `main`。TEIM 的安卓子模块用于锁定引用和对照，不作为渠道出包目录。
+- 指定已核准的完整提交。构建入口按同一提交检查本地源码和实时 `origin/main`，拒绝未提交源码。已有非构建资料保留。
+
+  ```sh
+  python3 tools/build_xuyinfang_release.py --commit <40位提交> --source-only
+  XINGDUN_RELEASE_CHANNEL=xiaomi VERSION_NAME=1.0.0 VERSION_CODE=1 \
+    python3 tools/build_xuyinfang_release.py --commit <40位提交> :app:assembleRelease
+  ```
+
+- 出包后核对同目录的 `xuyinfang-release-source.json` 中的提交、渠道、包名、版本和 APK 哈希，再复制或安装对应 APK。切换渠道须重新构建并校验本轮产物。
+
 ## 任务记录与验收资料
 
 - 默认以最终回复记录任务结果、实际验证情况、版本和交付路径；普通开发、构建、测试或安装任务不自动另写整套验收记录，不按任务名称或日期反复新建验收、证据或归档文件夹。
