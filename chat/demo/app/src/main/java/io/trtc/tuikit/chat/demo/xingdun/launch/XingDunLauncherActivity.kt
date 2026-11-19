@@ -5,12 +5,19 @@ import android.app.ActivityManager
 import android.content.Intent
 import android.os.Bundle
 import io.trtc.tuikit.chat.demo.main.MainActivity
+import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunNotificationIntentReader
 
 /** Routes desktop launches separately from Android restoring the app in Recents. */
 class XingDunLauncherActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
+        if (XingDunNotificationIntentReader.hasPayloadExtras(intent)) {
+            // Existing local PendingIntents and vendor "open application" actions can still target this component.
+            startActivity(Intent(this, XingDunStartupActivity::class.java).apply {
+                putExtras(intent)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            })
+        } else if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
             val main = MainActivity.resumeFromLauncher(this)
             val previousTask = if (main == null) existingAppTask() else null
             if (previousTask != null) {

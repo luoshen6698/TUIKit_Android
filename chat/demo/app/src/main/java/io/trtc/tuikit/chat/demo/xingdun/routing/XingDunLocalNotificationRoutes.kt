@@ -2,9 +2,11 @@ package io.trtc.tuikit.chat.demo.xingdun.routing
 
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import com.tencent.imsdk.v2.V2TIMManager
 import com.tencent.qcloud.tuicore.TUILogin
 import io.trtc.tuikit.atomicxcore.api.login.LoginStore
+import io.trtc.tuikit.chat.demo.xingdun.launch.XingDunStartupActivity
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 
@@ -25,11 +27,13 @@ internal object XingDunLocalNotificationRoutes {
         val destination = XingDunNotificationDestination.Conversation(conversationID)
         val payload = XingDunNotificationPayloadParser.encode(destination)
         if (XingDunNotificationPayloadParser.parse(payload) != destination) return null
-        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
-        // PendingIntent uniqueness must not use data: startup reserves data URIs for invitations.
-        intent.action = context.packageName + ".LOCAL_NOTIFICATION." + tag
-        intent.putExtra("ext", payload)
-        intent.putExtra(EXTRA_ACCOUNT, accountKey)
+        val intent = Intent(context, XingDunStartupActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // PendingIntent uniqueness must not use data: startup reserves data URIs for invitations.
+            action = context.packageName + ".LOCAL_NOTIFICATION." + tag
+            putExtra("ext", payload)
+            putExtra(EXTRA_ACCOUNT, accountKey)
+        }
         return PendingIntent.getActivity(context, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }

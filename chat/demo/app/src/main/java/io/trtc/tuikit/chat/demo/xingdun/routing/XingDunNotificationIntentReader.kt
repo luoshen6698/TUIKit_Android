@@ -11,6 +11,8 @@ internal object XingDunNotificationIntentReader {
     private val payloadKeys = listOf("ext", "entity", "ChatKey")
     private const val MAX_EXTRA_BYTES = 1024
 
+    fun hasPayloadExtras(intent: Intent): Boolean = payloadKeys.any(intent::hasExtra)
+
     fun readAndStage(intent: Intent?, source: String): Boolean {
         if (intent == null) return false
         if (intent.hasExtra(XingDunLocalNotificationRoutes.EXTRA_ACCOUNT) &&
