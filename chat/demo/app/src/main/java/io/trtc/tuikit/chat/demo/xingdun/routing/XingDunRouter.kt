@@ -71,34 +71,54 @@ object XingDunRouter {
     @Synchronized
     fun consumePendingRoute() {
         if (!::appContext.isInitialized) return
-        val raw = MMKV.defaultMMKV().decodeString(KEY_PENDING_PUSH_ROUTE, "").orEmpty()
-        if (raw.isEmpty()) return
-        val scope = currentScope()
-        val recovery = XingDunCredentialRecoveryCoordinator.state.value
-        if (XingDunTenantSessionCoordinator.isLeaving() || recovery == XingDunCredentialRecoveryState.REDIRECTING) {
-            clearPendingRoute()
-            return
-        }
-        when (XingDunNotificationConsumptionPolicy.decide(
-            MMKV.defaultMMKV().decodeString(KEY_PENDING_PUSH_SCOPE, "").orEmpty(),
-            scope, LoginStore.shared.sdkAppID, TUILogin.getLoginUser(),
-            authenticationReady = recovery == XingDunCredentialRecoveryState.NORMAL &&
-                V2TIMManager.getInstance().loginStatus == V2TIMManager.V2TIM_STATUS_LOGINED,
-            navigationReady = scope != null && navigationReadyScope == scope.key,
-        )) {
-            XingDunNotificationConsumption.WAIT -> return
-            XingDunNotificationConsumption.DISCARD -> { clearPendingRoute(); return }
-            XingDunNotificationConsumption.OPEN -> Unit
-        }
-        val destination = XingDunNotificationPayloadParser.parse(raw)
+        val destination = readyPendingRoute(requireExistingNavigation = true) ?: return
         clearPendingRoute()
-        if (destination == null || scope?.allows(destination) != true) return
         when (destination) {
             is XingDunNotificationDestination.Conversation -> ChatActivity.start(appContext, destination.conversationID)
             XingDunNotificationDestination.Tab.MESSAGES -> launchMain(MainActivity.TAB_MESSAGES)
             XingDunNotificationDestination.Tab.CONTACTS -> launchMain(MainActivity.TAB_CONTACTS)
             XingDunNotificationDestination.Tab.PROFILE -> launchMain(MainActivity.TAB_PROFILE)
         }
+    }
+
+    @Synchronized
+    internal fun takeConversationIntent(context: Context, requireExistingNavigation: Boolean): Intent? {
+        val destination = readyPendingRoute(requireExistingNavigation) as? XingDunNotificationDestination.Conversation
+            ?: return null
+        clearPendingRoute()
+        return ChatActivity.conversationIntent(context, destination.conversationID)
+    }
+
+    @Synchronized
+    internal fun hasReadyStartupConversation(): Boolean =
+        readyPendingRoute(requireExistingNavigation = false) is XingDunNotificationDestination.Conversation
+
+    private fun readyPendingRoute(requireExistingNavigation: Boolean): XingDunNotificationDestination? {
+        val raw = MMKV.defaultMMKV().decodeString(KEY_PENDING_PUSH_ROUTE, "").orEmpty()
+        if (raw.isEmpty()) return null
+        val scope = currentScope()
+        val recovery = XingDunCredentialRecoveryCoordinator.state.value
+        if (XingDunTenantSessionCoordinator.isLeaving() || recovery == XingDunCredentialRecoveryState.REDIRECTING) {
+            clearPendingRoute()
+            return null
+        }
+        when (XingDunNotificationConsumptionPolicy.decide(
+            MMKV.defaultMMKV().decodeString(KEY_PENDING_PUSH_SCOPE, "").orEmpty(),
+            scope, LoginStore.shared.sdkAppID, TUILogin.getLoginUser(),
+            authenticationReady = recovery == XingDunCredentialRecoveryState.NORMAL &&
+                V2TIMManager.getInstance().loginStatus == V2TIMManager.V2TIM_STATUS_LOGINED,
+            navigationReady = scope != null && (!requireExistingNavigation || navigationReadyScope == scope.key),
+        )) {
+            XingDunNotificationConsumption.WAIT -> return null
+            XingDunNotificationConsumption.DISCARD -> { clearPendingRoute(); return null }
+            XingDunNotificationConsumption.OPEN -> Unit
+        }
+        val destination = XingDunNotificationPayloadParser.parse(raw)
+        if (destination == null || scope?.allows(destination) != true) {
+            clearPendingRoute()
+            return null
+        }
+        return destination
     }
 
     internal fun currentAccountKey(): String? = currentScope()?.key

@@ -94,6 +94,23 @@ class XingDunStartupActivity : AppCompatActivity() {
                 entry.data?.path == "/detail")) {
             intent = Intent(entry).apply { data = null }
         }
+        val hasConsent = XingDunPrivacyConsentStore(noBackupFilesDir).hasConsent()
+        val queuedNotification = hasConsent && intent?.data == null &&
+            XingDunNotificationIntentReader.readAndStage(intent, "startup")
+        if (queuedNotification &&
+            XingDunSessionManager.currentSession()?.let(::hasIncomingCall) != true
+        ) {
+            val conversation = XingDunRouter.takeConversationIntent(this, requireExistingNavigation = true)
+            if (conversation != null) {
+                if (isTaskRoot) {
+                    routeToHome(conversation)
+                } else {
+                    startActivity(conversation)
+                    finish()
+                }
+                return
+            }
+        }
         XingDunRouter.markStartupPending()
         setContentView(R.layout.xingdun_activity_startup_loading)
         startupStatusView = findViewById(R.id.xingdun_startup_status)
@@ -102,11 +119,11 @@ class XingDunStartupActivity : AppCompatActivity() {
         }
         splashScreen.setKeepOnScreenCondition { false }
 
-        if (!XingDunPrivacyConsentStore(noBackupFilesDir).hasConsent()) {
+        if (!hasConsent) {
             showFirstLaunchPrivacyDialog()
             return
         }
-        continueStartup()
+        continueStartup(readNotification = false)
     }
 
     private fun showFirstLaunchPrivacyDialog() {
@@ -154,14 +171,14 @@ class XingDunStartupActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun continueStartup() {
+    private fun continueStartup(readNotification: Boolean = true) {
         if (intent?.data != null) {
             routeToEnterpriseAccess()
             return
         }
 
         // Keep the destination account-scoped while the existing authenticated startup runs.
-        XingDunNotificationIntentReader.readAndStage(intent, "startup")
+        if (readNotification) XingDunNotificationIntentReader.readAndStage(intent, "startup")
 
         incomingCallLaunch = XingDunIncomingCallLaunchPolicy.hasCallHint(intent?.getStringExtra("ext")) ||
             XingDunSessionManager.currentSession()?.let(::hasIncomingCall) == true
@@ -348,8 +365,10 @@ class XingDunStartupActivity : AppCompatActivity() {
         }
         if (!isStartupActive()) return@coroutineScope
         incomingCallLaunch = false
-        updateStartupStatus(R.string.xingdun_startup_loading_messages)
-        XingDunMessageFirstFramePreloader.preload(this@XingDunStartupActivity, restoredSession)
+        if (!XingDunRouter.hasReadyStartupConversation()) {
+            updateStartupStatus(R.string.xingdun_startup_loading_messages)
+            XingDunMessageFirstFramePreloader.preload(this@XingDunStartupActivity, restoredSession)
+        }
         awaitIncomingCallIfPresent(restoredSession)
         // Do not pull an app back over the user's foreground app after a slow recovery.
         awaitForeground(Lifecycle.State.RESUMED)
@@ -521,13 +540,14 @@ class XingDunStartupActivity : AppCompatActivity() {
             )
         }
 
-    private fun routeToHome() {
-        routeOnce(
-            Intent(this, MainActivity::class.java).apply {
-                putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HOME)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            }
-        )
+    private fun routeToHome(
+        conversation: Intent? = XingDunRouter.takeConversationIntent(this, requireExistingNavigation = false),
+    ) {
+        val main = Intent(this, MainActivity::class.java).apply {
+            putExtra(MainActivity.EXTRA_TARGET_TAB, if (conversation == null) MainActivity.TAB_HOME else MainActivity.TAB_MESSAGES)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        routeOnce(main, conversation)
     }
 
     private fun routeToAuthentication(noticeResId: Int = 0) {
@@ -548,13 +568,18 @@ class XingDunStartupActivity : AppCompatActivity() {
         )
     }
 
-    private fun routeOnce(target: Intent) {
+    private fun routeOnce(target: Intent, conversation: Intent? = null) {
         if (hasRouted || isFinishing || isDestroyed) return
         hasRouted = true
         timeoutJob?.cancel()
         timeoutJob = null
         waitingToRetry = false
-        startActivity(target)
+        if (conversation == null) {
+            startActivity(target)
+        } else {
+            startActivities(arrayOf(target, conversation))
+            XingDunRouter.markMainReady()
+        }
     }
 
     private fun isStartupActive(): Boolean = !hasRouted && !isFinishing && !isDestroyed &&

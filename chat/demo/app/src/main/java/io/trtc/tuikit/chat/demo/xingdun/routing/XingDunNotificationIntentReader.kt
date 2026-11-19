@@ -11,12 +11,12 @@ internal object XingDunNotificationIntentReader {
     private val payloadKeys = listOf("ext", "entity", "ChatKey")
     private const val MAX_EXTRA_BYTES = 1024
 
-    fun readAndStage(intent: Intent?, source: String) {
-        if (intent == null) return
+    fun readAndStage(intent: Intent?, source: String): Boolean {
+        if (intent == null) return false
         if (intent.hasExtra(XingDunLocalNotificationRoutes.EXTRA_ACCOUNT) &&
             intent.getStringExtra(XingDunLocalNotificationRoutes.EXTRA_ACCOUNT) != XingDunLocalNotificationRoutes.accountKey()) {
             Log.i("XingDunPush", "notification_entry source=$source account_mismatch=true")
-            return
+            return false
         }
         val values = payloadKeys.associateWith { key ->
             runCatching { intent.getStringExtra(key) }.getOrNull()
@@ -30,6 +30,7 @@ internal object XingDunNotificationIntentReader {
             // Only a fixed schema bitmask and outcome: never log ext, IDs, message text or tokens.
             Log.i("XingDunPush", "notification_entry source=$source fields=$fields queued=$queued")
         }
+        return queued
     }
 
     internal fun payloadFromExtras(values: Map<String, String?>): String? {

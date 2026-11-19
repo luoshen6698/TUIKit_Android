@@ -254,16 +254,18 @@ class ChatActivity : BaseActivity() {
         }
 
         fun start(context: Context, conversationID: String, locateMessage: MessageInfo?) {
-            context.startActivity(Intent(context, ChatActivity::class.java).apply {
+            context.startActivity(conversationIntent(context, conversationID).apply {
                 if (context !is android.app.Activity) {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                putExtra(EXTRA_CONVERSATION_ID, conversationID)
                 if (locateMessage != null) {
                     putExtra(EXTRA_LOCATE_MESSAGE, locateMessage)
                 }
             })
         }
+
+        internal fun conversationIntent(context: Context, conversationID: String): Intent =
+            Intent(context, ChatActivity::class.java).putExtra(EXTRA_CONVERSATION_ID, conversationID)
 
         fun startForMessageID(
             context: Context,
