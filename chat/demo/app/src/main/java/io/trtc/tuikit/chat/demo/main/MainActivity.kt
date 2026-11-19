@@ -1,5 +1,8 @@
 package io.trtc.tuikit.chat.demo.main
 
+import android.app.Activity
+import java.lang.ref.WeakReference
+
 import io.trtc.tuikit.chat.demo.common.BadgeDragPolicy
 import io.trtc.tuikit.chat.demo.common.BaseActivity
 
@@ -78,6 +81,7 @@ import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunRouter
 import io.trtc.tuikit.chat.demo.xingdun.routing.XingDunNotificationIntentReader
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunCredentialRecoveryState
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunTenantSessionCoordinator
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.widgets.AvatarBadgeView
 import io.trtc.tuikit.chat.demo.xingdun.features.XingDunDirectoryPageView
@@ -144,8 +148,26 @@ class MainActivity : BaseActivity() {
         const val TAB_LUSHU = "lushu"
         const val TAB_CONTACTS = "contacts"
         const val TAB_PROFILE = "profile"
+
+        private var launcherTarget: WeakReference<MainActivity>? = null
+
+        internal fun resumeFromLauncher(launcher: Activity): Intent? {
+            val main = launcherTarget?.get() ?: return null
+            val currentScope = XingDunSessionManager.currentUiSession()?.scopeKey ?: return null
+            if (main.taskId != launcher.taskId || main.isFinishing || main.isDestroyed ||
+                main.launcherScopeKey != currentScope || XingDunTenantSessionCoordinator.isLeaving() ||
+                XingDunCredentialRecoveryCoordinator.state.value == XingDunCredentialRecoveryState.REDIRECTING
+            ) {
+                return null
+            }
+            return Intent(launcher, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra(EXTRA_TARGET_TAB, TAB_HOME)
+            }
+        }
     }
 
+    private var launcherScopeKey: String? = null
     private var lushuState: Bundle? = null
     private val lushuPublisher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) (tabPageCache[R.id.demo_tab_lushu] as? LushuPageView)?.published()
@@ -317,9 +339,12 @@ class MainActivity : BaseActivity() {
         XingDunRouter.markMainReady()
         XingDunRouter.consumePendingRoute()
         V2TIMManager.getInstance().addIMSDKListener(imSDKListener)
+        launcherScopeKey = XingDunSessionManager.currentUiSession()?.scopeKey
+        launcherTarget = WeakReference(this)
     }
 
     override fun onDestroy() {
+        if (launcherTarget?.get() === this) launcherTarget = null
         V2TIMManager.getInstance().removeIMSDKListener(imSDKListener)
         super.onDestroy()
     }

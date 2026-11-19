@@ -52,13 +52,19 @@
             android:exported="false" />
 
         <activity
-            android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunStartupActivity"
+            android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLauncherActivity"
             android:exported="true"
-            android:theme="@style/XingDunStartupTheme">
+            android:theme="@style/XingDunLauncherTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <activity
+            android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunStartupActivity"
+            android:exported="true"
+            android:theme="@style/XingDunStartupTheme">
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

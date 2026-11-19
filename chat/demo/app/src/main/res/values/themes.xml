@@ -1,6 +1,12 @@
 <resources>
     <style name="demo_Theme_ChatView" parent="Chat_UIKit_Theme" />
 
+    <style name="XingDunLauncherTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
+
     <style name="XingDunStartupTheme" parent="Theme.SplashScreen">
         <item name="android:windowBackground">@color/xingdun_splash_background</item>
         <item name="android:windowDisablePreview">false</item>
