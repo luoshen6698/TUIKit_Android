@@ -2,10 +2,6 @@
 <resources>
     <string name="xingdun_reset_code_requested">如果该联系方式符合条件，我们将发送验证码，请在%1$d分钟内完成验证。</string>
     <string name="xingdun_profile_privacy_title">资料可见性</string>
-    <string name="xingdun_account_type_title">账户类型</string>
-    <string name="xingdun_account_type_normal">普通</string>
-    <string name="xingdun_account_type_internal">内部</string>
-    <string name="xingdun_account_type_unknown">未知</string>
     <string name="xingdun_privacy_account">显示账号</string>
     <string name="xingdun_privacy_phone">显示手机号</string>
     <string name="xingdun_privacy_email">显示邮箱</string>

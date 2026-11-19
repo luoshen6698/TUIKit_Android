@@ -2,10 +2,6 @@
 <resources>
     <string name="xingdun_reset_code_requested">If this contact is eligible, a verification code will be sent. Complete verification within %1$d minutes.</string>
     <string name="xingdun_profile_privacy_title">Profile visibility</string>
-    <string name="xingdun_account_type_title">Account type</string>
-    <string name="xingdun_account_type_normal">Standard</string>
-    <string name="xingdun_account_type_internal">Internal</string>
-    <string name="xingdun_account_type_unknown">Unknown</string>
     <string name="xingdun_privacy_account">Show account</string>
     <string name="xingdun_privacy_phone">Show phone number</string>
     <string name="xingdun_privacy_email">Show email address</string>

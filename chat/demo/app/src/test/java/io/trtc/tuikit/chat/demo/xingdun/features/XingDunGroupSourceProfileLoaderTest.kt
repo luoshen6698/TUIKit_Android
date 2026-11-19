@@ -512,7 +512,7 @@ class XingDunGroupSourceProfileLoaderTest {
             avatar = "https://example.invalid/a.png", alias = "Synthetic alias", birthday = "2000-01-01", phone = "synthetic-phone",
             email = "synthetic@example.invalid", signature = "Synthetic signature", profileVisibility = policy())
         val variants = listOf(base.copy(nickname = "Other"), base.copy(avatar = "other"), base.copy(customId = "other"),
-            base.copy(accountType = "internal"), base.copy(alias = "Other"), base.copy(birthday = "2001-01-01"),
+            base.copy(alias = "Other"), base.copy(birthday = "2001-01-01"),
             base.copy(phone = "other"), base.copy(email = "other"), base.copy(signature = "other"), base.copy(isBlacklist = true))
         for (changed in variants) {
             val state = XingDunGroupSourceProfileRenderState()
@@ -539,7 +539,7 @@ class XingDunGroupSourceProfileLoaderTest {
         val state = XingDunGroupSourceProfileRenderState()
         assertTrue(state.shouldRender(profile, "friend", true, true, false, null, "target"))
         assertFalse(state.shouldRender(profile.copy(nickname = "Synthetic", phone = "new hidden value", signature = "different hidden",
-            departmentPath = listOf("ignored"), isBlockedByPeer = true), "friend", true, true, false, null, "target"))
+            departmentPath = listOf("ignored"), isBlockedByPeer = true, accountType = "internal"), "friend", true, true, false, null, "target"))
         state.reset()
         assertTrue(state.shouldRender(profile, "friend", true, true, false, null, "target"))
     }

@@ -161,7 +161,7 @@ internal class XingDunGroupSourceProfileLoader(
 internal class XingDunGroupSourceProfileRenderState {
     private data class Inputs(
         val name: String?, val avatar: String, val showAccount: Boolean, val account: String?,
-        val accountTypeLabel: Int, val remark: String?, val fields: List<Pair<String, String?>>,
+        val remark: String?, val fields: List<Pair<String, String?>>,
         val relationship: String, val blacklist: Boolean?, val audio: Boolean, val video: Boolean,
         val operating: Boolean, val error: String?,
     )
@@ -177,7 +177,6 @@ internal class XingDunGroupSourceProfileRenderState {
             name = profile.nickname.normalized(), avatar = profile.avatar.orEmpty(),
             showAccount = showAccount,
             account = if (showAccount) profile.customId.normalized() ?: profile.timUserId.ifBlank { targetUserID } else null,
-            accountTypeLabel = XingDunAccountType.label(profile.accountType),
             remark = if (friend) profile.alias.normalized() else null,
             fields = listOf("birthday" to profile.birthday, "phone" to profile.phone, "email" to profile.email, "signature" to profile.signature)
                 .filter { XingDunProfileVisibility.visible(profile.profileVisibility, it.first) }

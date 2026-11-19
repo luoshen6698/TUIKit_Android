@@ -510,16 +510,12 @@ class XingDunContactDetailActivity : BaseActivity() {
             content.addView(calls, cardParams(top = 16))
         }
 
-        content.addView(sectionLabel(R.string.xingdun_contact_detail_user_information))
-        content.addView(card().apply {
-            addView(valueRow(R.string.xingdun_account_type_title, getString(XingDunAccountType.label(current.accountType))))
+        val userInformation = card().apply {
             if (friendRelationship) {
-                addView(divider())
                 addView(disclosureRow(
                     R.string.xingdun_contact_detail_remark,
                     current.alias.displayValue()
                 ) { showRemarkEditor() })
-                addView(divider())
             }
             listOf(
                 Triple("birthday", R.string.xingdun_contact_detail_birthday, current.birthday),
@@ -532,7 +528,11 @@ class XingDunContactDetailActivity : BaseActivity() {
                     addView(valueRow(label, value.displayValue()))
                 }
             }
-        }, cardParams(top = 6))
+        }
+        if (userInformation.childCount > 0) {
+            content.addView(sectionLabel(R.string.xingdun_contact_detail_user_information))
+            content.addView(userInformation, cardParams(top = 6))
+        }
 
         if (friendRelationship) {
             content.addView(card().apply {
