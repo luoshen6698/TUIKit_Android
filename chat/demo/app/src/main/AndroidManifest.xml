@@ -53,8 +53,10 @@
 
         <activity
             android:name="io.trtc.tuikit.chat.demo.xingdun.launch.XingDunLauncherActivity"
+            android:excludeFromRecents="true"
             android:exported="true"
-            android:relinquishTaskIdentity="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="${applicationId}.launcher"
             android:theme="@style/XingDunLauncherTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

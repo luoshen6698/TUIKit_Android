@@ -1,6 +1,5 @@
 package io.trtc.tuikit.chat.demo.main
 
-import android.app.Activity
 import java.lang.ref.WeakReference
 
 import io.trtc.tuikit.chat.demo.common.BadgeDragPolicy
@@ -16,6 +15,7 @@ import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.content.Intent
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
@@ -151,10 +151,10 @@ class MainActivity : BaseActivity() {
 
         private var launcherTarget: WeakReference<MainActivity>? = null
 
-        internal fun resumeFromLauncher(launcher: Activity): Intent? {
+        internal fun resumeFromLauncher(launcher: Context): Intent? {
             val main = launcherTarget?.get() ?: return null
             val currentScope = XingDunSessionManager.currentUiSession()?.scopeKey ?: return null
-            if (main.taskId != launcher.taskId || main.isFinishing || main.isDestroyed ||
+            if (main.isFinishing || main.isDestroyed ||
                 main.launcherScopeKey != currentScope || XingDunTenantSessionCoordinator.isLeaving() ||
                 XingDunCredentialRecoveryCoordinator.state.value == XingDunCredentialRecoveryState.REDIRECTING
             ) {
