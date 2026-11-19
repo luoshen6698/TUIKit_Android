@@ -786,7 +786,7 @@ class MessageInputViewModel(
             atUserList = atUserList,
             quotedMessage = SearchMessageVisibility.quoteForSend(conversationID, quotedMessage),
             needReadReceipt = MessageInputReadReceiptPolicy.needReadReceipt(
-                isReadReceiptEnabled = AppBuilderConfig.enableReadReceipt,
+                isReadReceiptEnabled = AppBuilderConfig.shouldRequestReadReceipt(conversationID),
                 groupType = conversationInfo.value?.groupType
             ),
             offlinePushInfo = createOfflinePushInfo(context, payload)

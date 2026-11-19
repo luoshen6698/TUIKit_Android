@@ -622,7 +622,7 @@ class MessageListViewModel(
         return SendMessageOption(
             atUserList = message.atUserList.takeIf { it.isNotEmpty() },
             quotedMessage = null,
-            needReadReceipt = message.needReadReceipt,
+            needReadReceipt = message.needReadReceipt && (!conversationID.startsWith("group_") || AppBuilderConfig.canViewGroupReadReceipts()),
             isExtensionEnabled = message.isExtensionEnabled,
             onlineUserOnly = false,
             offlinePushInfo = message.offlinePushInfo
@@ -757,7 +757,7 @@ class MessageListViewModel(
                     messagePayload = TextMessagePayload(text = text)
                 }
                 val option = SendMessageOption(
-                    needReadReceipt = AppBuilderConfig.enableReadReceipt,
+                    needReadReceipt = AppBuilderConfig.shouldRequestReadReceipt(conversationId),
                     offlinePushInfo = createOfflinePushInfoForConversation(conversationId, placeholderMessage)
                 )
                 inputStore.sendMessage(payload, option, object : CompletionHandler {
@@ -1150,7 +1150,7 @@ class MessageListViewModel(
             val sortedMessageList = forwardCoordinator.prepareMessagesForForward(
                 messages = sourceMessages,
                 conversationID = tempConversationID,
-                needReadReceipt = AppBuilderConfig.enableReadReceipt
+                needReadReceipt = AppBuilderConfig.shouldRequestReadReceipt(tempConversationID)
             )
             if (sortedMessageList.isEmpty()) {
                 completion?.onFailure(-1, getLocalizedString(R.string.uikit_empty_content))
@@ -1165,7 +1165,7 @@ class MessageListViewModel(
                 else -> null
             }
             val sendMessageOption = SendMessageOption(
-                needReadReceipt = AppBuilderConfig.enableReadReceipt,
+                needReadReceipt = AppBuilderConfig.shouldRequestReadReceipt(tempConversationID),
                 isExtensionEnabled = false,
                 offlinePushInfo = createOfflinePushInfoForMultiConversation("", tempConversationID)
             )

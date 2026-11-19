@@ -26,6 +26,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
@@ -92,6 +93,7 @@ import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMemberPager
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunGroupMember
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessage
 import io.trtc.tuikit.chat.demo.xingdun.network.XingDunPinnedMessagePage
+import io.trtc.tuikit.chat.demo.xingdun.session.XingDunReadReceiptFeatureSynchronizer
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunRuntimeFeaturePolicy
 import io.trtc.tuikit.chat.demo.xingdun.session.XingDunSessionManager
 import io.trtc.tuikit.chat.uikit.components.messageinput.config.ChatMessageInputConfig
@@ -1350,6 +1352,13 @@ class ChatActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (::conversationID.isInitialized && conversationID.startsWith(GROUP_CONVERSATION_ID_PREFIX)
+            && ::chatPageView.isInitialized) {
+            lifecycleScope.launch {
+                XingDunReadReceiptFeatureSynchronizer.refreshGroupViewer()
+                chatPageView.refreshReadReceiptPresentation()
+            }
+        }
         if (::conversationID.isInitialized) getUserID(conversationID)?.let { peer ->
             io.trtc.tuikit.chat.uikit.components.presence.UserPresenceStore.observe(this, peer) {
                 peerPresence = it

@@ -19,6 +19,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.recyclerview.widget.RecyclerView
 import io.trtc.tuikit.chat.uikit.R
+import io.trtc.tuikit.chat.uikit.components.messagelist.utils.shouldShowReadReceiptIndicator
 import io.trtc.tuikit.chat.uikit.components.common.ConversationIDUtil
 import io.trtc.tuikit.chat.uikit.components.common.EventBus
 import io.trtc.tuikit.chat.uikit.components.common.findLifecycleOwner
@@ -789,7 +790,7 @@ class MessageListView @JvmOverloads constructor(
 
         scope.launch {
             viewModel.readReceiptMessage.collectLatest { message ->
-                if (message != null) {
+                if (message != null && message.shouldShowReadReceiptIndicator()) {
                     MessageReadReceiptDialog(
                         context = context,
                         message = message,
@@ -983,6 +984,10 @@ class MessageListView @JvmOverloads constructor(
                 }
             }
         }
+    }
+
+    fun refreshReadReceiptPresentation() {
+        if (::adapter.isInitialized) adapter.notifyDataSetChanged()
     }
 
     fun refreshMessagePresentation(messageID: String) {

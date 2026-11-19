@@ -169,6 +169,8 @@ class ChatPageView @JvmOverloads constructor(
         )
     }
 
+    fun refreshReadReceiptPresentation() = messageListView.refreshReadReceiptPresentation()
+
     fun refreshMessagePresentation(messageID: String) {
         messageListView.refreshMessagePresentation(messageID)
     }

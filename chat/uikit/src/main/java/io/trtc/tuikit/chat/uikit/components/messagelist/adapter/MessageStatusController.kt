@@ -152,7 +152,7 @@ internal class MessageStatusController(
         message: MessageInfo,
         showMessageReadReceipt: Boolean
     ): Int {
-        if (!showMessageReadReceipt ||
+        if (!message.shouldShowReadReceiptIndicator(showMessageReadReceipt) ||
             !message.isSentBySelf ||
             !message.needReadReceipt ||
             message.messageType == MessageType.TIPS

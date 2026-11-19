@@ -38,6 +38,10 @@ object AppBuilderConfig {
 
     var messageAlignment: MessageAlignment = MessageAlignment.TWO_SIDED
     var enableReadReceipt: Boolean = false
+    var canViewGroupReadReceipts: () -> Boolean = { true }
+
+    fun shouldRequestReadReceipt(conversationID: String): Boolean =
+        enableReadReceipt && (!conversationID.startsWith("group_") || canViewGroupReadReceipts())
     var messageActionList: List<MessageAction> = listOf(
         MessageAction.COPY,
         MessageAction.RECALL,

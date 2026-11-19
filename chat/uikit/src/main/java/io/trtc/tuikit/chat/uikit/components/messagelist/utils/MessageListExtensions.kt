@@ -1,6 +1,7 @@
 package io.trtc.tuikit.chat.uikit.components.messagelist.utils
 import android.content.Context
 import io.trtc.tuikit.chat.uikit.R
+import io.trtc.tuikit.chat.uikit.components.config.AppBuilderConfig
 import io.trtc.tuikit.chat.uikit.components.common.jsonData2Dictionary
 import io.trtc.tuikit.atomicxcore.api.conversation.ConversationType
 import io.trtc.tuikit.atomicxcore.api.message.CustomMessagePayload
@@ -29,7 +30,8 @@ val MessageInfo.isShowReadReceipt: Boolean
 fun MessageInfo.shouldShowReadReceiptIndicator(
     isContainerAllowed: Boolean = true
 ): Boolean {
-    return isContainerAllowed && isShowReadReceipt
+    return isContainerAllowed && isShowReadReceipt &&
+        (conversationType != ConversationType.GROUP || AppBuilderConfig.canViewGroupReadReceipts())
 }
 
 val MessageInfo.readReceiptDisplayState: MessageReadReceiptDisplayState
